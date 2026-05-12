@@ -1,0 +1,14 @@
+---
+description: Spec-driven development workflow rules for broad features
+globs: ["**/*.{md,mdx,ts,tsx,js,jsx}"]
+alwaysApply: false
+---
+
+# Spec-Driven Development Rules
+
+- Use spec-driven workflow for broad features, cross-role workflows, or unclear acceptance criteria.
+- Start with a compact feature brief before implementation.
+- Break work into spec, plan, tasks, implement, verify.
+- Keep artifacts short, actionable, and traceable.
+- Prefer asking short clarifying questions over guessing critical requirements.
+- For implementation, only read the files needed to support the current stage.

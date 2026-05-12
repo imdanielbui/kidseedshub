@@ -1,0 +1,14 @@
+---
+description: InsForge backend platform rules for auth, database, storage, and deployment
+globs: ["**/*.{ts,tsx,js,jsx,md}"]
+alwaysApply: false
+---
+
+# InsForge Backend Rules
+
+- Treat auth/session, Postgres schema, storage, compute, AI gateway, and deployment as backend platform concerns.
+- Keep backend changes isolated from frontend UI edits.
+- Prefer platform primitives over custom backend plumbing when InsForge already provides them.
+- Ask before changing schema, auth provider, or production data flow.
+- Validate backend inputs and permissions at the boundary.
+- Keep migrations and data mutations explicit and reviewed.

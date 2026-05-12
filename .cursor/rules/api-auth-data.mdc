@@ -1,0 +1,16 @@
+---
+description: API, auth, roles, data access, privacy, and validation rules
+globs: ["**/*.{ts,tsx,js,jsx}", "**/*.prisma", "**/*.sql"]
+alwaysApply: false
+---
+
+# API Auth Data Rules
+
+- Treat auth/session, role permissions, and student/parent data as high-risk areas.
+- Validate API inputs at the boundary. Prefer existing schema validation; otherwise use Zod.
+- Never expose secrets, tokens, credentials, or internal error details to clients.
+- Check permissions close to the data access point, not only in UI.
+- For admin CMS, define allowed roles explicitly.
+- Do not change migrations, schema, or persisted data shape without explicit approval.
+- For Firebase/Supabase/NextAuth, follow existing project patterns before adding custom auth logic.
+- For MongoDB, validate object IDs and query filters before database calls.

@@ -1,0 +1,15 @@
+---
+description: Dashboard, CMS, and custom project UI rules
+globs: ["**/*.{tsx,jsx,css,scss}"]
+alwaysApply: false
+---
+
+# UI Dashboard Rules
+
+- Prefer custom per-project visual direction after inspecting current brand and components.
+- Avoid generic AI-looking dashboards.
+- Reuse existing design tokens, spacing, typography, cards, tables, dialogs, and form controls.
+- Dashboard pages should handle loading, empty, error, and permission states.
+- CRUD screens should include search/filter when data volume justifies it, not by default.
+- Dense admin tables are acceptable for internal operations; keep primary actions obvious.
+- Parent/student-facing screens should be friendly, clear, and low-friction.

@@ -1,0 +1,53 @@
+[workspace]
+name = "KSH AI Workspace"
+language = "vi-mixed"
+primary_tools = ["codex", "claude-code", "cursor", "spec-kit", "insforge"]
+
+[behavior]
+autonomy = "balanced"
+ask_before_risky_changes = true
+max_clarifying_questions = 5
+prefer_minimal_changes = true
+read_targeted_files = true
+prefer_existing_patterns = true
+summarize_context_at_percent = 70
+
+[verification]
+run_lint = true
+run_tests = true
+run_build = true
+fix_small_failures_automatically = true
+ask_before_large_architecture_changes = true
+
+[protected]
+paths = [
+  ".env*",
+  "**/*credential*",
+  "**/*secret*",
+  "**/*key*",
+  "**/migrations/**",
+  "**/seed*/**",
+  "**/backups/**",
+  "**/exports/**"
+]
+ask_before = ["auth", "roles", "student-data", "parent-data", "deployment", "database-schema"]
+
+[stack]
+frontend = ["Next.js", "React", "TypeScript", "Tailwind CSS", "shadcn/ui", "MUI", "Ant Design"]
+backend = ["Next.js route handlers", "Node", "Express", "Firebase", "Supabase"]
+database = ["MongoDB", "Firebase", "Supabase"]
+integrations = ["Google APIs", "OpenAI API", "email", "Excel export"]
+
+[profiles.spec_kit]
+enabled = true
+workflow = ["clarify", "specify", "plan", "tasks", "implement", "verify"]
+focus = ["feature briefs", "acceptance criteria", "traceable tasks", "verification"]
+
+[profiles.insforge]
+enabled = true
+backend = ["Postgres", "auth", "storage", "compute", "AI gateway", "edge functions"]
+focus = ["backend consistency", "platform primitives", "migrations", "deployment"]
+
+[domain]
+focus = ["CMS", "dashboard", "education operations", "AI chatbot", "internal automation"]
+roles = ["admin", "teacher", "parent", "student", "sales", "customer-success"]

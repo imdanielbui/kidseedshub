@@ -1,0 +1,15 @@
+---
+description: Internal automation, Google APIs, Excel dashboard, and data cleanup rules
+globs: ["**/*.{ts,tsx,js,jsx,py,md}"]
+alwaysApply: false
+---
+
+# Automation Google Excel Rules
+
+- For data cleanup, prefer dry-run mode before writing changes.
+- Log input count, transformed count, skipped rows, validation errors, and output path.
+- For Google APIs, isolate auth/client setup from business logic.
+- Never commit Google credentials or service account keys.
+- Excel exports should have stable columns, clear headers, date formats, totals where useful, and internal notes when data is incomplete.
+- Automation scripts must be idempotent when possible.
+- For reports, separate data extraction, transformation, and rendering/export.

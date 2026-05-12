@@ -1,0 +1,17 @@
+---
+description: Next.js, React, TypeScript, and UI implementation rules
+globs: ["**/*.{ts,tsx,js,jsx}"]
+alwaysApply: false
+---
+
+# Next.js React Rules
+
+- Inspect the current router style before adding routes. If absent, prefer App Router for new Next.js work.
+- Prefer server components and route handlers when they reduce client complexity.
+- Add `use client` only where browser APIs, state, effects, or event handlers are required.
+- Keep TypeScript pragmatic: avoid broad `any`; use localized escape hatches only with clear reason.
+- Follow existing component and file naming conventions.
+- Do not introduce a new UI library if the project already uses one.
+- For forms, use the existing validation standard; if none exists, prefer Zod.
+- Build responsive desktop/mobile UI for dashboard pages.
+- For new dashboard UI, read existing layout, table, form, dialog, and empty-state patterns first.

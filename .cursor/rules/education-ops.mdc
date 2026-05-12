@@ -1,0 +1,16 @@
+---
+description: Education operations domain rules
+globs: ["**/*.{ts,tsx,js,jsx,md}"]
+alwaysApply: false
+---
+
+# Education Operations Rules
+
+- Core entities: courses, classes, sessions, students, parents, teachers, attendance, makeup credits, reports, payroll.
+- Class schedules are generated from start date, fixed weekdays, time slots, total sessions, room, and teacher.
+- Vietnam holidays must be configurable. Default behavior: skip holiday sessions and propose/auto-create makeup sessions based on the same weekday/slot when configured.
+- Attendance states must distinguish present, absent with permission, absent without permission, and note/review when supported.
+- Absence with permission may create makeup eligibility, but exact makeup rules must remain configurable.
+- Teacher payroll should support taught sessions, teaching hours, and manual approval before finalization.
+- End-of-course reports should support PDF for parents, Excel for internal use, dashboard view, and AI-generated comments based on actual data.
+- Do not hardcode business policies that the user said are still unclear; design them as configurable domain rules.
