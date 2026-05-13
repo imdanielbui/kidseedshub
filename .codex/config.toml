@@ -1,7 +1,7 @@
 [workspace]
-name = "KSH AI Workspace"
+name = "KidSeedsHub"
 language = "vi-mixed"
-primary_tools = ["codex", "claude-code", "cursor", "spec-kit", "insforge"]
+primary_tools = ["codex", "claude-code", "cursor", "spec-kit", "insforge", "gitnexus"]
 
 [behavior]
 autonomy = "balanced"
@@ -47,6 +47,10 @@ focus = ["feature briefs", "acceptance criteria", "traceable tasks", "verificati
 enabled = true
 backend = ["Postgres", "auth", "storage", "compute", "AI gateway", "edge functions"]
 focus = ["backend consistency", "platform primitives", "migrations", "deployment"]
+
+[mcp_servers.gitnexus]
+command = "npx"
+args = ["-y", "gitnexus@latest", "mcp"]
 
 [domain]
 focus = ["CMS", "dashboard", "education operations", "AI chatbot", "internal automation"]

@@ -1,6 +1,6 @@
 # AI Workspace Agents
 
-This workspace is optimized for Codex, Claude Code, and Cursor on Next.js CMS/dashboard, auth, education operations, AI chatbot, Google integrations, Excel dashboards, internal automation, spec-driven development, and optional InsForge-backed projects.
+This workspace is optimized for Codex, Claude Code, and Cursor on Next.js CMS/dashboard, auth, education operations, AI chatbot, Google integrations, Excel dashboards, internal automation, spec-driven development, optional InsForge-backed projects, and GitNexus-assisted codebase intelligence.
 
 Default language: Vietnamese for collaboration, English for code names, technical docs, comments, commit messages, and API contracts when appropriate.
 
@@ -14,6 +14,8 @@ Default language: Vietnamese for collaboration, English for code names, technica
 - Rule 6 - Token Budgets Are Not Advisory: per-task budget is 4,000 tokens and per-session budget is 30,000 tokens. If approaching budget, summarize and start fresh. Surface the breach. Do not silently overrun.
 - Rule 7 - Surface Conflicts, Don't Average Them: if two patterns contradict, pick one based on recency or test coverage. Explain why. Flag the other for cleanup. Do not blend conflicting patterns.
 - Rule 8 - Read Before You Write: before adding code, read exports, immediate callers, and shared utilities. "Looks orthogonal" is dangerous. If unsure why code is structured a way, ask.
+- Rule 8A - Data Features Are Full-Stack: for any feature that reads, writes, persists, filters, or changes state, inspect the repo's backend pattern first, identify the required API/data model, implement or update backend before or in parallel with UI, then verify both backend and UI. Do not build frontend-only flows for features that need stored data.
+- Rule 8B - Use GitNexus for Deep Repo Context: when the repo is large, the dependency chain is unclear, or the change may have blast radius, use GitNexus/knowledge-graph context first to inspect clusters, callers, processes, and impact before editing.
 - Rule 9 - Tests Verify Intent, Not Just Behavior: tests must encode why behavior matters, not just what it does. A test that cannot fail when business logic changes is wrong.
 - Rule 10 - Checkpoint After Every Significant Step: summarize what was done, what is verified, and what remains. Do not continue from a state you cannot describe back. If you lose track, stop and restate.
 - Rule 11 - Match the Codebase's Conventions, Even If You Disagree: conformance over taste inside the codebase. If a convention is harmful, surface it. Do not fork silently.
@@ -37,9 +39,19 @@ Use spec-kit style flow when the task is a new feature, cross-screen workflow, o
 
 - Clarify requirements first with short questions.
 - Write a compact feature brief before implementation.
+- For features with data or state, identify backend/API/data model before implementing UI. Backend and frontend must be planned and verified together.
 - Break work into plan, tasks, implement, verify.
 - Keep spec artifacts short and executable, not essay-like.
 - Use spec-driven workflow especially for auth, scheduling, reports, integrations, and multi-role CMS flows.
+
+## GitNexus Codebase Intelligence
+
+Use GitNexus when the task needs architectural context beyond local file reading.
+
+- Run GitNexus analysis before broad refactors, dependency-heavy changes, or uncertain blast-radius edits.
+- Prefer GitNexus when the repo is large or the relevant callers are not obvious.
+- Use GitNexus outputs to identify clusters, execution flows, impact, and related tests before writing code.
+- After commits that affect structure or dependencies, reindex when the graph may be stale.
 
 ## InsForge Backend Profile
 

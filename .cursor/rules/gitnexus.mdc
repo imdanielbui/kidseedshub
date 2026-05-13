@@ -1,0 +1,12 @@
+---
+description: GitNexus codebase intelligence and blast radius rules
+globs: ["**/*.{ts,tsx,js,jsx,md}"]
+alwaysApply: false
+---
+
+# GitNexus Rules
+
+- Use GitNexus for large repos, unclear dependency chains, or broad changes.
+- Prefer graph context before editing when call chains, clusters, or blast radius matter.
+- Reindex after structural commits or dependency changes when the graph may be stale.
+- Use GitNexus output to identify related files, execution flows, and likely tests.

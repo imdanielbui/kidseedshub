@@ -31,6 +31,14 @@ When the task is a broad feature, cross-screen workflow, or requirement with unc
 
 Prefer this flow for auth, scheduling, reports, integrations, and multi-role CMS work.
 
+## GitNexus Context Workflow
+
+Use GitNexus when a change may affect many files, call chains, or module boundaries.
+
+- Run GitNexus analysis before broad refactors, dependency-heavy changes, or uncertain blast-radius edits.
+- Use graph context to inspect clusters, execution flows, and impact before editing.
+- Reindex after structural commits or dependency changes when the graph may be stale.
+
 ## InsForge Backend Profile
 
 When the project uses InsForge, treat backend primitives as first-class:
