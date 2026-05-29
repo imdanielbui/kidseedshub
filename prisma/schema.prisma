@@ -1,0 +1,589 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALE
+  TEACHER
+  PARENT
+}
+
+enum StudentStatus {
+  LEAD
+  TRIAL
+  EVALUATION
+  CONVERTED
+  RETENTION
+  NURTURE
+  ACTIVE
+  INACTIVE
+  GRADUATED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum CourseSubject {
+  FUN
+  ROBOTICS
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT_EXCUSED
+  ABSENT_NO_EXCUSE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+}
+
+enum ExpenseCategory {
+  SALARY
+  MATERIALS
+  UTILITIES
+  MARKETING
+  OTHER
+}
+
+enum TaskStatus {
+  PENDING
+  DONE
+  OVERDUE
+}
+
+enum ContactResult {
+  INTERESTED
+  NEED_TIME
+  REJECTED
+  CONVERTED
+  NO_ANSWER
+}
+
+enum AssessmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+}
+
+enum ProgressLevel {
+  BEGINNING
+  PROGRESSING
+  PROFICIENT
+}
+
+enum RubricConfigStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum FinalAssessmentStatus {
+  DRAFT
+  READY
+  PUBLISHED
+}
+
+enum ClassSessionStatus {
+  SCHEDULED
+  CANCELED
+  COMPLETED
+}
+
+enum ScheduleEventType {
+  HOLIDAY
+  EVENT
+}
+
+enum AbsenceRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  email     String?  @unique
+  password  String
+  role      Role
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent                Parent?
+  assignedStudents      Student[]          @relation("AssignedTeacher")
+  saleOwnedStudents     Student[]          @relation("StudentSaleOwner")
+  createdStudents       Student[]          @relation("StudentCreatedBy")
+  classesTeaching       Class[]
+  receiptsCreated       Receipt[]          @relation("ReceiptCreatedBy")
+  expensesCreated       Expense[]          @relation("ExpenseCreatedBy")
+  attendanceMarked      Attendance[]       @relation("AttendanceMarkedBy")
+  weeklyAssessments     WeeklyAssessment[] @relation("WeeklyAssessmentTeacher")
+  finalAssessments      FinalAssessment[]  @relation("FinalAssessmentTeacher")
+  finalAssessmentsPublished FinalAssessment[] @relation("FinalAssessmentPublishedBy")
+  rubricConfigsCreated  AssessmentRubricConfig[] @relation("RubricConfigCreatedBy")
+  tasksAssigned         Task[]             @relation("TaskAssignedTo")
+  tasksCreated          Task[]             @relation("TaskCreatedBy")
+  contactLogs           ContactLog[]       @relation("ContactLogBy")
+  absenceRequestsReviewed AbsenceRequest[]  @relation("AbsenceRequestReviewedBy")
+  auditLogs             AuditLog[]         @relation("AuditActor")
+  notificationsReceived InternalNotification[] @relation("NotificationRecipient")
+  notificationsTriggered InternalNotification[] @relation("NotificationActor")
+}
+
+model Parent {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  students  Student[]
+  feedbacks CourseFeedback[]
+  absenceRequests AbsenceRequest[]
+  createdAt DateTime @default(now())
+}
+
+model Student {
+  id                String        @id @default(cuid())
+  code              String        @unique
+  name              String
+  birthDate         DateTime?
+  parentId          String
+  parent            Parent        @relation(fields: [parentId], references: [id])
+  status            StudentStatus @default(LEAD)
+  leadSource        String?
+  leadNote          String?
+  healthNote        String?
+  gender            Gender        @default(UNKNOWN)
+  saleOwnerId       String?
+  saleOwner         User?         @relation("StudentSaleOwner", fields: [saleOwnerId], references: [id])
+  createdById       String?
+  createdBy         User?         @relation("StudentCreatedBy", fields: [createdById], references: [id])
+  assignedTeacherId String?
+  assignedTeacher   User?         @relation("AssignedTeacher", fields: [assignedTeacherId], references: [id])
+  stageChangedAt    DateTime      @default(now())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  enrollments       Enrollment[]
+  classStudents     ClassStudent[]
+  photos            ClassPhoto[]
+  tasks             Task[]
+  contactLogs       ContactLog[]
+  weeklyAssessments WeeklyAssessment[]
+  finalAssessments  FinalAssessment[]
+  feedbacks         CourseFeedback[]
+  absenceRequests   AbsenceRequest[]
+}
+
+model Course {
+  id            String        @id @default(cuid())
+  name          String
+  subject       CourseSubject
+  description   String?
+  totalSessions Int
+  price         Decimal       @db.Decimal(12, 2)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  enrollments Enrollment[]
+  classes     Class[]
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id])
+  teacherId   String
+  teacher     User     @relation(fields: [teacherId], references: [id])
+  weekday     Int
+  startTime   String
+  endTime     String
+  room        String?
+  startDate   DateTime?
+  plannedSessions Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students      ClassStudent[]
+  scheduleSlots ClassScheduleSlot[]
+  sessions      ClassSession[]
+}
+
+model ClassScheduleSlot {
+  id        String   @id @default(cuid())
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  weekday   Int
+  startTime String
+  endTime   String
+  room      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions ClassSession[]
+}
+
+model ClassStudent {
+  id        String   @id @default(cuid())
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id])
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  joinedAt  DateTime @default(now())
+  isActive  Boolean  @default(true)
+
+  @@unique([classId, studentId])
+}
+
+model ClassSession {
+  id             String             @id @default(cuid())
+  classId        String
+  class          Class              @relation(fields: [classId], references: [id])
+  scheduleSlotId String?
+  scheduleSlot   ClassScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: SetNull)
+  date           DateTime
+  startTime      String?
+  endTime        String?
+  room           String?
+  status         ClassSessionStatus @default(SCHEDULED)
+  topic          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  attendances Attendance[]
+  absenceRequests AbsenceRequest[]
+
+  @@unique([classId, date])
+}
+
+model AbsenceRequest {
+  id             String               @id @default(cuid())
+  studentId      String
+  student        Student              @relation(fields: [studentId], references: [id])
+  parentId       String
+  parent         Parent               @relation(fields: [parentId], references: [id])
+  classSessionId String
+  classSession   ClassSession         @relation(fields: [classSessionId], references: [id])
+  reason         String
+  status         AbsenceRequestStatus @default(PENDING)
+  adminNote      String?
+  reviewedById   String?
+  reviewedBy     User?                @relation("AbsenceRequestReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([studentId, classSessionId])
+}
+
+model ScheduleEvent {
+  id                String            @id @default(cuid())
+  title             String
+  date              DateTime
+  type              ScheduleEventType @default(HOLIDAY)
+  affectsScheduling Boolean           @default(true)
+  note              String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([date, title])
+}
+
+model Enrollment {
+  id              String    @id @default(cuid())
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id])
+  courseId        String
+  course          Course    @relation(fields: [courseId], references: [id])
+  sessionsBought  Int
+  sessionsUsed    Int       @default(0)
+  joinSessionNumber        Int?
+  totalCourseSessionsAtJoin Int?
+  freeTrialSessions        Int       @default(0)
+  paidSessionsBeforeReceipt Int       @default(0)
+  startDate       DateTime?
+  endDate         DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  attendances       Attendance[]
+  receipts          Receipt[]
+  receiptLines      ReceiptLine[]
+  weeklyAssessments WeeklyAssessment[]
+  finalAssessments  FinalAssessment[]
+}
+
+model Attendance {
+  id            String           @id @default(cuid())
+  enrollmentId  String
+  enrollment    Enrollment       @relation(fields: [enrollmentId], references: [id])
+  classSessionId String?
+  classSession   ClassSession?   @relation(fields: [classSessionId], references: [id])
+  date          DateTime
+  status        AttendanceStatus
+  note          String?
+  makeupDate    DateTime?
+  markedById    String
+  markedBy      User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  photos ClassPhoto[]
+}
+
+model ClassPhoto {
+  id           String      @id @default(cuid())
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id])
+  attendanceId String?
+  attendance   Attendance? @relation(fields: [attendanceId], references: [id])
+  url          String
+  cloudinaryId String
+  takenAt      DateTime    @default(now())
+  isFeatured   Boolean     @default(false)
+}
+
+model WeeklyAssessment {
+  id           String           @id @default(cuid())
+  studentId    String
+  student      Student          @relation(fields: [studentId], references: [id])
+  enrollmentId String
+  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id])
+  subject      CourseSubject
+  rubricVersion String
+  rubricConfigId String?
+  rubricConfig   AssessmentRubricConfig? @relation(fields: [rubricConfigId], references: [id], onDelete: SetNull)
+  rubricSnapshot Json?
+  weekNumber   Int
+  status       AssessmentStatus @default(NOT_STARTED)
+  teacherId    String
+  teacher      User             @relation("WeeklyAssessmentTeacher", fields: [teacherId], references: [id])
+  comment      String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  items AssessmentItemResult[]
+
+  @@unique([enrollmentId, weekNumber, subject])
+  @@index([rubricConfigId])
+}
+
+model AssessmentItemResult {
+  id                 String           @id @default(cuid())
+  weeklyAssessmentId String
+  weeklyAssessment   WeeklyAssessment @relation(fields: [weeklyAssessmentId], references: [id])
+  domainKey          String
+  skillKey           String
+  outcomeIndex       Int
+  checked            Boolean          @default(false)
+  progressLevel      ProgressLevel?
+  score              Int?
+  comment            String?
+  evidenceUrl        String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([weeklyAssessmentId, domainKey, skillKey, outcomeIndex])
+}
+
+model FinalAssessment {
+  id              String        @id @default(cuid())
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id])
+  enrollmentId    String
+  enrollment      Enrollment    @relation(fields: [enrollmentId], references: [id])
+  subject         CourseSubject
+  rubricVersion   String
+  requiredWeeks   Int
+  completedWeeks  Int
+  strengths       String
+  improvements    String
+  teacherSummary  String
+  nextSteps       String?
+  teacherId       String
+  teacher         User          @relation("FinalAssessmentTeacher", fields: [teacherId], references: [id])
+  status          FinalAssessmentStatus @default(DRAFT)
+  publishedAt     DateTime?
+  publishedById   String?
+  publishedBy     User?         @relation("FinalAssessmentPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([publishedById])
+}
+
+model AssessmentRubricConfig {
+  id            String             @id @default(cuid())
+  subject       CourseSubject
+  version       String
+  status        RubricConfigStatus @default(DRAFT)
+  domainsJson   Json
+  createdById   String?
+  createdBy     User?              @relation("RubricConfigCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  activatedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  weeklyAssessments WeeklyAssessment[]
+
+  @@unique([subject, version])
+  @@index([subject, status])
+  @@index([createdById])
+}
+
+model Receipt {
+  id           String        @id @default(cuid())
+  code         String        @unique
+  enrollmentId String
+  enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id])
+  amount       Decimal       @db.Decimal(12, 2)
+  sessions     Int
+  grossAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal      @default(0) @db.Decimal(12, 2)
+  discountPercent Decimal     @default(0) @db.Decimal(5, 2)
+  discountNote String?
+  billableSessions Int        @default(0)
+  freeTrialSessions Int       @default(0)
+  paidSessionsBeforeReceipt Int @default(0)
+  remainingSessionsAfterReceipt Int @default(0)
+  method       PaymentMethod
+  note         String?
+  createdById  String
+  createdBy    User          @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime      @default(now())
+
+  lines        ReceiptLine[]
+}
+
+model ReceiptLine {
+  id                           String     @id @default(cuid())
+  receiptId                    String
+  receipt                      Receipt    @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  enrollmentId                 String
+  enrollment                   Enrollment @relation(fields: [enrollmentId], references: [id])
+  courseName                   String
+  coursePrice                  Decimal    @db.Decimal(12, 2)
+  courseTotalSessions          Int
+  unitPrice                    Decimal    @db.Decimal(12, 2)
+  billableSessions             Int
+  freeTrialSessions            Int        @default(0)
+  paidSessionsBeforeReceipt    Int        @default(0)
+  grossAmount                  Decimal    @db.Decimal(12, 2)
+  discountAmount               Decimal    @default(0) @db.Decimal(12, 2)
+  discountPercent              Decimal    @default(0) @db.Decimal(5, 2)
+  amount                       Decimal    @db.Decimal(12, 2)
+  remainingSessionsAfterReceipt Int       @default(0)
+  createdAt                    DateTime   @default(now())
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  category    ExpenseCategory
+  amount      Decimal         @db.Decimal(12, 2)
+  description String
+  invoiceUrl  String?
+  date        DateTime
+  createdById String
+  createdBy   User            @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime        @default(now())
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  title        String
+  note         String?
+  dueDate      DateTime
+  status       TaskStatus @default(PENDING)
+  studentId    String?
+  student      Student?   @relation(fields: [studentId], references: [id])
+  assignedToId String
+  assignedTo   User       @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  createdById  String
+  createdBy    User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime   @default(now())
+  completedAt  DateTime?
+}
+
+model ContactLog {
+  id         String        @id @default(cuid())
+  studentId  String
+  student    Student       @relation(fields: [studentId], references: [id])
+  content    String
+  result     ContactResult
+  loggedById String
+  loggedBy   User          @relation("ContactLogBy", fields: [loggedById], references: [id])
+  createdAt  DateTime      @default(now())
+}
+
+model CourseFeedback {
+  id              String   @id @default(cuid())
+  studentId       String
+  student         Student  @relation(fields: [studentId], references: [id])
+  parentId        String
+  parent          Parent   @relation(fields: [parentId], references: [id])
+  teachingQuality Int
+  teacherAttitude Int
+  studentProgress Int
+  wouldRecommend  Int
+  comment         String?
+  createdAt       DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+model InternalNotification {
+  id          String    @id @default(cuid())
+  recipientId String
+  recipient   User      @relation("NotificationRecipient", fields: [recipientId], references: [id])
+  actorId     String?
+  actor       User?     @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  title       String
+  body        String
+  href        String?
+  type        String
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([recipientId, isRead, createdAt])
+  @@index([type])
+}
+
+model PermissionMatrixEntry {
+  permission String   @id
+  roles      Role[]
+  updatedAt  DateTime @updatedAt
+}

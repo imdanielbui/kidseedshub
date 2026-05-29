@@ -38,11 +38,37 @@ Never run destructive commands such as hard reset, force push, database wipe, or
 Use spec-kit style flow when the task is a new feature, cross-screen workflow, or anything with unclear acceptance criteria.
 
 - Clarify requirements first with short questions.
+- Read `docs/ai-context/index.md` before planning or coding non-trivial product/UI work.
+- Treat `docs/ai-context/product-contract.md` and `docs/ai-context/ui-contract.md` as the daily product and design-system contract.
+- Read the relevant `docs/ai-context/workflows/*.md` file before changing a module workflow.
 - Write a compact feature brief before implementation.
 - For features with data or state, identify backend/API/data model before implementing UI. Backend and frontend must be planned and verified together.
 - Break work into plan, tasks, implement, verify.
 - Keep spec artifacts short and executable, not essay-like.
 - Use spec-driven workflow especially for auth, scheduling, reports, integrations, and multi-role CMS flows.
+
+## AI Context Contracts
+
+Use `docs/ai-context/` to keep agents from relying on memory or re-reading the full product plan.
+
+- `docs/ai-context/index.md`: required read order and per-task output fields.
+- `docs/ai-context/product-contract.md`: ship-ready rules for product, data, privacy, and verification.
+- `docs/ai-context/ui-contract.md`: shared UI rules for shell, dialogs, forms, lists, tables, states, and accessibility.
+- `docs/ai-context/feature-slice-template.md`: compact spec template for new or unclear feature slices.
+- `docs/ai-context/workflows/`: module workflow contracts that override generic assumptions.
+
+For non-trivial feature work, report the contract and workflow read before implementation:
+
+```md
+Contract read:
+Workflow:
+Data/API impact:
+UI impact:
+Verification target:
+GitNexus:
+```
+
+Use `docs/specs/kidseedshub-full-product-plan.md` as roadmap/status reference, not as the only working contract for implementation.
 
 ## GitNexus Codebase Intelligence
 
@@ -337,3 +363,47 @@ Use `templates/handoff-summary.md` when context is high or work spans sessions.
 - Tests: prioritize unit tests for scheduling/business rules, integration tests for APIs/auth, E2E for critical admin flows.
 - UI: responsive desktop/mobile, reuse design system, match current brand before inventing style.
 - Security: protect auth/session, env/secrets, user privacy, API input validation.
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **kidseedshub** (1784 symbols, 3369 relationships, 113 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/kidseedshub/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/kidseedshub/clusters` | All functional areas |
+| `gitnexus://repo/kidseedshub/processes` | All execution flows |
+| `gitnexus://repo/kidseedshub/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->

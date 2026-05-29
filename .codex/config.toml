@@ -38,16 +38,6 @@ backend = ["Next.js route handlers", "Node", "Express", "Firebase", "Supabase"]
 database = ["MongoDB", "Firebase", "Supabase"]
 integrations = ["Google APIs", "OpenAI API", "email", "Excel export"]
 
-[profiles.spec_kit]
-enabled = true
-workflow = ["clarify", "specify", "plan", "tasks", "implement", "verify"]
-focus = ["feature briefs", "acceptance criteria", "traceable tasks", "verification"]
-
-[profiles.insforge]
-enabled = true
-backend = ["Postgres", "auth", "storage", "compute", "AI gateway", "edge functions"]
-focus = ["backend consistency", "platform primitives", "migrations", "deployment"]
-
 [mcp_servers.gitnexus]
 command = "npx"
 args = ["-y", "gitnexus@latest", "mcp"]
