@@ -30,7 +30,16 @@ export async function GET(request: Request) {
   }
 
   const range = parseMonth(parsed.data.month)
-  const [receiptSum, expenseSum, receiptsByMethod, expensesByCategory] = await prisma.$transaction([
+  const [
+    receiptSum,
+    expenseSum,
+    receiptsByMethod,
+    expensesByCategory,
+    salaryExpenseSum,
+    refundExpenseSum,
+    walletCreditIssuedSum,
+    walletCreditAppliedSum
+  ] = await prisma.$transaction([
     prisma.receipt.aggregate({
       where: { createdAt: { gte: range.start, lt: range.end } },
       _sum: { amount: true },
@@ -54,17 +63,56 @@ export async function GET(request: Request) {
       orderBy: { category: "asc" },
       _sum: { amount: true },
       _count: { _all: true }
+    }),
+    prisma.expense.aggregate({
+      where: {
+        date: { gte: range.start, lt: range.end },
+        category: "SALARY"
+      },
+      _sum: { amount: true }
+    }),
+    prisma.expense.aggregate({
+      where: {
+        date: { gte: range.start, lt: range.end },
+        refundEntitlementId: { not: null }
+      },
+      _sum: { amount: true }
+    }),
+    prisma.studentWalletEntry.aggregate({
+      where: {
+        createdAt: { gte: range.start, lt: range.end },
+        type: "CREDIT"
+      },
+      _sum: { amount: true }
+    }),
+    prisma.studentWalletEntry.aggregate({
+      where: {
+        createdAt: { gte: range.start, lt: range.end },
+        type: "APPLIED"
+      },
+      _sum: { amount: true }
     })
   ])
 
   const revenue = receiptSum._sum.amount ?? new Prisma.Decimal(0)
   const expense = expenseSum._sum.amount ?? new Prisma.Decimal(0)
+  const salaryExpense = salaryExpenseSum._sum.amount ?? new Prisma.Decimal(0)
+  const refundExpense = refundExpenseSum._sum.amount ?? new Prisma.Decimal(0)
+  const walletCreditIssued = walletCreditIssuedSum._sum.amount ?? new Prisma.Decimal(0)
+  const walletCreditApplied = (walletCreditAppliedSum._sum.amount ?? new Prisma.Decimal(0)).mul(-1)
+  const operatingExpense = expense.minus(salaryExpense).minus(refundExpense)
 
   const summary: FinanceSummary = {
     month: parsed.data.month,
     revenue: revenue.toString(),
+    walletCreditApplied: walletCreditApplied.toString(),
+    walletCreditIssued: walletCreditIssued.toString(),
     expense: expense.toString(),
+    salaryExpense: salaryExpense.toString(),
+    refundExpense: refundExpense.toString(),
+    operatingExpense: operatingExpense.lessThan(0) ? "0" : operatingExpense.toString(),
     profit: revenue.minus(expense).toString(),
+    netProfit: revenue.minus(expense).toString(),
     receiptCount: receiptSum._count,
     expenseCount: expenseSum._count,
     receiptsByMethod: receiptsByMethod.map((row) => ({

@@ -5,6 +5,7 @@ import { History, RefreshCcw, Save, ShieldCheck, UserCog } from "lucide-react"
 import { CourseSettings } from "./course-settings"
 import { PermissionMatrixSettings } from "./permission-matrix-settings"
 import { RubricSettings } from "./rubric-settings"
+import { StaffProfileSettings } from "./staff-profile-settings"
 import { StudentImportSettings } from "./student-import-settings"
 import type { ApiResponse } from "@/lib/api-response"
 import type { AuditLogItem } from "@/lib/contracts/operations"
@@ -172,6 +173,7 @@ export default function SettingsPage() {
       <RubricSettings />
       <StudentImportSettings />
       <PermissionMatrixSettings />
+      <StaffProfileSettings users={users} />
 
       <section className="neu-card rounded-3xl p-6">
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">

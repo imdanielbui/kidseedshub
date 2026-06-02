@@ -64,6 +64,23 @@ const parentPortalInclude = Prisma.validator<Prisma.ParentInclude>()({
           parent: { include: { user: true } }
         },
         orderBy: { createdAt: "desc" }
+      },
+      makeupEntitlements: {
+        include: {
+          enrollment: { include: { course: true } },
+          classSession: { include: { class: true } },
+          walletEntries: true,
+          refundExpense: true,
+          resolvedBy: true
+        },
+        orderBy: [{ month: "desc" }, { createdAt: "desc" }]
+      },
+      walletEntries: {
+        include: {
+          createdBy: true,
+          receipt: true
+        },
+        orderBy: { createdAt: "desc" }
       }
     }
   }
@@ -162,6 +179,7 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
       const finalAssessments = student.finalAssessments.filter((assessment) =>
         finalAssessmentMeetsRequiredWeeks(assessment, requiredWeeksByCourseId.get(assessment.enrollment.courseId) ?? assessment.requiredWeeks)
       )
+      const walletBalance = student.walletEntries.reduce((total, entry) => total.plus(entry.amount), new Prisma.Decimal(0))
 
       return {
         id: student.id,
@@ -173,7 +191,31 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
         upcomingSessions,
         journal,
         finalAssessments: finalAssessments.map(toFinalAssessmentResult),
-        feedbacks: student.feedbacks.map(toCourseFeedbackItem)
+        feedbacks: student.feedbacks.map(toCourseFeedbackItem),
+        makeupEntitlements: student.makeupEntitlements.map((entitlement) => ({
+          id: entitlement.id,
+          enrollmentId: entitlement.enrollmentId,
+          courseName: entitlement.enrollment.course.name,
+          className: entitlement.classSession?.class.name,
+          month: entitlement.month,
+          status: entitlement.status,
+          isEligible: entitlement.isEligible,
+          eligibilityReason: entitlement.eligibilityReason ?? undefined,
+          scheduledFor: entitlement.scheduledFor?.toISOString(),
+          resolvedAmount: entitlement.resolvedAmount?.toString(),
+          resolvedAt: entitlement.resolvedAt?.toISOString(),
+          refundExpenseCode: entitlement.refundExpense?.code
+        })),
+        walletBalance: walletBalance.toString(),
+        walletEntries: student.walletEntries.map((entry) => ({
+          id: entry.id,
+          amount: entry.amount.toString(),
+          type: entry.type,
+          note: entry.note ?? undefined,
+          receiptCode: entry.receipt?.code,
+          createdByName: entry.createdBy.name,
+          createdAt: entry.createdAt.toISOString()
+        }))
       }
     })
   }

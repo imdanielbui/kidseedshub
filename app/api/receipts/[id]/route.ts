@@ -67,6 +67,8 @@ function toReceiptDetail(receipt: ReceiptDetailRecord): ReceiptPrintDetail {
     grossAmount: formatMoney(receipt.grossAmount),
     discountAmount: formatMoney(receipt.discountAmount),
     discountPercent: discountPercent.toString(),
+    walletCreditAmount: receipt.walletCreditAmount.toString(),
+    amountBeforeWalletCredit: receipt.amount.plus(receipt.walletCreditAmount).toString(),
     discountNote: receipt.note ?? undefined,
     sessions: receipt.sessions,
     billableSessions: receipt.lines.length ? receipt.lines.reduce((total, line) => total + line.billableSessions, 0) : receipt.billableSessions,

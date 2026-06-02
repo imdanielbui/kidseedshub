@@ -14,6 +14,18 @@ A feature is not ship-ready unless these are clear and verified:
 - Recovery path: how staff fixes mistakes without corrupting history.
 - Verification: API/backend check plus UI/manual flow for user-facing work.
 
+## Module Audit Rule
+
+Before marking an operations module ready for customer use, check the module against the specific business ledger it affects:
+
+- Class and attendance: session deduction, duplicate attendance prevention, makeup/refund impact, teacher assignment, and substituted teacher handling.
+- Makeup and refunds: monthly quota, entitlement state, one-resolution rule, wallet credit, refund payout, parent visibility, and audit trail.
+- Staff leave: leave balance, impacted class sessions, substitute/move/cancel decision, review status, and notifications.
+- Timesheet and payroll: employment type, approved hours, leave deductions, manual adjustments, payroll approval, paid lock, salary expense linkage, and role privacy.
+- Finance: receipts, expenses, salary expenses, refunds, wallet credits, and net profit are distinguishable in reports.
+- Parent portal: parent sees only their child's schedule, absence, makeup, credit/refund, photos, and published reports.
+- Security: production secrets, demo data visibility, permission persistence, login abuse protection, and trusted upload/image sources.
+
 ## Data Rules
 
 - Any feature that creates, edits, deletes, filters, or persists data must inspect backend patterns first.

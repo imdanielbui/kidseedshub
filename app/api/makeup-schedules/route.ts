@@ -18,6 +18,10 @@ export async function GET() {
   const attendances = await prisma.attendance.findMany({
     where: {
       status: "ABSENT_EXCUSED",
+      OR: [
+        { makeupEntitlement: { is: null } },
+        { makeupEntitlement: { is: { status: { in: ["PENDING_SCHEDULE", "SCHEDULED"] } } } }
+      ],
       ...(session.user.role === "TEACHER" ? { classSession: { class: { teacherId: session.user.id } } } : {})
     },
     include: {

@@ -1,6 +1,6 @@
 "use client"
 
-import { BellRing, Download, MessageSquareText, Plus, ReceiptText, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
+import { BellRing, CheckCircle2, Download, MessageSquareText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import {
@@ -12,6 +12,7 @@ import {
   type PaymentMethodKey,
   type ReceiptListItem
 } from "@/lib/contracts/finance"
+import { payrollRunStatusLabels, type PayrollLineItem, type PayrollRunItem } from "@/lib/contracts/payroll"
 import type { QueuedTuitionReminder, TuitionReminderItem, ZaloTemplateItem } from "@/lib/contracts/reminders"
 import type { StudentListItem } from "@/lib/contracts/students"
 
@@ -29,6 +30,13 @@ type ExpenseFormState = {
   description: string
   invoiceUrl: string
   date: string
+}
+
+type PayrollLineEditState = {
+  hoursWorked: string
+  deductions: string
+  adjustments: string
+  note: string
 }
 
 const emptyReceiptForm: ReceiptFormState = {
@@ -73,6 +81,7 @@ export default function FinancePage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [receipts, setReceipts] = useState<ReceiptListItem[]>([])
   const [expenses, setExpenses] = useState<ExpenseListItem[]>([])
+  const [payrollRuns, setPayrollRuns] = useState<PayrollRunItem[]>([])
   const [students, setStudents] = useState<StudentListItem[]>([])
   const [templates, setTemplates] = useState<ZaloTemplateItem[]>([])
   const [reminders, setReminders] = useState<TuitionReminderItem[]>([])
@@ -83,6 +92,9 @@ export default function FinancePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingReceipt, setIsSubmittingReceipt] = useState(false)
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false)
+  const [isCreatingPayroll, setIsCreatingPayroll] = useState(false)
+  const [payrollActionId, setPayrollActionId] = useState("")
+  const [payrollLineEdits, setPayrollLineEdits] = useState<Record<string, PayrollLineEditState>>({})
   const [queueingEnrollmentId, setQueueingEnrollmentId] = useState("")
   const [error, setError] = useState<string | null>(null)
 
@@ -94,23 +106,26 @@ export default function FinancePage() {
       setError(null)
 
       try {
-        const [summaryResponse, receiptsResponse, expensesResponse, templatesResponse, remindersResponse] = await Promise.all([
+        const [summaryResponse, receiptsResponse, expensesResponse, payrollResponse, templatesResponse, remindersResponse] = await Promise.all([
           fetch(`/api/finance/summary?month=${month}`, { cache: "no-store" }),
           fetch(`/api/receipts?month=${month}`, { cache: "no-store" }),
           fetch(`/api/expenses?month=${month}`, { cache: "no-store" }),
+          fetch(`/api/payroll-runs?month=${month}`, { cache: "no-store" }),
           fetch("/api/message-templates", { cache: "no-store" }),
           fetch(`/api/tuition-reminders?templateId=${selectedTemplateId}`, { cache: "no-store" })
         ])
-        const [summaryPayload, receiptsPayload, expensesPayload, templatesPayload, remindersPayload] = (await Promise.all([
+        const [summaryPayload, receiptsPayload, expensesPayload, payrollPayload, templatesPayload, remindersPayload] = (await Promise.all([
           summaryResponse.json(),
           receiptsResponse.json(),
           expensesResponse.json(),
+          payrollResponse.json(),
           templatesResponse.json(),
           remindersResponse.json()
         ])) as [
           ApiResponse<FinanceSummary>,
           ApiResponse<ReceiptListItem[]>,
           ApiResponse<ExpenseListItem[]>,
+          ApiResponse<PayrollRunItem[]>,
           ApiResponse<ZaloTemplateItem[]>,
           ApiResponse<TuitionReminderItem[]>
         ]
@@ -135,10 +150,16 @@ export default function FinancePage() {
           setExpenses([])
         }
 
+        if (payrollResponse.ok && payrollPayload.success && payrollPayload.data) {
+          setPayrollRuns(payrollPayload.data)
+        } else {
+          setPayrollRuns([])
+        }
+
         setTemplates(templatesPayload.success && templatesPayload.data ? templatesPayload.data : [])
         setReminders(remindersPayload.success && remindersPayload.data ? remindersPayload.data : [])
 
-        const firstError = summaryPayload.error ?? receiptsPayload.error ?? expensesPayload.error ?? templatesPayload.error ?? remindersPayload.error
+        const firstError = summaryPayload.error ?? receiptsPayload.error ?? expensesPayload.error ?? payrollPayload.error ?? templatesPayload.error ?? remindersPayload.error
         if (firstError) setError(firstError.message)
       } catch {
         if (isMounted) setError("Không tải được dữ liệu tài chính.")
@@ -199,6 +220,7 @@ export default function FinancePage() {
       ),
     [students]
   )
+  const payrollRun = payrollRuns[0]
 
   async function submitReceipt(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -294,6 +316,113 @@ export default function FinancePage() {
     }
   }
 
+  async function createPayrollRun() {
+    setIsCreatingPayroll(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/payroll-runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ month })
+      })
+      const payload = (await response.json()) as ApiResponse<PayrollRunItem>
+
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Không tạo được kỳ payroll.")
+        return
+      }
+
+      setRefreshKey((current) => current + 1)
+    } catch {
+      setError("Không tạo được kỳ payroll.")
+    } finally {
+      setIsCreatingPayroll(false)
+    }
+  }
+
+  async function runPayrollAction(run: PayrollRunItem, action: "generate" | "approve" | "pay") {
+    setPayrollActionId(`${run.id}:${action}`)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/payroll-runs/${run.id}/${action}`, {
+        method: "POST"
+      })
+      const payload = (await response.json()) as ApiResponse<PayrollRunItem>
+
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Không cập nhật được payroll.")
+        return
+      }
+
+      setPayrollLineEdits({})
+      setRefreshKey((current) => current + 1)
+    } catch {
+      setError("Không cập nhật được payroll.")
+    } finally {
+      setPayrollActionId("")
+    }
+  }
+
+  async function savePayrollLine(run: PayrollRunItem, line: PayrollLineItem) {
+    const edit = payrollLineEdits[line.id]
+
+    if (!edit?.note.trim()) {
+      setError("Điều chỉnh payroll cần ghi chú.")
+      return
+    }
+
+    setPayrollActionId(`${run.id}:line:${line.id}`)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/payroll-runs/${run.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          lines: [{
+            id: line.id,
+            hoursWorked: edit.hoursWorked || line.hoursWorked,
+            deductions: edit.deductions || line.deductions,
+            adjustments: edit.adjustments || line.adjustments,
+            note: edit.note.trim()
+          }]
+        })
+      })
+      const payload = (await response.json()) as ApiResponse<PayrollRunItem>
+
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Không lưu được dòng payroll.")
+        return
+      }
+
+      setPayrollLineEdits((current) => {
+        const next = { ...current }
+        delete next[line.id]
+        return next
+      })
+      setRefreshKey((current) => current + 1)
+    } catch {
+      setError("Không lưu được dòng payroll.")
+    } finally {
+      setPayrollActionId("")
+    }
+  }
+
+  function updatePayrollLineEdit(line: PayrollLineItem, patch: Partial<PayrollLineEditState>) {
+    setPayrollLineEdits((current) => ({
+      ...current,
+      [line.id]: {
+        hoursWorked: current[line.id]?.hoursWorked ?? "",
+        deductions: current[line.id]?.deductions ?? "",
+        adjustments: current[line.id]?.adjustments ?? "",
+        note: current[line.id]?.note ?? "",
+        ...patch
+      }
+    }))
+  }
+
   return (
     <main className="space-y-6">
       <div className="neu-card rounded-3xl p-6">
@@ -346,6 +475,150 @@ export default function FinancePage() {
       {error ? (
         <p className="rounded-3xl border border-brand-red/15 bg-white/50 p-4 text-sm text-brand-red">{error}</p>
       ) : null}
+      <section className="neu-card rounded-3xl">
+        <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Payroll</p>
+            <h2 className="mt-2 font-semibold text-brand-ink">Payroll tháng {month}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-stone-500">
+              Sinh bảng lương từ hồ sơ nhân sự, giờ dạy đã duyệt và nghỉ không lương; khi chi sẽ tạo phiếu chi lương liên kết.
+            </p>
+          </div>
+          {payrollRun ? (
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
+                {payrollRunStatusLabels[payrollRun.status]}
+              </span>
+              {payrollRun.status === "DRAFT" ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-brand-red/15 px-3 py-2 text-xs font-semibold text-brand-red disabled:opacity-50"
+                  disabled={payrollActionId === `${payrollRun.id}:generate`}
+                  onClick={() => void runPayrollAction(payrollRun, "generate")}
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                  {payrollActionId === `${payrollRun.id}:generate` ? "Đang sinh" : "Sinh lại dòng"}
+                </button>
+              ) : null}
+              {payrollRun.status === "DRAFT" && payrollRun.lineCount > 0 ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  disabled={payrollActionId === `${payrollRun.id}:approve`}
+                  onClick={() => void runPayrollAction(payrollRun, "approve")}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {payrollActionId === `${payrollRun.id}:approve` ? "Đang duyệt" : "Duyệt payroll"}
+                </button>
+              ) : null}
+              {payrollRun.status === "APPROVED" ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  disabled={payrollActionId === `${payrollRun.id}:pay`}
+                  onClick={() => void runPayrollAction(payrollRun, "pay")}
+                >
+                  <WalletCards className="h-3.5 w-3.5" />
+                  {payrollActionId === `${payrollRun.id}:pay` ? "Đang chi" : "Tạo phiếu chi lương"}
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isCreatingPayroll}
+              onClick={() => void createPayrollRun()}
+            >
+              <Plus className="h-4 w-4" />
+              {isCreatingPayroll ? "Đang tạo" : "Tạo payroll tháng"}
+            </button>
+          )}
+        </div>
+        <div className="content-border grid gap-3 p-5 md:grid-cols-4">
+          <PayrollMetric label="Tổng gross" value={payrollRun ? formatMoney(payrollRun.totalGrossAmount) : "0đ"} />
+          <PayrollMetric label="Khấu trừ" value={payrollRun ? formatMoney(payrollRun.totalDeductions) : "0đ"} />
+          <PayrollMetric label="Thưởng/điều chỉnh" value={payrollRun ? formatMoney(payrollRun.totalAdjustments) : "0đ"} />
+          <PayrollMetric label="Cần chi" value={payrollRun ? formatMoney(payrollRun.totalFinalAmount) : "0đ"} />
+        </div>
+        {payrollRun ? (
+          <div className="content-border space-y-3 p-5">
+            {payrollRun.lines.length ? (
+              payrollRun.lines.map((line) => {
+                const edit = payrollLineEdits[line.id]
+                const isSavingLine = payrollActionId === `${payrollRun.id}:line:${line.id}`
+
+                return (
+                  <article key={line.id} className="neu-list-item rounded-2xl p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-brand-ink">{line.staffName}</p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {line.employmentType === "FULL_TIME" ? "Toàn thời gian" : "Bán thời gian"} - {line.hoursWorked}h - gross {formatMoney(line.grossAmount)}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          Khấu trừ {formatMoney(line.deductions)} - Điều chỉnh {formatMoney(line.adjustments)}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-brand-red">{formatMoney(line.finalAmount)}</p>
+                    </div>
+                    {line.note ? <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs text-stone-600">{line.note}</p> : null}
+                    {payrollRun.status === "DRAFT" ? (
+                      <div className="mt-4 grid gap-3 md:grid-cols-5">
+                        <FinanceInput
+                          label="Giờ"
+                          type="number"
+                          min="0"
+                          value={edit?.hoursWorked ?? ""}
+                          onChange={(value) => updatePayrollLineEdit(line, { hoursWorked: value })}
+                        />
+                        <FinanceInput
+                          label="Khấu trừ"
+                          type="number"
+                          value={edit?.deductions ?? ""}
+                          onChange={(value) => updatePayrollLineEdit(line, { deductions: value })}
+                        />
+                        <FinanceInput
+                          label="Điều chỉnh"
+                          type="number"
+                          value={edit?.adjustments ?? ""}
+                          onChange={(value) => updatePayrollLineEdit(line, { adjustments: value })}
+                        />
+                        <FinanceInput
+                          label="Ghi chú"
+                          value={edit?.note ?? ""}
+                          onChange={(value) => updatePayrollLineEdit(line, { note: value })}
+                        />
+                        <button
+                          type="button"
+                          className="self-end rounded-2xl border border-brand-red/15 px-3 py-3 text-xs font-semibold text-brand-red disabled:opacity-50"
+                          disabled={isSavingLine}
+                          onClick={() => void savePayrollLine(payrollRun, line)}
+                        >
+                          {isSavingLine ? "Đang lưu" : "Lưu chỉnh"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                )
+              })
+            ) : (
+              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">
+                Kỳ payroll chưa có dòng lương. Bấm sinh lại dòng để lấy hồ sơ nhân sự và giờ đã duyệt.
+              </p>
+            )}
+            {payrollRun.salaryExpenseCode ? (
+              <p className="rounded-2xl border border-brand-red/10 bg-white/35 p-4 text-sm text-stone-600">
+                Đã tạo phiếu chi lương {payrollRun.salaryExpenseCode} - {formatMoney(payrollRun.salaryExpenseAmount ?? "0")}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="content-border p-5">
+            <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Chưa có payroll cho tháng đang chọn.</p>
+          </div>
+        )}
+      </section>
       <section className="neu-card rounded-3xl">
         <div className="flex flex-col gap-4 p-5 md:flex-row md:items-end md:justify-between">
           <div>
@@ -615,5 +888,14 @@ function FinanceInput({
         required={required}
       />
     </label>
+  )
+}
+
+function PayrollMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="neu-pressed rounded-2xl p-4">
+      <p className="text-xs font-semibold uppercase tracking-widest text-stone-500">{label}</p>
+      <p className="mt-2 text-lg font-semibold text-brand-ink">{value}</p>
+    </div>
   )
 }

@@ -4,6 +4,7 @@ import { fail, ok } from "@/lib/api-response"
 import { createAuditLog, getActiveStaffRecipientIds, notifyUsers } from "@/lib/backend/activity"
 import { nextReceiptCode } from "@/lib/backend/codes"
 import { parseMonth } from "@/lib/backend/date"
+import { getStudentWalletBalance } from "@/lib/backend/makeup-entitlement"
 import type { ReceiptListItem } from "@/lib/contracts/finance"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -59,6 +60,8 @@ function toReceiptListItem(receipt: ReceiptListRecord): ReceiptListItem {
     grossAmount: receipt.grossAmount.toString(),
     discountAmount: receipt.discountAmount.toString(),
     discountPercent: receipt.discountPercent.toString(),
+    walletCreditAmount: receipt.walletCreditAmount.toString(),
+    amountBeforeWalletCredit: receipt.amount.plus(receipt.walletCreditAmount).toString(),
     discountNote: receipt.note ?? undefined,
     sessions: receipt.sessions,
     billableSessions,
@@ -194,6 +197,11 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data
+
+  if (data.walletCreditAmount > 0 && !can(session.user.role, "wallet:apply_credit")) {
+    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền áp dụng credit ví học viên." }, { status: 403 })
+  }
+
   try {
     const receipt = await prisma.$transaction(async (tx) => {
       const inputLines = data.lines?.length
@@ -264,7 +272,9 @@ export async function POST(request: Request) {
 
       const totalGrossAmount = computedLines.reduce((total, line) => total.plus(line.grossAmount), new Prisma.Decimal(0))
       const totalDiscountAmount = computedLines.reduce((total, line) => total.plus(line.discountAmount.plus(line.grossAmount.mul(line.discountPercent).div(100))), new Prisma.Decimal(0))
-      const totalAmount = data.amount !== undefined ? new Prisma.Decimal(data.amount) : computedLines.reduce((total, line) => total.plus(line.amount), new Prisma.Decimal(0))
+      const totalAmountBeforeWalletCredit = data.amount !== undefined ? new Prisma.Decimal(data.amount) : computedLines.reduce((total, line) => total.plus(line.amount), new Prisma.Decimal(0))
+      const walletCreditAmount = new Prisma.Decimal(data.walletCreditAmount)
+      const totalAmount = totalAmountBeforeWalletCredit.minus(walletCreditAmount)
       const totalSessions = computedLines.reduce((total, line) => total + line.billableSessions, 0)
       const totalFreeTrialSessions = computedLines.reduce((total, line) => total + line.freeTrialSessions, 0)
       const totalPaidBeforeReceipt = computedLines.reduce((total, line) => total + line.paidSessionsBeforeReceipt, 0)
@@ -276,6 +286,19 @@ export async function POST(request: Request) {
         throw new Error("NO_PAYABLE_SESSIONS")
       }
 
+      if (walletCreditAmount.greaterThan(0)) {
+        const receiptStudentId = Array.from(studentIds)[0]
+        const availableCredit = await getStudentWalletBalance(tx, receiptStudentId)
+
+        if (walletCreditAmount.greaterThan(availableCredit)) {
+          throw new Error("WALLET_CREDIT_EXCEEDS_BALANCE")
+        }
+
+        if (walletCreditAmount.greaterThan(totalAmountBeforeWalletCredit)) {
+          throw new Error("WALLET_CREDIT_EXCEEDS_AMOUNT")
+        }
+      }
+
       const created = await tx.receipt.create({
         data: {
           code,
@@ -284,6 +307,7 @@ export async function POST(request: Request) {
           grossAmount: totalGrossAmount,
           discountAmount: totalDiscountAmount,
           discountPercent: new Prisma.Decimal(0),
+          walletCreditAmount,
           sessions: totalSessions,
           billableSessions: totalSessions,
           freeTrialSessions: totalFreeTrialSessions,
@@ -312,6 +336,19 @@ export async function POST(request: Request) {
         },
         include: receiptListInclude
       })
+
+      if (walletCreditAmount.greaterThan(0)) {
+        await tx.studentWalletEntry.create({
+          data: {
+            studentId: created.enrollment.studentId,
+            amount: walletCreditAmount.mul(-1),
+            type: "APPLIED",
+            receiptId: created.id,
+            note: `Áp dụng credit cho phiếu thu ${created.code}`,
+            createdById: session.user.id
+          }
+        })
+      }
 
       for (const line of computedLines) {
         const enrollment = await tx.enrollment.update({
@@ -346,6 +383,7 @@ export async function POST(request: Request) {
           sessions: created.sessions,
           grossAmount: created.grossAmount.toString(),
           discountAmount: created.discountAmount.toString(),
+          walletCreditAmount: created.walletCreditAmount.toString(),
           lineCount: created.lines.length,
           enrollmentIds
         }
@@ -379,6 +417,14 @@ export async function POST(request: Request) {
 
     if (error instanceof Error && error.message === "NO_PAYABLE_SESSIONS") {
       return fail({ code: "NO_PAYABLE_SESSIONS", message: "Không có buổi tính phí sau học thử. Hãy kiểm tra lại số buổi học thử hoặc nhập số tiền cần thu nếu đây là ngoại lệ." }, { status: 400 })
+    }
+
+    if (error instanceof Error && error.message === "WALLET_CREDIT_EXCEEDS_BALANCE") {
+      return fail({ code: "WALLET_CREDIT_EXCEEDS_BALANCE", message: "Credit áp dụng vượt quá số dư ví học viên." }, { status: 400 })
+    }
+
+    if (error instanceof Error && error.message === "WALLET_CREDIT_EXCEEDS_AMOUNT") {
+      return fail({ code: "WALLET_CREDIT_EXCEEDS_AMOUNT", message: "Credit áp dụng không được vượt quá số tiền phiếu thu." }, { status: 400 })
     }
 
     throw error

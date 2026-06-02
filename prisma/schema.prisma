@@ -112,6 +112,59 @@ enum AbsenceRequestStatus {
   REJECTED
 }
 
+enum StaffLeaveType {
+  PAID
+  UNPAID
+  SICK
+  OTHER
+}
+
+enum StaffLeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+}
+
+enum StaffTimesheetSource {
+  CLASS_SESSION
+  MANUAL
+  ADJUSTMENT
+}
+
+enum StaffTimesheetStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELED
+}
+
+enum MakeupEntitlementStatus {
+  PENDING_SCHEDULE
+  SCHEDULED
+  COMPLETED
+  CREDITED
+  REFUNDED
+  EXPIRED
+  REJECTED
+}
+
+enum StudentWalletEntryType {
+  CREDIT
+  APPLIED
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String
@@ -123,35 +176,49 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parent                Parent?
-  assignedStudents      Student[]          @relation("AssignedTeacher")
-  saleOwnedStudents     Student[]          @relation("StudentSaleOwner")
-  createdStudents       Student[]          @relation("StudentCreatedBy")
-  classesTeaching       Class[]
-  receiptsCreated       Receipt[]          @relation("ReceiptCreatedBy")
-  expensesCreated       Expense[]          @relation("ExpenseCreatedBy")
-  attendanceMarked      Attendance[]       @relation("AttendanceMarkedBy")
-  weeklyAssessments     WeeklyAssessment[] @relation("WeeklyAssessmentTeacher")
-  finalAssessments      FinalAssessment[]  @relation("FinalAssessmentTeacher")
-  finalAssessmentsPublished FinalAssessment[] @relation("FinalAssessmentPublishedBy")
-  rubricConfigsCreated  AssessmentRubricConfig[] @relation("RubricConfigCreatedBy")
-  tasksAssigned         Task[]             @relation("TaskAssignedTo")
-  tasksCreated          Task[]             @relation("TaskCreatedBy")
-  contactLogs           ContactLog[]       @relation("ContactLogBy")
-  absenceRequestsReviewed AbsenceRequest[]  @relation("AbsenceRequestReviewedBy")
-  auditLogs             AuditLog[]         @relation("AuditActor")
-  notificationsReceived InternalNotification[] @relation("NotificationRecipient")
-  notificationsTriggered InternalNotification[] @relation("NotificationActor")
+  parent                     Parent?
+  assignedStudents           Student[]                     @relation("AssignedTeacher")
+  saleOwnedStudents          Student[]                     @relation("StudentSaleOwner")
+  createdStudents            Student[]                     @relation("StudentCreatedBy")
+  classesTeaching            Class[]
+  receiptsCreated            Receipt[]                     @relation("ReceiptCreatedBy")
+  expensesCreated            Expense[]                     @relation("ExpenseCreatedBy")
+  attendanceMarked           Attendance[]                  @relation("AttendanceMarkedBy")
+  weeklyAssessments          WeeklyAssessment[]            @relation("WeeklyAssessmentTeacher")
+  finalAssessments           FinalAssessment[]             @relation("FinalAssessmentTeacher")
+  finalAssessmentsPublished  FinalAssessment[]             @relation("FinalAssessmentPublishedBy")
+  rubricConfigsCreated       AssessmentRubricConfig[]      @relation("RubricConfigCreatedBy")
+  tasksAssigned              Task[]                        @relation("TaskAssignedTo")
+  tasksCreated               Task[]                        @relation("TaskCreatedBy")
+  contactLogs                ContactLog[]                  @relation("ContactLogBy")
+  absenceRequestsReviewed    AbsenceRequest[]              @relation("AbsenceRequestReviewedBy")
+  makeupEntitlementsResolved MakeupEntitlement[]           @relation("MakeupEntitlementResolvedBy")
+  walletEntriesCreated       StudentWalletEntry[]          @relation("StudentWalletEntryCreatedBy")
+  staffProfile               StaffProfile?
+  staffLeaveRequests         StaffLeaveRequest[]           @relation("StaffLeaveRequester")
+  staffLeaveRequestsReviewed StaffLeaveRequest[]           @relation("StaffLeaveReviewedBy")
+  staffLeaveAdjustments      StaffLeaveBalanceAdjustment[] @relation("StaffLeaveAdjustmentStaff")
+  staffLeaveAdjustmentsMade  StaffLeaveBalanceAdjustment[] @relation("StaffLeaveAdjustmentCreatedBy")
+  staffTimesheetEntries      StaffTimesheetEntry[]         @relation("StaffTimesheetStaff")
+  staffTimesheetApproved     StaffTimesheetEntry[]         @relation("StaffTimesheetApprovedBy")
+  payrollRunsGenerated       PayrollRun[]                  @relation("PayrollRunGeneratedBy")
+  payrollRunsApproved        PayrollRun[]                  @relation("PayrollRunApprovedBy")
+  payrollRunsPaid            PayrollRun[]                  @relation("PayrollRunPaidBy")
+  payrollLines               PayrollLine[]                 @relation("PayrollLineStaff")
+  substitutedSessions        ClassSession[]                @relation("ClassSessionSubstituteTeacher")
+  auditLogs                  AuditLog[]                    @relation("AuditActor")
+  notificationsReceived      InternalNotification[]        @relation("NotificationRecipient")
+  notificationsTriggered     InternalNotification[]        @relation("NotificationActor")
 }
 
 model Parent {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  students  Student[]
-  feedbacks CourseFeedback[]
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  user            User             @relation(fields: [userId], references: [id])
+  students        Student[]
+  feedbacks       CourseFeedback[]
   absenceRequests AbsenceRequest[]
-  createdAt DateTime @default(now())
+  createdAt       DateTime         @default(now())
 }
 
 model Student {
@@ -176,15 +243,22 @@ model Student {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  enrollments       Enrollment[]
-  classStudents     ClassStudent[]
-  photos            ClassPhoto[]
-  tasks             Task[]
-  contactLogs       ContactLog[]
-  weeklyAssessments WeeklyAssessment[]
-  finalAssessments  FinalAssessment[]
-  feedbacks         CourseFeedback[]
-  absenceRequests   AbsenceRequest[]
+  enrollments        Enrollment[]
+  classStudents      ClassStudent[]
+  photos             ClassPhoto[]
+  tasks              Task[]
+  contactLogs        ContactLog[]
+  weeklyAssessments  WeeklyAssessment[]
+  finalAssessments   FinalAssessment[]
+  feedbacks          CourseFeedback[]
+  absenceRequests    AbsenceRequest[]
+  makeupEntitlements MakeupEntitlement[]
+  walletEntries      StudentWalletEntry[]
+  refundExpenses     Expense[]            @relation("RefundExpenseStudent")
+
+  @@index([saleOwnerId])
+  @@index([createdById])
+  @@index([status, stageChangedAt])
 }
 
 model Course {
@@ -203,21 +277,21 @@ model Course {
 }
 
 model Class {
-  id          String   @id @default(cuid())
-  name        String
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id])
-  teacherId   String
-  teacher     User     @relation(fields: [teacherId], references: [id])
-  weekday     Int
-  startTime   String
-  endTime     String
-  room        String?
-  startDate   DateTime?
+  id              String    @id @default(cuid())
+  name            String
+  courseId        String
+  course          Course    @relation(fields: [courseId], references: [id])
+  teacherId       String
+  teacher         User      @relation(fields: [teacherId], references: [id])
+  weekday         Int
+  startTime       String
+  endTime         String
+  room            String?
+  startDate       DateTime?
   plannedSessions Int?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   students      ClassStudent[]
   scheduleSlots ClassScheduleSlot[]
@@ -252,24 +326,29 @@ model ClassStudent {
 }
 
 model ClassSession {
-  id             String             @id @default(cuid())
-  classId        String
-  class          Class              @relation(fields: [classId], references: [id])
-  scheduleSlotId String?
-  scheduleSlot   ClassScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: SetNull)
-  date           DateTime
-  startTime      String?
-  endTime        String?
-  room           String?
-  status         ClassSessionStatus @default(SCHEDULED)
-  topic          String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id                  String             @id @default(cuid())
+  classId             String
+  class               Class              @relation(fields: [classId], references: [id])
+  scheduleSlotId      String?
+  scheduleSlot        ClassScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: SetNull)
+  date                DateTime
+  startTime           String?
+  endTime             String?
+  room                String?
+  status              ClassSessionStatus @default(SCHEDULED)
+  substituteTeacherId String?
+  substituteTeacher   User?              @relation("ClassSessionSubstituteTeacher", fields: [substituteTeacherId], references: [id], onDelete: SetNull)
+  topic               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
-  attendances Attendance[]
-  absenceRequests AbsenceRequest[]
+  attendances        Attendance[]
+  absenceRequests    AbsenceRequest[]
+  makeupEntitlements MakeupEntitlement[]
+  timesheetEntry     StaffTimesheetEntry?
 
   @@unique([classId, date])
+  @@index([substituteTeacherId])
 }
 
 model AbsenceRequest {
@@ -289,7 +368,129 @@ model AbsenceRequest {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
+  makeupEntitlement MakeupEntitlement?
+
   @@unique([studentId, classSessionId])
+}
+
+model StaffLeaveRequest {
+  id           String           @id @default(cuid())
+  staffId      String
+  staff        User             @relation("StaffLeaveRequester", fields: [staffId], references: [id])
+  startDate    DateTime
+  endDate      DateTime
+  type         StaffLeaveType
+  reason       String
+  status       StaffLeaveStatus @default(PENDING)
+  reviewedById String?
+  reviewedBy   User?            @relation("StaffLeaveReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  adminNote    String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([staffId, status])
+  @@index([startDate, endDate])
+  @@index([reviewedById])
+}
+
+model StaffProfile {
+  id             String         @id @default(cuid())
+  userId         String         @unique
+  user           User           @relation(fields: [userId], references: [id])
+  employmentType EmploymentType
+  startDate      DateTime
+  monthlySalary  Decimal?       @db.Decimal(12, 2)
+  hourlyRate     Decimal?       @db.Decimal(12, 2)
+  payrollActive  Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([employmentType, payrollActive])
+}
+
+model StaffLeaveBalanceAdjustment {
+  id          String   @id @default(cuid())
+  staffId     String
+  staff       User     @relation("StaffLeaveAdjustmentStaff", fields: [staffId], references: [id])
+  days        Decimal  @db.Decimal(5, 2)
+  reason      String
+  createdById String
+  createdBy   User     @relation("StaffLeaveAdjustmentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([staffId, createdAt])
+  @@index([createdById])
+}
+
+model StaffTimesheetEntry {
+  id                   String               @id @default(cuid())
+  staffId              String
+  staff                User                 @relation("StaffTimesheetStaff", fields: [staffId], references: [id])
+  date                 DateTime
+  source               StaffTimesheetSource
+  startTime            String?
+  endTime              String?
+  hours                Decimal              @db.Decimal(5, 2)
+  status               StaffTimesheetStatus @default(DRAFT)
+  linkedClassSessionId String?              @unique
+  linkedClassSession   ClassSession?        @relation(fields: [linkedClassSessionId], references: [id], onDelete: SetNull)
+  approvedById         String?
+  approvedBy           User?                @relation("StaffTimesheetApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt           DateTime?
+  note                 String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([staffId, date])
+  @@index([status, date])
+  @@index([approvedById])
+}
+
+model PayrollRun {
+  id            String           @id @default(cuid())
+  month         String           @unique
+  status        PayrollRunStatus @default(DRAFT)
+  generatedById String
+  generatedBy   User             @relation("PayrollRunGeneratedBy", fields: [generatedById], references: [id])
+  approvedById  String?
+  approvedBy    User?            @relation("PayrollRunApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt    DateTime?
+  paidById      String?
+  paidBy        User?            @relation("PayrollRunPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  paidAt        DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  lines         PayrollLine[]
+  salaryExpense Expense?      @relation("PayrollRunSalaryExpense")
+
+  @@index([status, month])
+  @@index([generatedById])
+  @@index([approvedById])
+  @@index([paidById])
+}
+
+model PayrollLine {
+  id             String         @id @default(cuid())
+  payrollRunId   String
+  payrollRun     PayrollRun     @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  staffId        String
+  staff          User           @relation("PayrollLineStaff", fields: [staffId], references: [id])
+  employmentType EmploymentType
+  baseSalary     Decimal        @default(0) @db.Decimal(12, 2)
+  hourlyRate     Decimal        @default(0) @db.Decimal(12, 2)
+  hoursWorked    Decimal        @default(0) @db.Decimal(8, 2)
+  grossAmount    Decimal        @db.Decimal(12, 2)
+  deductions     Decimal        @default(0) @db.Decimal(12, 2)
+  adjustments    Decimal        @default(0) @db.Decimal(12, 2)
+  finalAmount    Decimal        @db.Decimal(12, 2)
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([payrollRunId, staffId])
+  @@index([staffId])
 }
 
 model ScheduleEvent {
@@ -306,46 +507,103 @@ model ScheduleEvent {
 }
 
 model Enrollment {
-  id              String    @id @default(cuid())
-  studentId       String
-  student         Student   @relation(fields: [studentId], references: [id])
-  courseId        String
-  course          Course    @relation(fields: [courseId], references: [id])
-  sessionsBought  Int
-  sessionsUsed    Int       @default(0)
-  joinSessionNumber        Int?
+  id                        String    @id @default(cuid())
+  studentId                 String
+  student                   Student   @relation(fields: [studentId], references: [id])
+  courseId                  String
+  course                    Course    @relation(fields: [courseId], references: [id])
+  sessionsBought            Int
+  sessionsUsed              Int       @default(0)
+  joinSessionNumber         Int?
   totalCourseSessionsAtJoin Int?
-  freeTrialSessions        Int       @default(0)
+  freeTrialSessions         Int       @default(0)
   paidSessionsBeforeReceipt Int       @default(0)
-  startDate       DateTime?
-  endDate         DateTime?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  startDate                 DateTime?
+  endDate                   DateTime?
+  isActive                  Boolean   @default(true)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
-  attendances       Attendance[]
-  receipts          Receipt[]
-  receiptLines      ReceiptLine[]
-  weeklyAssessments WeeklyAssessment[]
-  finalAssessments  FinalAssessment[]
+  attendances        Attendance[]
+  receipts           Receipt[]
+  receiptLines       ReceiptLine[]
+  weeklyAssessments  WeeklyAssessment[]
+  finalAssessments   FinalAssessment[]
+  makeupEntitlements MakeupEntitlement[]
 }
 
 model Attendance {
-  id            String           @id @default(cuid())
-  enrollmentId  String
-  enrollment    Enrollment       @relation(fields: [enrollmentId], references: [id])
+  id             String           @id @default(cuid())
+  enrollmentId   String
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id])
   classSessionId String?
-  classSession   ClassSession?   @relation(fields: [classSessionId], references: [id])
-  date          DateTime
-  status        AttendanceStatus
-  note          String?
-  makeupDate    DateTime?
-  markedById    String
-  markedBy      User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  classSession   ClassSession?    @relation(fields: [classSessionId], references: [id])
+  date           DateTime
+  status         AttendanceStatus
+  note           String?
+  makeupDate     DateTime?
+  markedById     String
+  markedBy       User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  photos ClassPhoto[]
+  photos            ClassPhoto[]
+  makeupEntitlement MakeupEntitlement?
+}
+
+model MakeupEntitlement {
+  id                String                  @id @default(cuid())
+  studentId         String
+  student           Student                 @relation(fields: [studentId], references: [id])
+  enrollmentId      String
+  enrollment        Enrollment              @relation(fields: [enrollmentId], references: [id])
+  attendanceId      String?                 @unique
+  attendance        Attendance?             @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  absenceRequestId  String?                 @unique
+  absenceRequest    AbsenceRequest?         @relation(fields: [absenceRequestId], references: [id], onDelete: SetNull)
+  classSessionId    String?
+  classSession      ClassSession?           @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  month             String
+  status            MakeupEntitlementStatus @default(PENDING_SCHEDULE)
+  isEligible        Boolean                 @default(true)
+  eligibilityReason String?
+  scheduledFor      DateTime?
+  resolvedAmount    Decimal?                @db.Decimal(12, 2)
+  resolvedAt        DateTime?
+  resolvedById      String?
+  resolvedBy        User?                   @relation("MakeupEntitlementResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  note              String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  walletEntries StudentWalletEntry[]
+  refundExpense Expense?             @relation("MakeupEntitlementRefundExpense")
+
+  @@index([studentId, month, status])
+  @@index([enrollmentId])
+  @@index([classSessionId])
+  @@index([resolvedById])
+}
+
+model StudentWalletEntry {
+  id                  String                 @id @default(cuid())
+  studentId           String
+  student             Student                @relation(fields: [studentId], references: [id])
+  amount              Decimal                @db.Decimal(12, 2)
+  type                StudentWalletEntryType
+  makeupEntitlementId String?
+  makeupEntitlement   MakeupEntitlement?     @relation(fields: [makeupEntitlementId], references: [id], onDelete: SetNull)
+  receiptId           String?
+  receipt             Receipt?               @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  note                String?
+  createdById         String
+  createdBy           User                   @relation("StudentWalletEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt           DateTime               @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([makeupEntitlementId])
+  @@index([receiptId])
+  @@index([createdById])
 }
 
 model ClassPhoto {
@@ -361,23 +619,23 @@ model ClassPhoto {
 }
 
 model WeeklyAssessment {
-  id           String           @id @default(cuid())
-  studentId    String
-  student      Student          @relation(fields: [studentId], references: [id])
-  enrollmentId String
-  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id])
-  subject      CourseSubject
-  rubricVersion String
+  id             String                  @id @default(cuid())
+  studentId      String
+  student        Student                 @relation(fields: [studentId], references: [id])
+  enrollmentId   String
+  enrollment     Enrollment              @relation(fields: [enrollmentId], references: [id])
+  subject        CourseSubject
+  rubricVersion  String
   rubricConfigId String?
   rubricConfig   AssessmentRubricConfig? @relation(fields: [rubricConfigId], references: [id], onDelete: SetNull)
   rubricSnapshot Json?
-  weekNumber   Int
-  status       AssessmentStatus @default(NOT_STARTED)
-  teacherId    String
-  teacher      User             @relation("WeeklyAssessmentTeacher", fields: [teacherId], references: [id])
-  comment      String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  weekNumber     Int
+  status         AssessmentStatus        @default(NOT_STARTED)
+  teacherId      String
+  teacher        User                    @relation("WeeklyAssessmentTeacher", fields: [teacherId], references: [id])
+  comment        String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 
   items AssessmentItemResult[]
 
@@ -404,43 +662,43 @@ model AssessmentItemResult {
 }
 
 model FinalAssessment {
-  id              String        @id @default(cuid())
-  studentId       String
-  student         Student       @relation(fields: [studentId], references: [id])
-  enrollmentId    String
-  enrollment      Enrollment    @relation(fields: [enrollmentId], references: [id])
-  subject         CourseSubject
-  rubricVersion   String
-  requiredWeeks   Int
-  completedWeeks  Int
-  strengths       String
-  improvements    String
-  teacherSummary  String
-  nextSteps       String?
-  teacherId       String
-  teacher         User          @relation("FinalAssessmentTeacher", fields: [teacherId], references: [id])
-  status          FinalAssessmentStatus @default(DRAFT)
-  publishedAt     DateTime?
-  publishedById   String?
-  publishedBy     User?         @relation("FinalAssessmentPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String                @id @default(cuid())
+  studentId      String
+  student        Student               @relation(fields: [studentId], references: [id])
+  enrollmentId   String
+  enrollment     Enrollment            @relation(fields: [enrollmentId], references: [id])
+  subject        CourseSubject
+  rubricVersion  String
+  requiredWeeks  Int
+  completedWeeks Int
+  strengths      String
+  improvements   String
+  teacherSummary String
+  nextSteps      String?
+  teacherId      String
+  teacher        User                  @relation("FinalAssessmentTeacher", fields: [teacherId], references: [id])
+  status         FinalAssessmentStatus @default(DRAFT)
+  publishedAt    DateTime?
+  publishedById  String?
+  publishedBy    User?                 @relation("FinalAssessmentPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   @@index([status, publishedAt])
   @@index([publishedById])
 }
 
 model AssessmentRubricConfig {
-  id            String             @id @default(cuid())
-  subject       CourseSubject
-  version       String
-  status        RubricConfigStatus @default(DRAFT)
-  domainsJson   Json
-  createdById   String?
-  createdBy     User?              @relation("RubricConfigCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  activatedAt   DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id          String             @id @default(cuid())
+  subject     CourseSubject
+  version     String
+  status      RubricConfigStatus @default(DRAFT)
+  domainsJson Json
+  createdById String?
+  createdBy   User?              @relation("RubricConfigCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  activatedAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   weeklyAssessments WeeklyAssessment[]
 
@@ -450,61 +708,74 @@ model AssessmentRubricConfig {
 }
 
 model Receipt {
-  id           String        @id @default(cuid())
-  code         String        @unique
-  enrollmentId String
-  enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id])
-  amount       Decimal       @db.Decimal(12, 2)
-  sessions     Int
-  grossAmount   Decimal       @default(0) @db.Decimal(12, 2)
-  discountAmount Decimal      @default(0) @db.Decimal(12, 2)
-  discountPercent Decimal     @default(0) @db.Decimal(5, 2)
-  discountNote String?
-  billableSessions Int        @default(0)
-  freeTrialSessions Int       @default(0)
-  paidSessionsBeforeReceipt Int @default(0)
-  remainingSessionsAfterReceipt Int @default(0)
-  method       PaymentMethod
-  note         String?
-  createdById  String
-  createdBy    User          @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
-  createdAt    DateTime      @default(now())
+  id                            String        @id @default(cuid())
+  code                          String        @unique
+  enrollmentId                  String
+  enrollment                    Enrollment    @relation(fields: [enrollmentId], references: [id])
+  amount                        Decimal       @db.Decimal(12, 2)
+  sessions                      Int
+  grossAmount                   Decimal       @default(0) @db.Decimal(12, 2)
+  discountAmount                Decimal       @default(0) @db.Decimal(12, 2)
+  discountPercent               Decimal       @default(0) @db.Decimal(5, 2)
+  walletCreditAmount            Decimal       @default(0) @db.Decimal(12, 2)
+  discountNote                  String?
+  billableSessions              Int           @default(0)
+  freeTrialSessions             Int           @default(0)
+  paidSessionsBeforeReceipt     Int           @default(0)
+  remainingSessionsAfterReceipt Int           @default(0)
+  method                        PaymentMethod
+  note                          String?
+  createdById                   String
+  createdBy                     User          @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  createdAt                     DateTime      @default(now())
 
-  lines        ReceiptLine[]
+  lines         ReceiptLine[]
+  walletEntries StudentWalletEntry[]
 }
 
 model ReceiptLine {
-  id                           String     @id @default(cuid())
-  receiptId                    String
-  receipt                      Receipt    @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  enrollmentId                 String
-  enrollment                   Enrollment @relation(fields: [enrollmentId], references: [id])
-  courseName                   String
-  coursePrice                  Decimal    @db.Decimal(12, 2)
-  courseTotalSessions          Int
-  unitPrice                    Decimal    @db.Decimal(12, 2)
-  billableSessions             Int
-  freeTrialSessions            Int        @default(0)
-  paidSessionsBeforeReceipt    Int        @default(0)
-  grossAmount                  Decimal    @db.Decimal(12, 2)
-  discountAmount               Decimal    @default(0) @db.Decimal(12, 2)
-  discountPercent              Decimal    @default(0) @db.Decimal(5, 2)
-  amount                       Decimal    @db.Decimal(12, 2)
-  remainingSessionsAfterReceipt Int       @default(0)
-  createdAt                    DateTime   @default(now())
+  id                            String     @id @default(cuid())
+  receiptId                     String
+  receipt                       Receipt    @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  enrollmentId                  String
+  enrollment                    Enrollment @relation(fields: [enrollmentId], references: [id])
+  courseName                    String
+  coursePrice                   Decimal    @db.Decimal(12, 2)
+  courseTotalSessions           Int
+  unitPrice                     Decimal    @db.Decimal(12, 2)
+  billableSessions              Int
+  freeTrialSessions             Int        @default(0)
+  paidSessionsBeforeReceipt     Int        @default(0)
+  grossAmount                   Decimal    @db.Decimal(12, 2)
+  discountAmount                Decimal    @default(0) @db.Decimal(12, 2)
+  discountPercent               Decimal    @default(0) @db.Decimal(5, 2)
+  amount                        Decimal    @db.Decimal(12, 2)
+  remainingSessionsAfterReceipt Int        @default(0)
+  createdAt                     DateTime   @default(now())
+
+  @@index([receiptId])
+  @@index([enrollmentId])
 }
 
 model Expense {
-  id          String          @id @default(cuid())
-  code        String          @unique
-  category    ExpenseCategory
-  amount      Decimal         @db.Decimal(12, 2)
-  description String
-  invoiceUrl  String?
-  date        DateTime
-  createdById String
-  createdBy   User            @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime        @default(now())
+  id                  String             @id @default(cuid())
+  code                String             @unique
+  category            ExpenseCategory
+  amount              Decimal            @db.Decimal(12, 2)
+  description         String
+  invoiceUrl          String?
+  date                DateTime
+  createdById         String
+  createdBy           User               @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  payrollRunId        String?            @unique
+  payrollRun          PayrollRun?        @relation("PayrollRunSalaryExpense", fields: [payrollRunId], references: [id], onDelete: SetNull)
+  refundEntitlementId String?            @unique
+  refundEntitlement   MakeupEntitlement? @relation("MakeupEntitlementRefundExpense", fields: [refundEntitlementId], references: [id], onDelete: SetNull)
+  refundStudentId     String?
+  refundStudent       Student?           @relation("RefundExpenseStudent", fields: [refundStudentId], references: [id], onDelete: SetNull)
+  createdAt           DateTime           @default(now())
+
+  @@index([refundStudentId])
 }
 
 model Task {

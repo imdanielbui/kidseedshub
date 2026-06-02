@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { nextStudentCode } from "@/lib/backend/codes"
 import { shouldActivateParentAccount } from "@/lib/backend/parent-account"
+import { createParentInitialPassword } from "@/lib/backend/parent-password"
 import type { StudentListItem } from "@/lib/contracts/students"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -139,7 +140,8 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data
-  const parentPassword = await bcrypt.hash(data.parent.phone, 10)
+  const parentPassword = createParentInitialPassword(data.parent.phone)
+  const parentPasswordHash = await bcrypt.hash(parentPassword.plainText, 10)
   const shouldActivateAccount = shouldActivateParentAccount(data.status)
 
   const student = await prisma.$transaction(async (tx) => {
@@ -154,7 +156,7 @@ export async function POST(request: Request) {
         name: data.parent.name,
         phone: data.parent.phone,
         email: data.parent.email,
-        password: parentPassword,
+        password: parentPasswordHash,
         role: "PARENT",
         isActive: shouldActivateAccount
       }

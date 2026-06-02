@@ -46,6 +46,8 @@ export type ReceiptListItem = {
   grossAmount: string
   discountAmount: string
   discountPercent: string
+  walletCreditAmount: string
+  amountBeforeWalletCredit: string
   discountNote?: string
   sessions: number
   billableSessions: number
@@ -77,13 +79,22 @@ export type ExpenseListItem = {
   description: string
   date: string
   createdByName: string
+  refundEntitlementId?: string
+  refundStudentId?: string
+  refundStudentName?: string
 }
 
 export type FinanceSummary = {
   month: string
   revenue: string
+  walletCreditApplied: string
+  walletCreditIssued: string
   expense: string
+  salaryExpense: string
+  refundExpense: string
+  operatingExpense: string
   profit: string
+  netProfit: string
   receiptCount: number
   expenseCount: number
   receiptsByMethod: Array<{

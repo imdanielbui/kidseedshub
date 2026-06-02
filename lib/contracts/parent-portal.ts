@@ -2,6 +2,8 @@ import type { FinalAssessmentResult, SubjectKey } from "@/lib/contracts/assessme
 import type { AbsenceRequestStatusKey } from "@/lib/contracts/absence-requests"
 import type { AttendanceStatusKey } from "@/lib/contracts/classes"
 import type { CourseFeedbackItem } from "@/lib/contracts/course-feedback"
+import type { MakeupEntitlementStatusKey } from "@/lib/contracts/makeup-entitlements"
+import type { StudentWalletEntryTypeKey } from "@/lib/contracts/student-wallet"
 
 export type ParentPortalCourse = {
   enrollmentId: string
@@ -56,6 +58,30 @@ export type ParentPortalChild = {
   journal: ParentPortalJournalItem[]
   finalAssessments: FinalAssessmentResult[]
   feedbacks: CourseFeedbackItem[]
+  makeupEntitlements: Array<{
+    id: string
+    enrollmentId: string
+    courseName: string
+    className?: string
+    month: string
+    status: MakeupEntitlementStatusKey
+    isEligible: boolean
+    eligibilityReason?: string
+    scheduledFor?: string
+    resolvedAmount?: string
+    resolvedAt?: string
+    refundExpenseCode?: string
+  }>
+  walletBalance: string
+  walletEntries: Array<{
+    id: string
+    amount: string
+    type: StudentWalletEntryTypeKey
+    note?: string
+    receiptCode?: string
+    createdByName: string
+    createdAt: string
+  }>
 }
 
 export type ParentPortalOverview = {

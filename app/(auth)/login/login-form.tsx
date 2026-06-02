@@ -11,6 +11,7 @@ const demoAccounts = [
   { label: "Teacher FUN", phone: "0900000005", password: "Teacher@123" },
   { label: "Parent", phone: "0911000004", password: "Parent@123" }
 ]
+const showDemoAccounts = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true"
 
 type SessionPayload = {
   user?: {
@@ -84,7 +85,7 @@ export function LoginForm() {
             className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
             type="password"
             autoComplete="current-password"
-            placeholder="Admin@123"
+            placeholder="Nhập mật khẩu"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
@@ -103,25 +104,27 @@ export function LoginForm() {
         </button>
       </form>
 
-      <div className="content-border mt-6 pt-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Tài khoản demo</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-4">
-          {demoAccounts.map((account) => (
-            <button
-              key={account.phone}
-              type="button"
-              className="neu-list-item rounded-2xl px-3 py-2 text-left text-xs font-semibold text-stone-600 hover:text-brand-red"
-              onClick={() => {
-                setPhone(account.phone)
-                setPassword(account.password)
-                setError("")
-              }}
-            >
-              {account.label}
-            </button>
-          ))}
+      {showDemoAccounts ? (
+        <div className="content-border mt-6 pt-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Tài khoản demo</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-4">
+            {demoAccounts.map((account) => (
+              <button
+                key={account.phone}
+                type="button"
+                className="neu-list-item rounded-2xl px-3 py-2 text-left text-xs font-semibold text-stone-600 hover:text-brand-red"
+                onClick={() => {
+                  setPhone(account.phone)
+                  setPassword(account.password)
+                  setError("")
+                }}
+              >
+                {account.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </>
   )
 }

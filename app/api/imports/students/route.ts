@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { createAuditLog } from "@/lib/backend/activity"
 import { nextStudentCode } from "@/lib/backend/codes"
+import { createParentInitialPassword } from "@/lib/backend/parent-password"
 import type { StudentImportResult, StudentImportRow } from "@/lib/contracts/imports"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -144,18 +145,19 @@ export async function POST(request: Request) {
   }
 
   const validRows = rows.filter((row) => row.errors.length === 0)
-  const parentPassword = await bcrypt.hash("Parent@123", 10)
   const createdStudents = await prisma.$transaction(async (tx) => {
     let createdCount = 0
 
     for (const row of validRows) {
+      const parentPassword = createParentInitialPassword(row.parentPhone)
+      const parentPasswordHash = await bcrypt.hash(parentPassword.plainText, 10)
       const parentUser = await tx.user.upsert({
         where: { phone: row.parentPhone },
         create: {
           name: row.parentName,
           phone: row.parentPhone,
           email: row.parentEmail,
-          password: parentPassword,
+          password: parentPasswordHash,
           role: "PARENT"
         },
         update: {

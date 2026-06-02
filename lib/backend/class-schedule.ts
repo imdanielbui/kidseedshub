@@ -233,5 +233,6 @@ export const classCalendarSessionInclude = {
       teacher: true,
       students: { where: { isActive: true } }
     }
-  }
+  },
+  substituteTeacher: true
 } satisfies Prisma.ClassSessionInclude

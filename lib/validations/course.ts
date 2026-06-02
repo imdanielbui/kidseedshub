@@ -52,7 +52,8 @@ export const classSessionUpdateSchema = z.object({
   status: z.enum(["SCHEDULED", "CANCELED", "COMPLETED"]).optional(),
   startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  room: z.string().max(120).nullable().optional()
+  room: z.string().max(120).nullable().optional(),
+  substituteTeacherId: z.string().nullable().optional()
 })
 
 export const classStudentsUpdateSchema = z.object({

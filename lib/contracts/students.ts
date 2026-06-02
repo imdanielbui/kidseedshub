@@ -54,6 +54,7 @@ export type ParentAccountInfo = {
   isActive: boolean
   canLogin: boolean
   activatedAt?: string
+  temporaryPassword?: string
 }
 
 export type StudentListItem = {

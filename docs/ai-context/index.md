@@ -15,7 +15,7 @@ This folder is the short operational contract for agents working on Kid Seeds Hu
 - New feature or cross-screen change: read `feature-slice-template.md` and fill the same fields in the task notes or spec.
 - UI/dialog/form/table work: read `ui-contract.md`.
 - CRM, pipeline, student detail, parent account, contact logs, tasks: read `workflows/crm-student-workflow.md`.
-- Class, attendance, makeup, assessment, finance, receipt, parent portal: read `workflows/operations-workflow.md`.
+- Class, attendance, makeup, staff leave, timesheet, payroll, assessment, finance, receipt, parent portal: read `workflows/operations-workflow.md`.
 - Large roadmap status: use `docs/specs/kidseedshub-full-product-plan.md` as a reference, not as the daily agent contract.
 
 ## Output Requirement

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto"
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
+import { isTrustedClassPhotoUrl } from "@/lib/backend/class-photo-url"
 import type { ClassPhotoListItem } from "@/lib/contracts/classes"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -73,6 +74,16 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data
+
+  if (!isTrustedClassPhotoUrl(data.url)) {
+    return fail(
+      {
+        code: "UNTRUSTED_PHOTO_URL",
+        message: "Nguồn ảnh lớp không nằm trong danh sách upload/storage được tin cậy."
+      },
+      { status: 400 }
+    )
+  }
 
   if (data.attendanceId) {
     const attendance = await prisma.attendance.findUnique({

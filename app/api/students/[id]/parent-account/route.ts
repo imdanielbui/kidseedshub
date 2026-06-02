@@ -3,6 +3,7 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { toParentAccountInfo } from "@/lib/backend/parent-account"
+import { createParentInitialPassword } from "@/lib/backend/parent-password"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 
@@ -42,10 +43,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     return fail({ code: "NOT_FOUND", message: "Học viên không tồn tại." }, { status: 404 })
   }
 
-  const password =
+  const parentPassword =
     parsed.data.action === "reset_default_password"
-      ? await bcrypt.hash(student.parent.user.phone, 10)
+      ? createParentInitialPassword(student.parent.user.phone)
       : undefined
+  const password = parentPassword ? await bcrypt.hash(parentPassword.plainText, 10) : undefined
 
   const user = await prisma.user.update({
     where: { id: student.parent.userId },
@@ -56,5 +58,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   })
 
-  return ok(toParentAccountInfo(user))
+  return ok({
+    ...toParentAccountInfo(user),
+    temporaryPassword: parentPassword?.isTemporary ? parentPassword.plainText : undefined
+  })
 }

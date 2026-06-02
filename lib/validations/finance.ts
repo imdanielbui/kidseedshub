@@ -24,6 +24,7 @@ export const receiptCreateSchema = z.object({
   paidSessionsBeforeReceipt: z.number().int().min(0).max(200).default(0),
   discountAmount: z.number().min(0).default(0),
   discountPercent: z.number().min(0).max(100).default(0),
+  walletCreditAmount: z.number().min(0).default(0),
   discountInput: z.string().trim().max(64).optional(),
   extraDiscountInput: z.string().trim().max(64).optional(),
   lines: z.array(receiptLineCreateSchema).min(1).max(10).optional(),
@@ -47,7 +48,8 @@ export const expenseCreateSchema = z.object({
   amount: z.number().positive(),
   description: z.string().min(1).max(1000),
   invoiceUrl: z.string().url().optional(),
-  date: z.string().datetime()
+  date: z.string().datetime(),
+  refundEntitlementId: z.string().min(1).optional()
 })
 
 export const financeSummaryQuerySchema = z.object({

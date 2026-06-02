@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { toMakeupScheduleItem } from "@/lib/backend/makeup-schedule"
+import {
+  isMakeupEntitlementTerminal,
+  syncMakeupEntitlementScheduleForAttendance
+} from "@/lib/backend/makeup-entitlement"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { makeupScheduleUpdateSchema } from "@/lib/validations/attendance"
@@ -34,7 +38,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     const existing = await prisma.attendance.findUnique({
       where: { id },
       include: {
-        classSession: { include: { class: true } }
+        classSession: { include: { class: true } },
+        makeupEntitlement: true
       }
     })
 
@@ -46,34 +51,48 @@ export async function PATCH(request: Request, context: RouteContext) {
       return fail({ code: "FORBIDDEN", message: "Giáo viên chỉ được cập nhật lớp mình phụ trách." }, { status: 403 })
     }
 
-    const updated = await prisma.attendance.update({
-      where: { id },
-      data: {
-        makeupDate: parsed.data.makeupDate ? new Date(parsed.data.makeupDate) : null,
-        markedById: session.user.id
-      },
-      include: {
-        enrollment: {
-          include: {
-            course: true,
-            student: {
-              include: {
-                parent: { include: { user: true } }
+    if (existing.makeupEntitlement && isMakeupEntitlementTerminal(existing.makeupEntitlement.status)) {
+      return fail({ code: "MAKEUP_ENTITLEMENT_RESOLVED", message: "Quyền học bù này đã được xử lý, không thể xếp lịch lại." }, { status: 409 })
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const scheduledFor = parsed.data.makeupDate ? new Date(parsed.data.makeupDate) : null
+      const attendance = await tx.attendance.update({
+        where: { id },
+        data: {
+          makeupDate: scheduledFor,
+          markedById: session.user.id
+        },
+        include: {
+          enrollment: {
+            include: {
+              course: true,
+              student: {
+                include: {
+                  parent: { include: { user: true } }
+                }
               }
             }
-          }
-        },
-        classSession: {
-          include: {
-            class: {
-              include: {
-                teacher: true
+          },
+          classSession: {
+            include: {
+              class: {
+                include: {
+                  teacher: true
+                }
               }
             }
-          }
-        },
-        markedBy: true
-      }
+          },
+          markedBy: true
+        }
+      })
+
+      await syncMakeupEntitlementScheduleForAttendance(tx, {
+        attendanceId: id,
+        scheduledFor
+      })
+
+      return attendance
     })
 
     return ok(toMakeupScheduleItem(updated))

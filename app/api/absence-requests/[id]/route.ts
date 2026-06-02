@@ -4,6 +4,7 @@ import { fail, ok } from "@/lib/api-response"
 import { absenceRequestInclude, toAbsenceRequestItem } from "@/lib/backend/absence-request"
 import { createAuditLog, getActiveStaffRecipientIds, notifyUsers } from "@/lib/backend/activity"
 import { todayRange } from "@/lib/backend/date"
+import { ensureMakeupEntitlementForExcusedAttendance } from "@/lib/backend/makeup-entitlement"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { absenceRequestUpdateSchema } from "@/lib/validations/absence-request"
@@ -76,8 +77,8 @@ export async function PATCH(request: Request, context: RouteContext) {
             }
           })
 
-          if (existingAttendance) {
-            await tx.attendance.update({
+          const attendance = existingAttendance
+            ? await tx.attendance.update({
               where: { id: existingAttendance.id },
               data: {
                 classSessionId: existing.classSessionId,
@@ -86,8 +87,7 @@ export async function PATCH(request: Request, context: RouteContext) {
                 markedById: session.user.id
               }
             })
-          } else {
-            await tx.attendance.create({
+            : await tx.attendance.create({
               data: {
                 enrollmentId: enrollment.id,
                 classSessionId: existing.classSessionId,
@@ -97,7 +97,18 @@ export async function PATCH(request: Request, context: RouteContext) {
                 markedById: session.user.id
               }
             })
-          }
+
+          await ensureMakeupEntitlementForExcusedAttendance(tx, {
+            attendanceId: attendance.id,
+            absenceRequestId: absenceRequest.id,
+            studentId: existing.studentId,
+            enrollmentId: enrollment.id,
+            classSessionId: existing.classSessionId,
+            sessionDate: existing.classSession.date,
+            scheduledFor: attendance.makeupDate,
+            actorId: session.user.id,
+            note: `Tạo từ yêu cầu xin nghỉ ${absenceRequest.id}`
+          })
         }
       }
 

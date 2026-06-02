@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import type { PermissionMatrixRow } from "@/lib/contracts/permissions"
 import { createAuditLog } from "@/lib/backend/activity"
-import { can, permissionLabels, PERMISSIONS, roles, setRuntimePermissionMatrix, type Permission, type Role } from "@/lib/permissions"
+import { loadPersistedPermissionMatrix } from "@/lib/backend/permission-matrix"
+import { can, permissionLabels, PERMISSIONS, roles, type Permission } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 
 const permissionKeys = Object.keys(PERMISSIONS) as Permission[]
@@ -19,16 +20,9 @@ const permissionMatrixUpdateSchema = z.object({
     .min(1)
 })
 
-function applyRuntimeMatrix(entries: Array<{ permission: string; roles: Role[] }>) {
-  setRuntimePermissionMatrix(
-    Object.fromEntries(entries.map((entry) => [entry.permission, entry.roles])) as Partial<Record<Permission, Role[]>>
-  )
-}
-
 async function getRows(): Promise<PermissionMatrixRow[]> {
-  const entries = await prisma.permissionMatrixEntry.findMany()
+  const entries = await loadPersistedPermissionMatrix()
   const entryMap = new Map(entries.map((entry) => [entry.permission, entry]))
-  applyRuntimeMatrix(entries)
 
   return permissionKeys.map((permission) => {
     const entry = entryMap.get(permission)

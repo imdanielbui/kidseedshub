@@ -1,6 +1,10 @@
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { todayRange } from "@/lib/backend/date"
+import {
+  ensureMakeupEntitlementForExcusedAttendance,
+  rejectOpenMakeupEntitlementForAttendance
+} from "@/lib/backend/makeup-entitlement"
 import type { AttendanceMarkResult } from "@/lib/contracts/classes"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -138,6 +142,32 @@ export async function POST(request: Request) {
           data: { status: "ACTIVE" }
         })
       }
+    }
+
+    if (created.status === "ABSENT_EXCUSED") {
+      const classSession = created.classSessionId
+        ? await tx.classSession.findUnique({
+            where: { id: created.classSessionId },
+            select: { date: true }
+          })
+        : null
+
+      await ensureMakeupEntitlementForExcusedAttendance(tx, {
+        attendanceId: created.id,
+        studentId: created.enrollment.student.id,
+        enrollmentId: created.enrollmentId,
+        classSessionId: created.classSessionId,
+        sessionDate: classSession?.date ?? created.date,
+        scheduledFor: created.makeupDate,
+        actorId: session.user.id,
+        note: created.note ?? undefined
+      })
+    } else {
+      await rejectOpenMakeupEntitlementForAttendance(tx, {
+        attendanceId: created.id,
+        actorId: session.user.id,
+        note: "Attendance changed away from excused absence."
+      })
     }
 
     return tx.attendance.findUniqueOrThrow({

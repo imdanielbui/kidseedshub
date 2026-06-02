@@ -22,6 +22,7 @@ function toCalendarSessionItem(session: {
   endTime: string | null
   room: string | null
   status: ClassCalendarSessionItem["status"]
+  substituteTeacher?: { name: string } | null
   class: {
     name: string
     course: { name: string; subject: ClassCalendarSessionItem["subject"] }
@@ -36,6 +37,7 @@ function toCalendarSessionItem(session: {
     courseName: session.class.course.name,
     subject: session.class.course.subject,
     teacherName: session.class.teacher.name,
+    substituteTeacherName: session.substituteTeacher?.name,
     studentCount: session.class.students.length,
     date: dateKey(session.date),
     weekday: session.date.getDay(),
@@ -72,9 +74,9 @@ export async function GET(request: Request) {
         lte: range.end
       },
       class: {
-        isActive: true,
-        ...(session.user.role === "TEACHER" ? { teacherId: session.user.id } : {})
-      }
+        isActive: true
+      },
+      ...(session.user.role === "TEACHER" ? { OR: [{ class: { teacherId: session.user.id } }, { substituteTeacherId: session.user.id }] } : {})
     },
     include: classCalendarSessionInclude,
     orderBy: [{ date: "asc" }, { startTime: "asc" }]

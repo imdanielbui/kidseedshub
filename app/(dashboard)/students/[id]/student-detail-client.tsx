@@ -43,6 +43,7 @@ type LearningDetailTarget =
 const contactResults = Object.entries(contactResultLabels) as Array<[ContactResultKey, string]>
 const paymentMethods = Object.entries(paymentMethodLabels) as Array<[PaymentMethodKey, string]>
 const studentStatusOptions = Object.entries(studentStatusLabels) as Array<[StudentStatusKey, string]>
+const usesTemporaryParentPassword = process.env.NODE_ENV === "production"
 const detailTabs: Array<{ key: DetailTab; label: string }> = [
   { key: "overview", label: "Tổng quan" },
   { key: "crm", label: "CRM" },
@@ -259,6 +260,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [isConfirmingEnrollmentDelete, setIsConfirmingEnrollmentDelete] = useState(false)
   const [studentReceipts, setStudentReceipts] = useState<ReceiptListItem[]>([])
   const [lastReceipt, setLastReceipt] = useState<ReceiptListItem | null>(null)
+  const [temporaryParentPassword, setTemporaryParentPassword] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingLog, setIsSubmittingLog] = useState(false)
   const [isSubmittingTask, setIsSubmittingTask] = useState(false)
@@ -774,6 +776,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       }
 
       setStudent((current) => current ? { ...current, parentAccount: payload.data as ParentAccountInfo } : current)
+      setTemporaryParentPassword(payload.data.temporaryPassword ?? null)
     } catch {
       setError("Không cập nhật được tài khoản phụ huynh.")
     } finally {
@@ -1345,7 +1348,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
               <InfoPill label="Số điện thoại đăng nhập" value={student.parentAccount.phone} />
               <InfoPill label="Email" value={student.parentAccount.email ?? "Chưa có email"} />
               <InfoPill label="Trạng thái" value={student.parentAccount.isActive ? "Active" : "Inactive"} />
-              <InfoPill label="Mật khẩu mặc định V1" value="SĐT phụ huynh" />
+              <InfoPill label="Mật khẩu phụ huynh" value={usesTemporaryParentPassword ? "Tạm thời khi reset" : "SĐT phụ huynh"} />
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <button type="button" disabled={isUpdatingParentAccount || student.parentAccount.canLogin} onClick={() => void updateParentAccount("activate")} className="glass-button-primary inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">
@@ -1354,7 +1357,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
               </button>
               <button type="button" disabled={isUpdatingParentAccount} onClick={() => void updateParentAccount("reset_default_password")} className="glass-button-secondary inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold">
                 <RotateCcw className="h-4 w-4" />
-                Đặt lại mật khẩu = SĐT
+                Đặt lại mật khẩu
               </button>
             </div>
           </div>
@@ -1363,7 +1366,10 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             <div className="mt-4 rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-700">
               <p>Link: http://localhost:3000/login</p>
               <p className="mt-2">Số điện thoại: {student.parentAccount.phone}</p>
-              <p>Mật khẩu mặc định: số điện thoại phụ huynh</p>
+              <p>
+                Mật khẩu:{" "}
+                {temporaryParentPassword ?? (usesTemporaryParentPassword ? "bấm đặt lại mật khẩu để tạo mã tạm thời" : "số điện thoại phụ huynh")}
+              </p>
               <p className="mt-2 text-xs text-stone-500">Khi account active, phụ huynh đăng nhập sẽ được chuyển thẳng sang `/parent`.</p>
             </div>
           </div>

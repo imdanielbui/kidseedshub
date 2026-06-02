@@ -57,6 +57,7 @@ export type ClassCalendarSessionItem = {
   courseName: string
   subject: SubjectKey
   teacherName: string
+  substituteTeacherName?: string
   studentCount: number
   date: string
   weekday: number
