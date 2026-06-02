@@ -52,6 +52,42 @@ function scoreOutOfFive(items: WeeklyAssessmentMatrixItem["items"]) {
   return averageScore(items)
 }
 
+function classSkillComparison(
+  rubric: WeeklyClassAssessmentDetail["rubric"],
+  students: WeeklyAssessmentMatrixItem[]
+): WeeklyClassAssessmentDetail["skillComparison"] {
+  return rubric.domains.flatMap((domain) =>
+    domain.skills.map((skill) => {
+      const studentScores = students.flatMap((student) => {
+        const skillItems = student.items.filter((item) => item.domainKey === domain.key && item.skillKey === skill.key)
+        const checkedItems = skillItems.filter((item) => item.checked).length
+
+        return checkedItems > 0 ? [scoreOutOfFive(skillItems)] : []
+      })
+      const checkedItems = students.reduce((total, student) => {
+        return total + student.items.filter((item) => item.domainKey === domain.key && item.skillKey === skill.key && item.checked).length
+      }, 0)
+      const totalItems = students.reduce((total, student) => {
+        return total + student.items.filter((item) => item.domainKey === domain.key && item.skillKey === skill.key).length
+      }, 0)
+      const averageScore = studentScores.length ? Math.round((studentScores.reduce((total, score) => total + score, 0) / studentScores.length) * 10) / 10 : 0
+
+      return {
+        domainKey: domain.key,
+        domainLabel: domain.label,
+        skillKey: skill.key,
+        skillLabel: skill.label,
+        averageScore,
+        checkedStudents: studentScores.length,
+        totalStudents: students.length,
+        checkedItems,
+        totalItems,
+        completionRate: students.length ? Math.round((studentScores.length / students.length) * 100) : 0
+      }
+    })
+  )
+}
+
 function domainProgress(rubric: WeeklyClassAssessmentDetail["rubric"], items: WeeklyAssessmentMatrixItem["items"]): WeeklyAssessmentMatrixItem["domainProgress"] {
   return rubric.domains.map((domain) => {
     const domainItems = items.filter((item) => item.domainKey === domain.key)
@@ -138,6 +174,45 @@ function toDetail(
 ): WeeklyClassAssessmentDetail {
   const assessmentByEnrollmentId = new Map(assessments.map((assessment) => [assessment.enrollmentId, assessment]))
   const totalItems = emptyItems(rubric).length
+  const students: WeeklyAssessmentMatrixItem[] = klass.students.map((classStudent) => {
+    const enrollment = classStudent.student.enrollments.find((item) => item.courseId === klass.courseId && item.isActive)
+    const assessment = enrollment ? assessmentByEnrollmentId.get(enrollment.id) : undefined
+    const savedItems = new Map((assessment?.items ?? []).map((item) => [itemKey(item), item]))
+    const savedRoboticsItems = new Map((assessment?.items ?? []).map((item) => [`${item.skillKey}:${item.outcomeIndex}`, item]))
+    const ageGroup = roboticsAgeGroupFromBirthDate(classStudent.student.birthDate)
+    const items = emptyItems(rubric).map((item) => {
+      const saved = savedItems.get(itemKey(item)) ?? (klass.course.subject === "ROBOTICS" ? savedRoboticsItems.get(`${item.skillKey}:${item.outcomeIndex}`) : undefined)
+      const fallbackScore = saved?.score ?? (saved?.progressLevel ? progressLevelToScore(saved.progressLevel) : undefined)
+
+      return {
+        ...item,
+        checked: klass.course.subject === "ROBOTICS" ? typeof fallbackScore === "number" : saved?.checked ?? false,
+        score: fallbackScore,
+        progressLevel: saved?.progressLevel ?? undefined,
+        comment: saved?.comment ?? undefined,
+        evidenceUrl: saved?.evidenceUrl ?? undefined
+      }
+    })
+
+    return {
+      id: assessment?.id,
+      studentId: classStudent.studentId,
+      studentName: classStudent.student.name,
+      birthDate: classStudent.student.birthDate?.toISOString(),
+      ageGroup: ageGroup.ageGroup,
+      ageGroupIsDefault: ageGroup.isDefault,
+      parentName: classStudent.student.parent.user.name,
+      parentPhone: classStudent.student.parent.user.phone,
+      healthNote: classStudent.student.healthNote ?? undefined,
+      enrollmentId: enrollment?.id,
+      status: assessment?.status ?? "NOT_STARTED",
+      comment: assessment?.comment ?? undefined,
+      checkedItems: items.filter((item) => item.checked).length,
+      totalItems,
+      domainProgress: domainProgress(rubric, items),
+      items
+    }
+  })
 
   return {
     classId: klass.id,
@@ -150,45 +225,8 @@ function toDetail(
     suggestedWeekNumber,
     availableWeeks,
     rubric,
-    students: klass.students.map((classStudent) => {
-      const enrollment = classStudent.student.enrollments.find((item) => item.courseId === klass.courseId && item.isActive)
-      const assessment = enrollment ? assessmentByEnrollmentId.get(enrollment.id) : undefined
-      const savedItems = new Map((assessment?.items ?? []).map((item) => [itemKey(item), item]))
-      const savedRoboticsItems = new Map((assessment?.items ?? []).map((item) => [`${item.skillKey}:${item.outcomeIndex}`, item]))
-      const ageGroup = roboticsAgeGroupFromBirthDate(classStudent.student.birthDate)
-      const items = emptyItems(rubric).map((item) => {
-        const saved = savedItems.get(itemKey(item)) ?? (klass.course.subject === "ROBOTICS" ? savedRoboticsItems.get(`${item.skillKey}:${item.outcomeIndex}`) : undefined)
-        const fallbackScore = saved?.score ?? (saved?.progressLevel ? progressLevelToScore(saved.progressLevel) : undefined)
-
-        return {
-          ...item,
-          checked: klass.course.subject === "ROBOTICS" ? typeof fallbackScore === "number" : saved?.checked ?? false,
-          score: fallbackScore,
-          progressLevel: saved?.progressLevel ?? undefined,
-          comment: saved?.comment ?? undefined,
-          evidenceUrl: saved?.evidenceUrl ?? undefined
-        }
-      })
-
-      return {
-        id: assessment?.id,
-        studentId: classStudent.studentId,
-        studentName: classStudent.student.name,
-        birthDate: classStudent.student.birthDate?.toISOString(),
-        ageGroup: ageGroup.ageGroup,
-        ageGroupIsDefault: ageGroup.isDefault,
-        parentName: classStudent.student.parent.user.name,
-        parentPhone: classStudent.student.parent.user.phone,
-        healthNote: classStudent.student.healthNote ?? undefined,
-        enrollmentId: enrollment?.id,
-        status: assessment?.status ?? "NOT_STARTED",
-        comment: assessment?.comment ?? undefined,
-        checkedItems: items.filter((item) => item.checked).length,
-        totalItems,
-        domainProgress: domainProgress(rubric, items),
-        items
-      }
-    })
+    students,
+    skillComparison: classSkillComparison(rubric, students)
   }
 }
 

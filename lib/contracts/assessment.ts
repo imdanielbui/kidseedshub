@@ -131,6 +131,19 @@ export type WeeklyAssessmentWeekOption = {
   status: "NOT_DUE" | "MISSING" | "IN_PROGRESS" | "COMPLETE"
 }
 
+export type WeeklyAssessmentSkillComparisonItem = {
+  domainKey: string
+  domainLabel: string
+  skillKey: string
+  skillLabel: string
+  averageScore: number
+  checkedStudents: number
+  totalStudents: number
+  checkedItems: number
+  totalItems: number
+  completionRate: number
+}
+
 export type WeeklyClassAssessmentDetail = {
   classId: string
   className: string
@@ -143,6 +156,7 @@ export type WeeklyClassAssessmentDetail = {
   availableWeeks: WeeklyAssessmentWeekOption[]
   rubric: AssessmentRubricConfigItem
   students: WeeklyAssessmentMatrixItem[]
+  skillComparison: WeeklyAssessmentSkillComparisonItem[]
 }
 
 export type FinalAssessmentResult = {

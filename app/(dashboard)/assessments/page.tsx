@@ -599,6 +599,8 @@ export default function AssessmentsPage() {
         </div>
 
         <aside className="space-y-4">
+          <ClassSkillComparisonPanel detail={detail} />
+
           <section className="neu-card rounded-3xl p-5">
             <h2 className="font-semibold text-brand-ink">Báo cáo cuối khóa</h2>
             <p className="mt-1 text-sm text-stone-500">
@@ -711,6 +713,54 @@ function InfoPill({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">{label}</p>
       <p className="mt-1 truncate font-semibold text-brand-ink">{value}</p>
     </div>
+  )
+}
+
+function ClassSkillComparisonPanel({ detail }: { detail: WeeklyClassAssessmentDetail | null }) {
+  const rows = detail ? [...detail.skillComparison].sort((first, second) => second.averageScore - first.averageScore || second.completionRate - first.completionRate) : []
+  const observedRows = rows.filter((row) => row.checkedStudents > 0)
+
+  return (
+    <section className="neu-card rounded-3xl p-5">
+      <h2 className="font-semibold text-brand-ink">So sánh kỹ năng lớp</h2>
+      <p className="mt-1 text-sm text-stone-500">
+        {detail ? `${detail.className} - tuần ${detail.weekNumber}` : "Chọn lớp để xem điểm trung bình theo kỹ năng."}
+      </p>
+      {detail && observedRows.length === 0 ? (
+        <p className="mt-4 rounded-2xl border border-brand-red/10 bg-white/45 px-3 py-2 text-xs text-stone-500">
+          Tuần này chưa có kỹ năng nào được chấm cho lớp.
+        </p>
+      ) : null}
+      {observedRows.length > 0 ? (
+        <div className="mt-4 max-h-[420px] space-y-3 overflow-auto pr-1">
+          {rows.map((row) => {
+            const scoreWidth = `${Math.min(100, Math.max(0, (row.averageScore / 5) * 100))}%`
+
+            return (
+              <article key={`${row.domainKey}:${row.skillKey}`} className="rounded-2xl border border-brand-red/10 bg-white/40 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-brand-ink">{row.skillLabel}</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      {row.domainLabel} · {row.checkedStudents}/{row.totalStudents} HS · {row.completionRate}%
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-brand-red/10 bg-white/70 px-2 py-1 text-xs font-semibold text-brand-red">
+                    {formatScore(row.averageScore)}/5
+                  </span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-200">
+                  <span className="block h-full rounded-full bg-brand-red" style={{ width: scoreWidth }} />
+                </div>
+                <p className="mt-2 text-[11px] font-semibold text-stone-400">
+                  {row.checkedItems}/{row.totalItems} dòng kỹ năng đã có dữ liệu
+                </p>
+              </article>
+            )
+          })}
+        </div>
+      ) : null}
+    </section>
   )
 }
 
