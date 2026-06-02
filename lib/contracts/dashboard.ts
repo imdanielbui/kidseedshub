@@ -1,3 +1,5 @@
+import type { MakeupEntitlementStatusKey } from "@/lib/contracts/makeup-entitlements"
+
 export type LowSessionAlert = {
   enrollmentId: string
   studentName: string
@@ -20,10 +22,25 @@ export type DueTaskAlert = {
   dueDate: string
 }
 
+export type MakeupEntitlementAlert = {
+  entitlementId: string
+  studentId: string
+  studentName: string
+  courseName: string
+  status: MakeupEntitlementStatusKey
+  month: string
+  scheduledFor?: string
+  resolvedAmount?: string
+  walletCreditAmount: string
+  refundExpenseCode?: string
+  updatedAt: string
+}
+
 export type DashboardAlerts = {
   sessionsLow: LowSessionAlert[]
   staleTrialLeads: StaleTrialLeadAlert[]
   dueTasks: DueTaskAlert[]
+  makeupStateAlerts: MakeupEntitlementAlert[]
 }
 
 export const dashboardAlertSections = [
@@ -41,6 +58,11 @@ export const dashboardAlertSections = [
     key: "dueTasks",
     title: "Task đến hạn hôm nay",
     emptyText: "Chưa có task đến hạn hôm nay."
+  },
+  {
+    key: "makeupStateAlerts",
+    title: "Học bù, credit & refund",
+    emptyText: "Chưa có trạng thái học bù/credit/refund cần theo dõi."
   }
 ] as const satisfies Array<{
   key: keyof DashboardAlerts

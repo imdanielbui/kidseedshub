@@ -1,4 +1,4 @@
-import { Prisma, StudentStatus } from "@prisma/client"
+import { MakeupEntitlementStatus, Prisma, StudentStatus } from "@prisma/client"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
@@ -12,6 +12,16 @@ const advancedAnalyticsQuerySchema = z.object({
 })
 
 const convertedStatuses: StudentStatus[] = ["CONVERTED", "RETENTION", "ACTIVE", "GRADUATED"]
+
+const makeupStatusPriority: Record<MakeupEntitlementStatus, number> = {
+  PENDING_SCHEDULE: 0,
+  EXPIRED: 1,
+  REFUNDED: 2,
+  CREDITED: 3,
+  SCHEDULED: 4,
+  COMPLETED: 5,
+  REJECTED: 6
+}
 
 function getRate(part: number, total: number) {
   if (total === 0) return 0
@@ -37,7 +47,7 @@ export async function GET(request: Request) {
   }
 
   const range = parseMonth(parsed.data.month)
-  const [students, receipts, enrollments, classSessions, attendances, activeStudentCount, inactiveStudentCount] = await prisma.$transaction([
+  const [students, receipts, enrollments, classSessions, attendances, activeStudentCount, inactiveStudentCount, makeupEntitlements] = await prisma.$transaction([
     prisma.student.findMany({
       select: {
         id: true,
@@ -72,7 +82,17 @@ export async function GET(request: Request) {
       select: { status: true }
     }),
     prisma.student.count({ where: { status: { in: ["ACTIVE", "CONVERTED", "RETENTION"] } } }),
-    prisma.student.count({ where: { status: "INACTIVE" } })
+    prisma.student.count({ where: { status: "INACTIVE" } }),
+    prisma.makeupEntitlement.findMany({
+      where: { month: parsed.data.month },
+      include: {
+        student: true,
+        enrollment: { include: { course: true } },
+        walletEntries: true,
+        refundExpense: true
+      },
+      orderBy: { updatedAt: "desc" }
+    })
   ])
 
   const leadSourceMap = new Map<string, { leadCount: number; convertedCount: number }>()
@@ -127,6 +147,48 @@ export async function GET(request: Request) {
 
   const presentCount = attendances.filter((attendance) => attendance.status === "PRESENT").length
   const absentCount = attendances.filter((attendance) => attendance.status !== "PRESENT").length
+  const makeupStatusCounts: Record<MakeupEntitlementStatus, number> = {
+    PENDING_SCHEDULE: 0,
+    SCHEDULED: 0,
+    COMPLETED: 0,
+    CREDITED: 0,
+    REFUNDED: 0,
+    EXPIRED: 0,
+    REJECTED: 0
+  }
+  let totalWalletCreditAmount = new Prisma.Decimal(0)
+  let totalRefundAmount = new Prisma.Decimal(0)
+
+  const makeupRows = makeupEntitlements.map((entitlement) => {
+    const walletCreditAmount = entitlement.walletEntries.reduce(
+      (total, entry) => total.plus(entry.amount),
+      new Prisma.Decimal(0)
+    )
+    const refundAmount = entitlement.refundExpense?.amount ?? entitlement.resolvedAmount ?? new Prisma.Decimal(0)
+
+    makeupStatusCounts[entitlement.status] += 1
+
+    if (entitlement.status === "CREDITED") {
+      totalWalletCreditAmount = totalWalletCreditAmount.plus(walletCreditAmount)
+    }
+
+    if (entitlement.status === "REFUNDED") {
+      totalRefundAmount = totalRefundAmount.plus(refundAmount)
+    }
+
+    return {
+      entitlementId: entitlement.id,
+      studentName: entitlement.student.name,
+      courseName: entitlement.enrollment.course.name,
+      status: entitlement.status,
+      month: entitlement.month,
+      scheduledFor: entitlement.scheduledFor?.toISOString(),
+      resolvedAmount: entitlement.resolvedAmount?.toString(),
+      walletCreditAmount: walletCreditAmount.toString(),
+      refundExpenseCode: entitlement.refundExpense?.code,
+      updatedAt: entitlement.updatedAt.toISOString()
+    }
+  })
 
   const report: AdvancedAnalyticsReport = {
     month: parsed.data.month,
@@ -166,6 +228,24 @@ export async function GET(request: Request) {
       lowSessionEnrollmentCount,
       averageRemainingSessions: enrollments.length ? Math.round((remainingSessionTotal / enrollments.length) * 10) / 10 : 0,
       projectedRenewalRevenue: projectedRenewalRevenue.toString()
+    },
+    makeupEntitlements: {
+      pendingScheduleCount: makeupStatusCounts.PENDING_SCHEDULE,
+      scheduledCount: makeupStatusCounts.SCHEDULED,
+      completedCount: makeupStatusCounts.COMPLETED,
+      creditedCount: makeupStatusCounts.CREDITED,
+      refundedCount: makeupStatusCounts.REFUNDED,
+      expiredCount: makeupStatusCounts.EXPIRED,
+      rejectedCount: makeupStatusCounts.REJECTED,
+      totalWalletCreditAmount: totalWalletCreditAmount.toString(),
+      totalRefundAmount: totalRefundAmount.toString(),
+      rows: makeupRows
+        .sort((first, second) => {
+          const priorityDiff = makeupStatusPriority[first.status] - makeupStatusPriority[second.status]
+          if (priorityDiff !== 0) return priorityDiff
+          return new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime()
+        })
+        .slice(0, 10)
     }
   }
 

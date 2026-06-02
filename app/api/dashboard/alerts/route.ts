@@ -1,8 +1,11 @@
+import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import type { DashboardAlerts } from "@/lib/contracts/dashboard"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
+
+const makeupDashboardStatuses = ["PENDING_SCHEDULE", "EXPIRED", "CREDITED", "REFUNDED"] as const
 
 export async function GET() {
   const session = await auth()
@@ -22,7 +25,7 @@ export async function GET() {
   const endOfToday = new Date(now)
   endOfToday.setHours(23, 59, 59, 999)
 
-  const [activeEnrollments, staleTrialLeads, dueTasks] = await prisma.$transaction([
+  const [activeEnrollments, staleTrialLeads, dueTasks, makeupStateAlerts] = await prisma.$transaction([
     prisma.enrollment.findMany({
       where: {
         isActive: true
@@ -65,6 +68,19 @@ export async function GET() {
       },
       orderBy: { dueDate: "asc" },
       take: 20
+    }),
+    prisma.makeupEntitlement.findMany({
+      where: {
+        status: { in: [...makeupDashboardStatuses] }
+      },
+      include: {
+        student: true,
+        enrollment: { include: { course: true } },
+        walletEntries: true,
+        refundExpense: true
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 20
     })
   ])
 
@@ -92,7 +108,27 @@ export async function GET() {
       title: task.title,
       studentName: task.student?.name,
       dueDate: task.dueDate.toISOString()
-    }))
+    })),
+    makeupStateAlerts: makeupStateAlerts.map((entitlement) => {
+      const walletCreditAmount = entitlement.walletEntries.reduce(
+        (total, entry) => total.plus(entry.amount),
+        new Prisma.Decimal(0)
+      )
+
+      return {
+        entitlementId: entitlement.id,
+        studentId: entitlement.studentId,
+        studentName: entitlement.student.name,
+        courseName: entitlement.enrollment.course.name,
+        status: entitlement.status,
+        month: entitlement.month,
+        scheduledFor: entitlement.scheduledFor?.toISOString(),
+        resolvedAmount: entitlement.resolvedAmount?.toString(),
+        walletCreditAmount: walletCreditAmount.toString(),
+        refundExpenseCode: entitlement.refundExpense?.code,
+        updatedAt: entitlement.updatedAt.toISOString()
+      }
+    })
   }
 
   return ok(alerts)

@@ -1,9 +1,10 @@
 "use client"
 
-import { BarChart3, CheckCircle2, CircleDollarSign, LineChart, MessageSquareHeart, Percent, RefreshCcw, UserRoundCheck } from "lucide-react"
+import { BarChart3, CalendarClock, CheckCircle2, CircleDollarSign, LineChart, MessageSquareHeart, Percent, RefreshCcw, UserRoundCheck } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import type { CourseFeedbackItem } from "@/lib/contracts/course-feedback"
+import { makeupEntitlementStatusLabels } from "@/lib/contracts/makeup-entitlements"
 import type { AdvancedAnalyticsReport, SaleKpiReport } from "@/lib/contracts/reports"
 
 function getCurrentMonth() {
@@ -17,6 +18,15 @@ function formatMoney(value: string) {
     currency: "VND",
     maximumFractionDigits: 0
   }).format(Number(value))
+}
+
+function formatDate(value?: string) {
+  if (!value) return "Chưa đặt lịch"
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(new Date(value))
 }
 
 function MetricChip({ label, value }: { label: string; value: string }) {
@@ -222,6 +232,55 @@ export default function ReportsPage() {
             <MetricChip label="Học viên active" value={String(advancedReport?.operations.activeStudentCount ?? 0)} />
             <MetricChip label="Inactive" value={String(advancedReport?.operations.inactiveStudentCount ?? 0)} />
             <MetricChip label="Có/vắng" value={`${advancedReport?.operations.presentCount ?? 0}/${advancedReport?.operations.absentCount ?? 0}`} />
+          </div>
+        </div>
+      </section>
+
+      <section className="neu-card rounded-3xl">
+        <div className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="font-semibold text-brand-ink">Học bù, credit và refund</h2>
+            <p className="mt-1 text-sm text-stone-500">Theo dõi quyền học bù theo trạng thái trong tháng báo cáo.</p>
+          </div>
+          <div className="neu-pressed inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-brand-red">
+            <CalendarClock className="h-4 w-4" />
+            {advancedReport?.month ?? month}
+          </div>
+        </div>
+        <div className="content-border space-y-4 p-5">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+            <MetricChip label="Chờ xếp lịch" value={String(advancedReport?.makeupEntitlements.pendingScheduleCount ?? 0)} />
+            <MetricChip label="Hết hạn" value={String(advancedReport?.makeupEntitlements.expiredCount ?? 0)} />
+            <MetricChip label="Đã credit" value={String(advancedReport?.makeupEntitlements.creditedCount ?? 0)} />
+            <MetricChip label="Đã refund" value={String(advancedReport?.makeupEntitlements.refundedCount ?? 0)} />
+            <MetricChip label="Tổng credit" value={formatMoney(advancedReport?.makeupEntitlements.totalWalletCreditAmount ?? "0")} />
+            <MetricChip label="Tổng refund" value={formatMoney(advancedReport?.makeupEntitlements.totalRefundAmount ?? "0")} />
+          </div>
+          <div className="space-y-2">
+            {advancedReport?.makeupEntitlements.rows.length ? (
+              advancedReport.makeupEntitlements.rows.map((row) => (
+                <article key={row.entitlementId} className="neu-list-item rounded-2xl p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-semibold text-brand-ink">{row.studentName}</h3>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {row.courseName} - {makeupEntitlementStatusLabels[row.status]}
+                      </p>
+                    </div>
+                    <div className="grid gap-2 text-xs text-stone-600 sm:grid-cols-2 lg:min-w-[560px] lg:grid-cols-4">
+                      <span className="rounded-2xl border border-brand-red/10 px-3 py-2">Tháng {row.month}</span>
+                      <span className="rounded-2xl border border-brand-red/10 px-3 py-2">{formatDate(row.scheduledFor)}</span>
+                      <span className="rounded-2xl border border-brand-red/10 px-3 py-2">{formatMoney(row.walletCreditAmount)} credit</span>
+                      <span className="rounded-2xl border border-brand-red/10 px-3 py-2">
+                        {row.refundExpenseCode ? `Refund ${row.refundExpenseCode}` : formatMoney(row.resolvedAmount ?? "0")}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Chưa có quyền học bù trong tháng này.</p>
+            )}
           </div>
         </div>
       </section>

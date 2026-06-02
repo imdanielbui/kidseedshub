@@ -4,6 +4,7 @@ import { AlertTriangle, BadgeDollarSign, Bell, CalendarCheck, CheckCircle2, User
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { dashboardAlertSections, type DashboardAlerts } from "@/lib/contracts/dashboard"
+import { makeupEntitlementStatusLabels } from "@/lib/contracts/makeup-entitlements"
 import type { InternalNotificationItem } from "@/lib/contracts/operations"
 
 const metrics = [
@@ -16,7 +17,8 @@ const metrics = [
 const emptyAlerts: DashboardAlerts = {
   sessionsLow: [],
   staleTrialLeads: [],
-  dueTasks: []
+  dueTasks: [],
+  makeupStateAlerts: []
 }
 
 function formatDateTime(value: string) {
@@ -55,12 +57,26 @@ function renderAlertItems(alerts: DashboardAlerts, key: keyof DashboardAlerts) {
     ))
   }
 
-  return alerts.dueTasks.map((item) => (
-    <article key={item.taskId} className="neu-list-item rounded-2xl p-4">
-      <p className="text-sm font-semibold text-brand-ink">{item.title}</p>
+  if (key === "dueTasks") {
+    return alerts.dueTasks.map((item) => (
+      <article key={item.taskId} className="neu-list-item rounded-2xl p-4">
+        <p className="text-sm font-semibold text-brand-ink">{item.title}</p>
+        <p className="mt-1 text-xs text-stone-500">
+          {item.studentName ? `${item.studentName} - ` : ""}
+          {formatDateTime(item.dueDate)}
+        </p>
+      </article>
+    ))
+  }
+
+  return alerts.makeupStateAlerts.map((item) => (
+    <article key={item.entitlementId} className="neu-list-item rounded-2xl p-4">
+      <p className="text-sm font-semibold text-brand-ink">{item.studentName}</p>
       <p className="mt-1 text-xs text-stone-500">
-        {item.studentName ? `${item.studentName} - ` : ""}
-        {formatDateTime(item.dueDate)}
+        {item.courseName} - {makeupEntitlementStatusLabels[item.status]} - tháng {item.month}
+      </p>
+      <p className="mt-2 text-[11px] text-stone-400">
+        {item.refundExpenseCode ? `Phiếu chi ${item.refundExpenseCode}` : `Cập nhật ${formatDateTime(item.updatedAt)}`}
       </p>
     </article>
   ))
@@ -109,10 +125,7 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const totalAlerts = useMemo(
-    () => alerts.sessionsLow.length + alerts.staleTrialLeads.length + alerts.dueTasks.length,
-    [alerts]
-  )
+  const totalAlerts = useMemo(() => dashboardAlertSections.reduce((total, section) => total + alerts[section.key].length, 0), [alerts])
   const displayedMetrics = metrics.map((metric) =>
     metric.label === "Cảnh báo" ? { ...metric, value: String(totalAlerts) } : metric
   )
@@ -208,7 +221,7 @@ export default function DashboardPage() {
           ) : null}
         </div>
       </section>
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {dashboardAlertSections.map((section) => {
           const alertCount = getAlertCount(alerts, section.key)
 

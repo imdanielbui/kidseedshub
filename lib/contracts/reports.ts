@@ -1,3 +1,5 @@
+import type { MakeupEntitlementStatusKey } from "@/lib/contracts/makeup-entitlements"
+
 export type SaleKpiRow = {
   userId: string
   saleName: string
@@ -64,6 +66,32 @@ export type RevenueForecast = {
   projectedRenewalRevenue: string
 }
 
+export type MakeupEntitlementReportRow = {
+  entitlementId: string
+  studentName: string
+  courseName: string
+  status: MakeupEntitlementStatusKey
+  month: string
+  scheduledFor?: string
+  resolvedAmount?: string
+  walletCreditAmount: string
+  refundExpenseCode?: string
+  updatedAt: string
+}
+
+export type MakeupEntitlementOperationsReport = {
+  pendingScheduleCount: number
+  scheduledCount: number
+  completedCount: number
+  creditedCount: number
+  refundedCount: number
+  expiredCount: number
+  rejectedCount: number
+  totalWalletCreditAmount: string
+  totalRefundAmount: string
+  rows: MakeupEntitlementReportRow[]
+}
+
 export type AdvancedAnalyticsReport = {
   month: string
   leadSources: LeadSourceAnalyticsRow[]
@@ -71,4 +99,5 @@ export type AdvancedAnalyticsReport = {
   retention: RetentionRow[]
   operations: OperationsOverview
   forecast: RevenueForecast
+  makeupEntitlements: MakeupEntitlementOperationsReport
 }
