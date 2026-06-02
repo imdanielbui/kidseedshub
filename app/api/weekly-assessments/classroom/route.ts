@@ -179,6 +179,7 @@ function toDetail(
         ageGroupIsDefault: ageGroup.isDefault,
         parentName: classStudent.student.parent.user.name,
         parentPhone: classStudent.student.parent.user.phone,
+        healthNote: classStudent.student.healthNote ?? undefined,
         enrollmentId: enrollment?.id,
         status: assessment?.status ?? "NOT_STARTED",
         comment: assessment?.comment ?? undefined,

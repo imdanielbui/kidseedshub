@@ -14,6 +14,7 @@ export type TodayClassStudent = {
   studentName: string
   parentName: string
   parentPhone: string
+  healthNote?: string
   enrollmentId?: string
   attendanceId?: string
   sessionsRemaining: number

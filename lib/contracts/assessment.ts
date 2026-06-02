@@ -95,6 +95,7 @@ export type WeeklyAssessmentMatrixItem = {
   ageGroupIsDefault?: boolean
   parentName: string
   parentPhone: string
+  healthNote?: string
   enrollmentId?: string
   status: AssessmentStatusKey
   comment?: string
