@@ -200,12 +200,14 @@ export default function FinancePage() {
 
   const summaryCards = useMemo(
     () => [
-      { label: "Doanh thu", value: summary ? formatMoney(summary.revenue) : "0đ", icon: TrendingUp },
-      { label: "Chi phí", value: summary ? formatMoney(summary.expense) : "0đ", icon: TrendingDown },
-      { label: "Lợi nhuận", value: summary ? formatMoney(summary.profit) : "0đ", icon: WalletCards },
-      { label: "Phiếu thu", value: String(summary?.receiptCount ?? receipts.length), icon: ReceiptText }
+      { label: "Doanh thu gross", value: summary ? formatMoney(summary.revenue) : "0đ", icon: TrendingUp },
+      { label: "Refund", value: summary ? formatMoney(summary.refundExpense) : "0đ", icon: TrendingDown },
+      { label: "Doanh thu ròng", value: summary ? formatMoney(summary.netRevenue) : "0đ", icon: WalletCards },
+      { label: "Chi vận hành", value: summary ? formatMoney(summary.operatingExpense) : "0đ", icon: TrendingDown },
+      { label: "Lương", value: summary ? formatMoney(summary.salaryExpense) : "0đ", icon: ReceiptText },
+      { label: "Lợi nhuận ròng", value: summary ? formatMoney(summary.netProfit) : "0đ", icon: WalletCards }
     ],
-    [receipts.length, summary]
+    [summary]
   )
   const enrollmentOptions = useMemo(
     () =>
@@ -452,7 +454,7 @@ export default function FinancePage() {
           </a>
         </div>
       </div>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {summaryCards.map((card) => {
           const Icon = card.icon
           return (
@@ -849,6 +851,11 @@ export default function FinancePage() {
                   <p className="mt-3 text-xs text-stone-500">
                     {expenseCategoryLabels[expense.category]} - {formatDate(expense.date)}
                   </p>
+                  {expense.refundEntitlementId ? (
+                    <p className="mt-2 inline-flex rounded-full border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-brand-red">
+                      Refund{expense.refundStudentName ? ` - ${expense.refundStudentName}` : ""}
+                    </p>
+                  ) : null}
                 </article>
               ))
             ) : (

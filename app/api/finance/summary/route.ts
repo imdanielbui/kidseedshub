@@ -101,10 +101,12 @@ export async function GET(request: Request) {
   const walletCreditIssued = walletCreditIssuedSum._sum.amount ?? new Prisma.Decimal(0)
   const walletCreditApplied = (walletCreditAppliedSum._sum.amount ?? new Prisma.Decimal(0)).mul(-1)
   const operatingExpense = expense.minus(salaryExpense).minus(refundExpense)
+  const netRevenue = revenue.minus(refundExpense)
 
   const summary: FinanceSummary = {
     month: parsed.data.month,
     revenue: revenue.toString(),
+    netRevenue: netRevenue.toString(),
     walletCreditApplied: walletCreditApplied.toString(),
     walletCreditIssued: walletCreditIssued.toString(),
     expense: expense.toString(),

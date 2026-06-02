@@ -87,6 +87,7 @@ export type ExpenseListItem = {
 export type FinanceSummary = {
   month: string
   revenue: string
+  netRevenue: string
   walletCreditApplied: string
   walletCreditIssued: string
   expense: string
