@@ -5,7 +5,7 @@ import { dateKey } from "@/lib/backend/class-schedule"
 import { toCourseFeedbackItem } from "@/lib/backend/course-feedback"
 import { finalAssessmentMeetsRequiredWeeks, requiredWeeksFromClass } from "@/lib/backend/final-assessments"
 import type { FinalAssessmentResult } from "@/lib/contracts/assessment"
-import type { ParentPortalOverview } from "@/lib/contracts/parent-portal"
+import type { ParentPortalChild, ParentPortalNotice, ParentPortalOverview, ParentPortalSession } from "@/lib/contracts/parent-portal"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 
@@ -112,6 +112,59 @@ function toFinalAssessmentResult(assessment: FinalAssessmentRecord): FinalAssess
   }
 }
 
+function buildParentPortalNotices(input: {
+  upcomingSessions: ParentPortalSession[]
+  finalAssessments: FinalAssessmentResult[]
+  makeupEntitlements: ParentPortalChild["makeupEntitlements"]
+  walletEntries: ParentPortalChild["walletEntries"]
+}): ParentPortalNotice[] {
+  const scheduleNotices: ParentPortalNotice[] = input.upcomingSessions.slice(0, 3).map((session) => ({
+    id: `session:${session.id}`,
+    type: "SCHEDULE",
+    title: "Lịch học sắp tới",
+    body: `${session.className} - ${session.date} ${session.startTime}-${session.endTime}${session.room ? ` - ${session.room}` : ""}`,
+    date: session.date
+  }))
+  const absenceNotices: ParentPortalNotice[] = input.upcomingSessions
+    .filter((session) => session.absenceRequest)
+    .map((session) => ({
+      id: `absence:${session.absenceRequest?.id}`,
+      type: "ABSENCE",
+      title: "Trạng thái xin nghỉ",
+      body: `${session.className} - ${session.absenceRequest?.reason}`,
+      date: session.date,
+      status: session.absenceRequest?.status
+    }))
+  const makeupNotices: ParentPortalNotice[] = input.makeupEntitlements.slice(0, 4).map((entitlement) => ({
+    id: `makeup:${entitlement.id}`,
+    type: "MAKEUP",
+    title: entitlement.status === "SCHEDULED" ? "Đã xếp lịch học bù" : entitlement.status === "CREDITED" ? "Credit học bù đã cập nhật" : entitlement.status === "REFUNDED" ? "Hoàn tiền học bù đã cập nhật" : "Cập nhật học bù",
+    body: `${entitlement.courseName}${entitlement.className ? ` - ${entitlement.className}` : ""}`,
+    date: entitlement.scheduledFor ?? entitlement.resolvedAt ?? `${entitlement.month}-01`,
+    status: entitlement.status
+  }))
+  const walletNotices: ParentPortalNotice[] = input.walletEntries.slice(0, 3).map((entry) => ({
+    id: `wallet:${entry.id}`,
+    type: "WALLET",
+    title: entry.type === "CREDIT" ? "Ví học viên có credit mới" : "Credit đã được áp dụng",
+    body: `${entry.amount}${entry.receiptCode ? ` - ${entry.receiptCode}` : ""}${entry.note ? ` - ${entry.note}` : ""}`,
+    date: entry.createdAt,
+    status: entry.type
+  }))
+  const reportNotices: ParentPortalNotice[] = input.finalAssessments.slice(0, 3).map((assessment) => ({
+    id: `report:${assessment.id}`,
+    type: "REPORT",
+    title: "Báo cáo cuối khóa đã sẵn sàng",
+    body: `${assessment.courseName} - ${assessment.completedWeeks}/${assessment.requiredWeeks} tuần`,
+    date: assessment.publishedAt ?? assessment.createdAt,
+    status: assessment.status
+  }))
+
+  return [...absenceNotices, ...scheduleNotices, ...makeupNotices, ...walletNotices, ...reportNotices]
+    .sort((first, second) => second.date.localeCompare(first.date))
+    .slice(0, 8)
+}
+
 function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
   return {
     parentName: parent.user.name,
@@ -180,6 +233,30 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
         finalAssessmentMeetsRequiredWeeks(assessment, requiredWeeksByCourseId.get(assessment.enrollment.courseId) ?? assessment.requiredWeeks)
       )
       const walletBalance = student.walletEntries.reduce((total, entry) => total.plus(entry.amount), new Prisma.Decimal(0))
+      const finalAssessmentResults = finalAssessments.map(toFinalAssessmentResult)
+      const makeupEntitlements: ParentPortalChild["makeupEntitlements"] = student.makeupEntitlements.map((entitlement) => ({
+        id: entitlement.id,
+        enrollmentId: entitlement.enrollmentId,
+        courseName: entitlement.enrollment.course.name,
+        className: entitlement.classSession?.class.name,
+        month: entitlement.month,
+        status: entitlement.status,
+        isEligible: entitlement.isEligible,
+        eligibilityReason: entitlement.eligibilityReason ?? undefined,
+        scheduledFor: entitlement.scheduledFor?.toISOString(),
+        resolvedAmount: entitlement.resolvedAmount?.toString(),
+        resolvedAt: entitlement.resolvedAt?.toISOString(),
+        refundExpenseCode: entitlement.refundExpense?.code
+      }))
+      const walletEntries: ParentPortalChild["walletEntries"] = student.walletEntries.map((entry) => ({
+        id: entry.id,
+        amount: entry.amount.toString(),
+        type: entry.type,
+        note: entry.note ?? undefined,
+        receiptCode: entry.receipt?.code,
+        createdByName: entry.createdBy.name,
+        createdAt: entry.createdAt.toISOString()
+      }))
 
       return {
         id: student.id,
@@ -189,33 +266,18 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
         healthNote: student.healthNote ?? undefined,
         courses,
         upcomingSessions,
+        notices: buildParentPortalNotices({
+          upcomingSessions,
+          finalAssessments: finalAssessmentResults,
+          makeupEntitlements,
+          walletEntries
+        }),
         journal,
-        finalAssessments: finalAssessments.map(toFinalAssessmentResult),
+        finalAssessments: finalAssessmentResults,
         feedbacks: student.feedbacks.map(toCourseFeedbackItem),
-        makeupEntitlements: student.makeupEntitlements.map((entitlement) => ({
-          id: entitlement.id,
-          enrollmentId: entitlement.enrollmentId,
-          courseName: entitlement.enrollment.course.name,
-          className: entitlement.classSession?.class.name,
-          month: entitlement.month,
-          status: entitlement.status,
-          isEligible: entitlement.isEligible,
-          eligibilityReason: entitlement.eligibilityReason ?? undefined,
-          scheduledFor: entitlement.scheduledFor?.toISOString(),
-          resolvedAmount: entitlement.resolvedAmount?.toString(),
-          resolvedAt: entitlement.resolvedAt?.toISOString(),
-          refundExpenseCode: entitlement.refundExpense?.code
-        })),
+        makeupEntitlements,
         walletBalance: walletBalance.toString(),
-        walletEntries: student.walletEntries.map((entry) => ({
-          id: entry.id,
-          amount: entry.amount.toString(),
-          type: entry.type,
-          note: entry.note ?? undefined,
-          receiptCode: entry.receipt?.code,
-          createdByName: entry.createdBy.name,
-          createdAt: entry.createdAt.toISOString()
-        }))
+        walletEntries
       }
     })
   }

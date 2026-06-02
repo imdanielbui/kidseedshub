@@ -1,6 +1,6 @@
 "use client"
 
-import { BookOpenCheck, CalendarDays, Camera, Download, Image as ImageIcon, LogOut, MessageSquareHeart, Palette, Rocket, Sprout, StickyNote, Trophy } from "lucide-react"
+import { BellRing, BookOpenCheck, CalendarDays, Camera, Download, Image as ImageIcon, LogOut, MessageSquareHeart, Palette, Rocket, Sprout, StickyNote, Trophy } from "lucide-react"
 import { signIn, signOut } from "next-auth/react"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
@@ -23,6 +23,14 @@ function getInitials(name: string) {
     .join("")
     .toUpperCase()
 }
+
+const noticeTypeLabels = {
+  SCHEDULE: "Lịch học",
+  ABSENCE: "Xin nghỉ",
+  MAKEUP: "Học bù",
+  WALLET: "Credit",
+  REPORT: "Báo cáo"
+} as const
 
 export default function ParentPortalPage() {
   const [portal, setPortal] = useState<ParentPortalOverview | null>(null)
@@ -420,6 +428,30 @@ export default function ParentPortalPage() {
               </div>
 
               <div className="space-y-5">
+                <Panel title="Thông báo liên quan" icon={BellRing}>
+                  {selectedChild.notices.length ? (
+                    selectedChild.notices.map((notice) => (
+                      <article key={notice.id} className="neu-list-item rounded-2xl p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-brand-ink">{notice.title}</p>
+                            <p className="mt-1 text-xs leading-5 text-stone-500">{notice.body}</p>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-brand-red/10 bg-white/60 px-2 py-1 text-[11px] font-semibold text-brand-red">
+                            {noticeTypeLabels[notice.type]}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-xs font-semibold text-stone-400">
+                          {formatDate(notice.date)}
+                          {notice.status ? ` - ${notice.status}` : ""}
+                        </p>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="text-sm text-stone-500">Chưa có thông báo mới cho học viên này.</p>
+                  )}
+                </Panel>
+
                 <Panel title="Lịch học sắp tới" icon={CalendarDays}>
                   {selectedChild.upcomingSessions.length ? (
                     selectedChild.upcomingSessions.map((session) => (

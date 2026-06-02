@@ -47,6 +47,15 @@ export type ParentPortalJournalItem = {
   }>
 }
 
+export type ParentPortalNotice = {
+  id: string
+  type: "SCHEDULE" | "ABSENCE" | "MAKEUP" | "WALLET" | "REPORT"
+  title: string
+  body: string
+  date: string
+  status?: string
+}
+
 export type ParentPortalChild = {
   id: string
   code: string
@@ -55,6 +64,7 @@ export type ParentPortalChild = {
   healthNote?: string
   courses: ParentPortalCourse[]
   upcomingSessions: ParentPortalSession[]
+  notices: ParentPortalNotice[]
   journal: ParentPortalJournalItem[]
   finalAssessments: FinalAssessmentResult[]
   feedbacks: CourseFeedbackItem[]
