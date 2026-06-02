@@ -16,6 +16,7 @@ const metrics = [
 
 const emptyAlerts: DashboardAlerts = {
   sessionsLow: [],
+  debtWarnings: [],
   staleTrialLeads: [],
   dueTasks: [],
   makeupStateAlerts: []
@@ -41,6 +42,20 @@ function renderAlertItems(alerts: DashboardAlerts, key: keyof DashboardAlerts) {
         <p className="text-sm font-semibold text-brand-ink">{item.studentName}</p>
         <p className="mt-1 text-xs text-stone-500">
           {item.courseName} - còn {item.sessionsRemaining} buổi
+        </p>
+      </article>
+    ))
+  }
+
+  if (key === "debtWarnings") {
+    return alerts.debtWarnings.map((item) => (
+      <article key={item.enrollmentId} className="neu-list-item rounded-2xl p-4">
+        <p className="text-sm font-semibold text-brand-ink">{item.studentName}</p>
+        <p className="mt-1 text-xs text-stone-500">
+          {item.courseName} - còn {item.sessionsRemaining} buổi
+        </p>
+        <p className="mt-2 text-[11px] text-stone-400">
+          {item.latestReceiptAt ? `Thu gần nhất ${formatDateTime(item.latestReceiptAt)}` : "Chưa có phiếu thu"}
         </p>
       </article>
     ))
@@ -221,7 +236,7 @@ export default function DashboardPage() {
           ) : null}
         </div>
       </section>
-      <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-5">
         {dashboardAlertSections.map((section) => {
           const alertCount = getAlertCount(alerts, section.key)
 

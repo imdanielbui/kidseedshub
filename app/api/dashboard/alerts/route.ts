@@ -32,7 +32,15 @@ export async function GET() {
       },
       include: {
         student: { include: { parent: { include: { user: true } } } },
-        course: true
+        course: true,
+        attendances: {
+          orderBy: { date: "desc" },
+          take: 1
+        },
+        receipts: {
+          orderBy: { createdAt: "desc" },
+          take: 1
+        }
       },
       orderBy: { updatedAt: "asc" },
       take: 100
@@ -94,8 +102,37 @@ export async function GET() {
       sessionsRemaining: enrollment.sessionsBought - enrollment.sessionsUsed
     }))
 
+  const debtWarnings: DashboardAlerts["debtWarnings"] = activeEnrollments
+    .filter((enrollment) => {
+      const sessionsRemaining = enrollment.sessionsBought - enrollment.sessionsUsed
+
+      if (sessionsRemaining > 0) {
+        return false
+      }
+
+      const latestReceipt = enrollment.receipts[0]
+      const latestAttendance = enrollment.attendances[0]
+
+      if (!latestReceipt) {
+        return true
+      }
+
+      return latestAttendance ? latestReceipt.createdAt < latestAttendance.date : false
+    })
+    .slice(0, 20)
+    .map((enrollment) => ({
+      enrollmentId: enrollment.id,
+      studentId: enrollment.studentId,
+      studentName: enrollment.student.name,
+      courseName: enrollment.course.name,
+      sessionsRemaining: enrollment.sessionsBought - enrollment.sessionsUsed,
+      latestAttendanceAt: enrollment.attendances[0]?.date.toISOString(),
+      latestReceiptAt: enrollment.receipts[0]?.createdAt.toISOString()
+    }))
+
   const alerts: DashboardAlerts = {
     sessionsLow,
+    debtWarnings,
     staleTrialLeads: staleTrialLeads.map((student) => ({
       studentId: student.id,
       studentName: student.name,

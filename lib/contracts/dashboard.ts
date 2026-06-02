@@ -7,6 +7,16 @@ export type LowSessionAlert = {
   sessionsRemaining: number
 }
 
+export type DebtWarningAlert = {
+  enrollmentId: string
+  studentId: string
+  studentName: string
+  courseName: string
+  sessionsRemaining: number
+  latestAttendanceAt?: string
+  latestReceiptAt?: string
+}
+
 export type StaleTrialLeadAlert = {
   studentId: string
   studentName: string
@@ -38,6 +48,7 @@ export type MakeupEntitlementAlert = {
 
 export type DashboardAlerts = {
   sessionsLow: LowSessionAlert[]
+  debtWarnings: DebtWarningAlert[]
   staleTrialLeads: StaleTrialLeadAlert[]
   dueTasks: DueTaskAlert[]
   makeupStateAlerts: MakeupEntitlementAlert[]
@@ -48,6 +59,11 @@ export const dashboardAlertSections = [
     key: "sessionsLow",
     title: "Học viên còn <= 2 buổi",
     emptyText: "Chưa có học viên sắp hết buổi."
+  },
+  {
+    key: "debtWarnings",
+    title: "Cần thu học phí",
+    emptyText: "Chưa có học viên hết buổi chưa đóng mới."
   },
   {
     key: "staleTrialLeads",
