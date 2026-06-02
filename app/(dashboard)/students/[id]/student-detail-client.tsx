@@ -11,7 +11,9 @@ import { contactResultLabels, type ContactResultKey, taskStatusLabels } from "@/
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import { paymentMethodLabels, type PaymentMethodKey, type ReceiptListItem } from "@/lib/contracts/finance"
+import { makeupEntitlementStatusLabels, type MakeupEntitlementItem } from "@/lib/contracts/makeup-entitlements"
 import { studentStatusLabels, type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
+import { studentWalletEntryTypeLabels, type StudentWalletSummary } from "@/lib/contracts/student-wallet"
 
 type DetailTab = "overview" | "crm" | "learning" | "finance" | "journal" | "parent-account"
 type ParentAccountAction = "activate" | "reset_default_password"
@@ -259,6 +261,9 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [selectedLearningDetail, setSelectedLearningDetail] = useState<LearningDetailTarget | null>(null)
   const [isConfirmingEnrollmentDelete, setIsConfirmingEnrollmentDelete] = useState(false)
   const [studentReceipts, setStudentReceipts] = useState<ReceiptListItem[]>([])
+  const [studentWallet, setStudentWallet] = useState<StudentWalletSummary | null>(null)
+  const [makeupEntitlements, setMakeupEntitlements] = useState<MakeupEntitlementItem[]>([])
+  const [walletCreditInput, setWalletCreditInput] = useState("")
   const [lastReceipt, setLastReceipt] = useState<ReceiptListItem | null>(null)
   const [temporaryParentPassword, setTemporaryParentPassword] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -332,6 +337,9 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const receiptAmountSuggestions = moneySuggestions(receiptAmount)
   const latestReceipt = lastReceipt ?? studentReceipts[0]
   const totalReceiptAmount = studentReceipts.reduce((total, receipt) => total + Number(receipt.amount), 0)
+  const walletBalance = Number(studentWallet?.balance ?? 0)
+  const walletCreditAmount = parseMoneyInput(walletCreditInput)
+  const actualReceiptPaymentAmount = Math.max(0, actualReceiptAmount - walletCreditAmount)
   const receiptValidationErrors = useMemo(() => {
     const errors: string[] = []
 
@@ -349,12 +357,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     })
 
     if (actualReceiptAmount < 0) errors.push("Phụ huynh cần thanh toán không được âm.")
+    if (walletCreditAmount > walletBalance) errors.push("Credit áp dụng không được vượt quá số dư ví.")
+    if (walletCreditAmount > actualReceiptAmount) errors.push("Credit áp dụng không được vượt quá số tiền phiếu thu.")
     if (receiptLines.length && !receiptLineSummaries.some((summary) => summary.billableSessions > 0) && !hasManualReceiptAmount) {
       errors.push("Không có buổi tính phí sau học thử. Hãy kiểm tra lại số buổi học thử hoặc nhập số tiền cần thu nếu đây là ngoại lệ.")
     }
 
     return errors
-  }, [actualReceiptAmount, hasManualReceiptAmount, receiptLineSummaries, receiptLines, student?.courses])
+  }, [actualReceiptAmount, hasManualReceiptAmount, receiptLineSummaries, receiptLines, student?.courses, walletBalance, walletCreditAmount])
 
   function syncProfileForm(nextStudent: StudentDetail) {
     setProfileName(nextStudent.name)
@@ -402,6 +412,18 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     setLastReceipt((current) => current ?? receipts[0] ?? null)
   }
 
+  async function loadFinanceLedger() {
+    const [walletResponse, makeupResponse] = await Promise.all([
+      fetch(`/api/student-wallet?studentId=${studentId}`, { cache: "no-store" }),
+      fetch(`/api/makeup-entitlements?studentId=${studentId}`, { cache: "no-store" })
+    ])
+    const walletPayload = (await walletResponse.json()) as ApiResponse<StudentWalletSummary>
+    const makeupPayload = (await makeupResponse.json()) as ApiResponse<MakeupEntitlementItem[]>
+
+    setStudentWallet(walletResponse.ok && walletPayload.success && walletPayload.data ? walletPayload.data : null)
+    setMakeupEntitlements(makeupResponse.ok && makeupPayload.success && makeupPayload.data ? makeupPayload.data : [])
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -410,16 +432,20 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       setError(null)
 
       try {
-        const [studentResponse, coursesResponse, classesResponse, receiptsResponse] = await Promise.all([
+        const [studentResponse, coursesResponse, classesResponse, receiptsResponse, walletResponse, makeupResponse] = await Promise.all([
           fetch(`/api/students/${studentId}`, { cache: "no-store" }),
           fetch("/api/courses"),
           fetch("/api/classes?active=true"),
-          fetch(`/api/receipts?studentId=${studentId}`, { cache: "no-store" })
+          fetch(`/api/receipts?studentId=${studentId}`, { cache: "no-store" }),
+          fetch(`/api/student-wallet?studentId=${studentId}`, { cache: "no-store" }),
+          fetch(`/api/makeup-entitlements?studentId=${studentId}`, { cache: "no-store" })
         ])
         const studentPayload = (await studentResponse.json()) as ApiResponse<StudentDetail>
         const coursesPayload = (await coursesResponse.json()) as ApiResponse<CourseListItem[]>
         const classesPayload = (await classesResponse.json()) as ApiResponse<ClassListItem[]>
         const receiptsPayload = (await receiptsResponse.json()) as ApiResponse<ReceiptListItem[]>
+        const walletPayload = (await walletResponse.json()) as ApiResponse<StudentWalletSummary>
+        const makeupPayload = (await makeupResponse.json()) as ApiResponse<MakeupEntitlementItem[]>
 
         if (!isMounted) return
 
@@ -446,6 +472,9 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           setStudentReceipts(receiptsPayload.data)
           setLastReceipt((current) => current ?? receiptsPayload.data?.[0] ?? null)
         }
+
+        setStudentWallet(walletResponse.ok && walletPayload.success && walletPayload.data ? walletPayload.data : null)
+        setMakeupEntitlements(makeupResponse.ok && makeupPayload.success && makeupPayload.data ? makeupPayload.data : [])
       } catch {
         if (isMounted) setError("Không tải được hồ sơ học viên.")
       } finally {
@@ -734,6 +763,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             discountInput: summary.line.discountInput.trim() || undefined,
             extraDiscountInput: summary.line.extraDiscountInput.trim() || undefined
           })),
+          walletCreditAmount: walletCreditAmount > 0 ? walletCreditAmount : undefined,
           method: receiptMethod,
           note: receiptNote.trim() || undefined
         })
@@ -746,11 +776,13 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       }
 
       setReceiptAmount("")
+      setWalletCreditInput("")
       setIsReceiptAmountOverride(false)
       setReceiptNote("")
       setLastReceipt(payload.data)
       await loadStudent()
       await loadReceipts()
+      await loadFinanceLedger()
     } catch {
       setError("Không tạo được phiếu thu.")
     } finally {
@@ -1080,11 +1112,16 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 
       {activeTab === "finance" ? (
         <section className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <InfoPill label="Tổng còn lại" value={`${student.sessionsRemaining} buổi`} />
             <InfoPill label="Khóa đang hoạt động" value={`${activeStudentCourses(student).length} khóa`} />
             <InfoPill label="Đã thu tất cả" value={studentReceipts.length ? formatCurrency(totalReceiptAmount) : "Chưa có phiếu"} />
+            <InfoPill label="Số dư credit" value={studentWallet ? formatCurrency(walletBalance) : "Chưa có ví"} />
             <InfoPill label="Phiếu thu gần nhất" value={latestReceipt ? `${latestReceipt.code} · ${formatCurrency(Number(latestReceipt.amount))}` : "Chưa có phiếu"} />
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <StudentWalletCard summary={studentWallet} />
+            <MakeupEntitlementCard entitlements={makeupEntitlements} />
           </div>
           <ReceiptHistoryCard receipts={studentReceipts} />
           <div className="grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
@@ -1240,7 +1277,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block text-sm font-semibold text-stone-700">
-                  Phụ huynh cần thanh toán
+                  Tổng phiếu trước credit
                   <input
                     className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
                     value={isReceiptAmountOverride ? receiptAmount : formatMoneyInput(Math.round(payableAmount))}
@@ -1282,6 +1319,19 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                       ))}
                     </span>
                   ) : null}
+                </label>
+                <label className="block text-sm font-semibold text-stone-700">
+                  Dùng credit ví
+                  <input
+                    className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    value={walletCreditInput}
+                    onChange={(event) => setWalletCreditInput(formatMoneyInput(event.target.value))}
+                    placeholder="0"
+                    disabled={walletBalance <= 0}
+                  />
+                  <span className="mt-1 block text-xs text-stone-500">
+                    Số dư {formatCurrency(walletBalance)} · còn thu {formatCurrency(actualReceiptPaymentAmount)}
+                  </span>
                 </label>
                 <label className="block text-sm font-semibold text-stone-700">
                   Phương thức
@@ -1638,6 +1688,80 @@ function ListCard({ title, count, children }: { title: string; count?: string; c
   )
 }
 
+function StudentWalletCard({ summary }: { summary: StudentWalletSummary | null }) {
+  const entries = summary?.entries ?? []
+  const balance = Number(summary?.balance ?? 0)
+
+  return (
+    <section className="neu-card rounded-3xl">
+      <div className="flex flex-col gap-2 p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="font-semibold text-brand-ink">Ví credit học viên</h2>
+          <p className="mt-1 text-sm text-stone-500">Credit từ học bù và các lần đã áp dụng vào phiếu thu.</p>
+        </div>
+        <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">{formatCurrency(balance)}</span>
+      </div>
+      <div className="content-border max-h-[34vh] space-y-3 overflow-auto p-5">
+        {entries.length ? entries.map((entry) => (
+          <article key={entry.id} className="neu-list-item rounded-2xl p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-brand-red/15 px-2 py-1 text-xs font-semibold text-brand-red">{studentWalletEntryTypeLabels[entry.type]}</span>
+                  <span className="rounded-full border border-brand-red/10 px-2 py-1 text-xs font-semibold text-stone-500">{formatDate(entry.createdAt)}</span>
+                  {entry.receiptCode ? <span className="rounded-full border border-brand-red/10 px-2 py-1 text-xs font-semibold text-stone-500">{entry.receiptCode}</span> : null}
+                </div>
+                <p className="mt-2 line-clamp-2 text-xs text-stone-500">{entry.note ?? "Không có ghi chú ví."}</p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold text-brand-red">{formatCurrency(Number(entry.amount))}</p>
+            </div>
+          </article>
+        )) : <EmptyState text={summary ? "Chưa có giao dịch ví." : "Không có dữ liệu ví hoặc tài khoản không có quyền xem ví."} />}
+      </div>
+    </section>
+  )
+}
+
+function MakeupEntitlementCard({ entitlements }: { entitlements: MakeupEntitlementItem[] }) {
+  return (
+    <section className="neu-card rounded-3xl">
+      <div className="flex flex-col gap-2 p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="font-semibold text-brand-ink">Học bù, credit và refund</h2>
+          <p className="mt-1 text-sm text-stone-500">Theo dõi mỗi quyền học bù và cách quyền đó được xử lý.</p>
+        </div>
+        <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">{entitlements.length} quyền</span>
+      </div>
+      <div className="content-border max-h-[34vh] space-y-3 overflow-auto p-5">
+        {entitlements.length ? entitlements.map((entitlement) => (
+          <article key={entitlement.id} className="neu-list-item rounded-2xl p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-brand-red/15 px-2 py-1 text-xs font-semibold text-brand-red">{makeupEntitlementStatusLabels[entitlement.status]}</span>
+                  <span className="rounded-full border border-brand-red/10 px-2 py-1 text-xs font-semibold text-stone-500">{entitlement.month}</span>
+                  <span className="rounded-full border border-brand-red/10 px-2 py-1 text-xs font-semibold text-stone-500">{entitlement.isEligible ? "Đủ điều kiện" : "Không đủ điều kiện"}</span>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-brand-ink">{entitlement.courseName}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-stone-500">
+                  {entitlement.className ? `${entitlement.className} · ` : ""}
+                  {entitlement.sessionDate ? `Nghỉ ngày ${formatDate(entitlement.sessionDate)}` : entitlement.eligibilityReason ?? "Chưa có ngày nghỉ gốc."}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold text-stone-500">
+                  {entitlement.scheduledFor ? <span className="rounded-full border border-brand-red/10 px-2 py-1">Học bù {formatDate(entitlement.scheduledFor)}</span> : null}
+                  {entitlement.resolvedAmount ? <span className="rounded-full border border-brand-red/10 px-2 py-1">Số tiền {formatCurrency(Number(entitlement.resolvedAmount))}</span> : null}
+                  {entitlement.refundExpenseCode ? <span className="rounded-full border border-brand-red/10 px-2 py-1">Refund {entitlement.refundExpenseCode}</span> : null}
+                </div>
+              </div>
+              <p className="shrink-0 text-xs text-stone-500">{formatDate(entitlement.updatedAt)}</p>
+            </div>
+          </article>
+        )) : <EmptyState text="Chưa có quyền học bù, credit hoặc refund." />}
+      </div>
+    </section>
+  )
+}
+
 function ReceiptHistoryCard({ receipts }: { receipts: ReceiptListItem[] }) {
   return (
     <section className="neu-card rounded-3xl">
@@ -1668,10 +1792,18 @@ function ReceiptHistoryCard({ receipts }: { receipts: ReceiptListItem[] }) {
                   )) : (
                     <span className="rounded-full border border-brand-red/10 px-2 py-1">{receipt.billableSessions} buổi tính phí</span>
                   )}
+                  {Number(receipt.walletCreditAmount) > 0 ? (
+                    <span className="rounded-full border border-brand-red/10 px-2 py-1">
+                      Dùng credit {formatCurrency(Number(receipt.walletCreditAmount))}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-2 lg:items-end">
                 <p className="text-base font-semibold text-brand-red">{formatCurrency(Number(receipt.amount))}</p>
+                {Number(receipt.walletCreditAmount) > 0 ? (
+                  <p className="text-xs font-semibold text-stone-500">Trước credit {formatCurrency(Number(receipt.amountBeforeWalletCredit))}</p>
+                ) : null}
                 <Link href={`/receipts/${receipt.id}/print`} target="_blank" className="glass-button-secondary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold">
                   <Printer className="h-3.5 w-3.5" />
                   In phiếu
