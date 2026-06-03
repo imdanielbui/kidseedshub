@@ -9,6 +9,46 @@ const prisma = new PrismaClient()
 const today = new Date()
 const todayWeekday = today.getDay()
 const staleDate = daysAgo(5)
+const seedModes = ["demo", "production"] as const
+const forbiddenProductionSeedPasswords = new Set(["Admin@123", "Sale@123", "Teacher@123", "Parent@123"])
+
+type SeedMode = (typeof seedModes)[number]
+
+function readSeedMode(): SeedMode {
+  const mode = process.env.KIDSEEDSHUB_SEED_MODE?.trim().toLowerCase()
+
+  if (mode && !seedModes.includes(mode as SeedMode)) {
+    throw new Error("KIDSEEDSHUB_SEED_MODE must be either 'demo' or 'production'.")
+  }
+
+  const resolvedMode = (mode as SeedMode | undefined) ?? (process.env.NODE_ENV === "production" ? "production" : "demo")
+
+  if (resolvedMode === "demo" && process.env.NODE_ENV === "production" && process.env.KIDSEEDSHUB_ALLOW_DEMO_SEED !== "true") {
+    throw new Error("Demo seed is blocked in production. Set KIDSEEDSHUB_ALLOW_DEMO_SEED=true only for an isolated demo database.")
+  }
+
+  return resolvedMode
+}
+
+function requiredEnv(name: string) {
+  const value = process.env[name]?.trim()
+
+  if (!value) {
+    throw new Error(`${name} is required for production seed bootstrap.`)
+  }
+
+  return value
+}
+
+function assertProductionSeedPassword(password: string) {
+  if (password.length < 12) {
+    throw new Error("KIDSEEDSHUB_ADMIN_PASSWORD must be at least 12 characters for production seed bootstrap.")
+  }
+
+  if (forbiddenProductionSeedPasswords.has(password)) {
+    throw new Error("KIDSEEDSHUB_ADMIN_PASSWORD cannot use a demo password.")
+  }
+}
 
 function daysAgo(days: number) {
   const date = new Date()
@@ -643,7 +683,31 @@ async function upsertTodayAttendance(input: {
   })
 }
 
-async function main() {
+async function seedProductionBootstrap() {
+  const adminPassword = requiredEnv("KIDSEEDSHUB_ADMIN_PASSWORD")
+  assertProductionSeedPassword(adminPassword)
+
+  const admin = await upsertUser({
+    name: requiredEnv("KIDSEEDSHUB_ADMIN_NAME"),
+    phone: requiredEnv("KIDSEEDSHUB_ADMIN_PHONE"),
+    email: requiredEnv("KIDSEEDSHUB_ADMIN_EMAIL"),
+    password: adminPassword,
+    role: "ADMIN"
+  })
+  const seedYear = Number(process.env.KIDSEEDSHUB_SEED_YEAR ?? new Date().getFullYear())
+
+  await Promise.all([
+    upsertRubricConfig({ rubric: FUN_RUBRIC, createdById: admin.id }),
+    upsertRubricConfig({ rubric: ROBOTICS_RUBRIC, createdById: admin.id })
+  ])
+  await ensureVietnamPublicHolidays(prisma, Number.isFinite(seedYear) ? seedYear : new Date().getFullYear())
+
+  console.info("Kid Seeds Hub production bootstrap is ready.")
+  console.info("- Admin account bootstrapped from KIDSEEDSHUB_ADMIN_* environment variables.")
+  console.info("- Demo users, parents, students, receipts, and classes were not created.")
+}
+
+async function seedDemoData() {
   const admin = await upsertUser({
     name: "Admin Kid Seeds",
     phone: "0900000001",
@@ -979,13 +1043,24 @@ async function main() {
 
   await ensureVietnamPublicHolidays(prisma, 2026)
 
-  console.info("Kid Seeds Hub seed data is ready.")
+  console.info("Kid Seeds Hub demo seed data is ready.")
   console.info("Demo accounts:")
   console.info("- Admin: 0900000001 / Admin@123")
   console.info("- Sale: 0900000002 / Sale@123")
   console.info("- Teacher Robotics: 0900000003 / Teacher@123")
   console.info("- Teacher FUN: 0900000005 / Teacher@123")
   console.info("- Parent sample: 0911000001 / Parent@123")
+}
+
+async function main() {
+  const mode = readSeedMode()
+
+  if (mode === "production") {
+    await seedProductionBootstrap()
+    return
+  }
+
+  await seedDemoData()
 }
 
 main()

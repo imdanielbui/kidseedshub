@@ -31,6 +31,7 @@ const noticeTypeLabels = {
   WALLET: "Credit",
   REPORT: "Báo cáo"
 } as const
+const showParentDemoLogin = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true"
 
 export default function ParentPortalPage() {
   const [portal, setPortal] = useState<ParentPortalOverview | null>(null)
@@ -239,7 +240,7 @@ export default function ParentPortalPage() {
         {error ? (
           <div className="rounded-3xl border border-brand-red/15 bg-white/50 p-4">
             <p className="text-sm font-semibold text-brand-red">{error}</p>
-            {error.includes("không có quyền") ? (
+            {showParentDemoLogin && error.includes("không có quyền") ? (
               <button
                 type="button"
                 className="neu-button mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"

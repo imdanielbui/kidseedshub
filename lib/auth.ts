@@ -76,6 +76,7 @@ async function auditBlockedLogin(phone: string, userId?: string) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: getAuthSecret(),
+  trustHost: shouldTrustHost(),
   session: {
     strategy: "jwt"
   },
@@ -176,4 +177,8 @@ function getAuthSecret() {
   }
 
   throw new Error("NEXTAUTH_SECRET or AUTH_SECRET must be set in production.")
+}
+
+function shouldTrustHost() {
+  return process.env.NODE_ENV !== "production" || process.env.AUTH_TRUST_HOST === "true" || process.env.VERCEL === "1"
 }

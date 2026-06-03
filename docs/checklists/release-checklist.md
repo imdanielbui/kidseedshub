@@ -1,12 +1,24 @@
 # Release Checklist
 
 - Branch and release scope confirmed.
-- Lint passed or failures documented.
-- Tests passed or gaps documented.
-- Build passed.
-- Env variables confirmed without printing values.
+- Deployment target confirmed. Primary target: Vercel.
+- Env variables confirmed without printing values:
+  - `DATABASE_URL`
+  - `NEXTAUTH_SECRET` or `AUTH_SECRET`
+  - `NEXTAUTH_URL`
+  - `AUTH_TRUST_HOST=true` for non-Vercel production, or `VERCEL=1` on Vercel
+  - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` or `KIDSEEDSHUB_TRUSTED_IMAGE_HOSTS`
+- Production bootstrap seed uses `npm run prisma:seed:production` with `KIDSEEDSHUB_ADMIN_*` variables.
+- Demo seed is used only for isolated demo databases with `npm run prisma:seed:demo`.
 - Migrations/data changes approved.
+- Preflight passed:
+  - `npm run release:preflight`
+- Tests passed or the missing test-suite gap is documented in the release note.
+- Build passed.
 - Auth callback URLs checked.
 - API integrations checked.
-- Smoke tests planned.
-- Rollback path identified.
+- Post-deploy smoke passed:
+  - `KIDSEEDSHUB_RELEASE_URL=https://... KIDSEEDSHUB_EXPECT_PRODUCTION_UI=true npm run release:smoke`
+- Smoke evidence captured for homepage/login, protected page redirect, health API, and protected API 401.
+- Previous stable deployment identified.
+- Rollback path identified, including migration compatibility and env changes required to roll back.

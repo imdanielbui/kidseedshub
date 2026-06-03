@@ -9,8 +9,12 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "env:validate": "tsx scripts/validate-env.ts",
+    "release:preflight": "tsx scripts/release-preflight.ts",
+    "release:smoke": "tsx scripts/release-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:seed:demo": "KIDSEEDSHUB_SEED_MODE=demo tsx prisma/seed.ts",
+    "prisma:seed:production": "KIDSEEDSHUB_SEED_MODE=production tsx prisma/seed.ts",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

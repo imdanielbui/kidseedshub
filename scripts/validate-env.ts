@@ -28,8 +28,16 @@ function validate() {
     errors.push("NEXTAUTH_URL must be a valid URL when set.")
   }
 
+  if (hasValue(process.env.AUTH_URL) && !isValidUrl(process.env.AUTH_URL)) {
+    errors.push("AUTH_URL must be a valid URL when set.")
+  }
+
   if (isProduction && !hasValue(process.env.NEXTAUTH_SECRET) && !hasValue(process.env.AUTH_SECRET)) {
     errors.push("NEXTAUTH_SECRET or AUTH_SECRET is required in production.")
+  }
+
+  if (isProduction && process.env.AUTH_TRUST_HOST !== "true" && process.env.VERCEL !== "1") {
+    errors.push("AUTH_TRUST_HOST=true is required in production unless VERCEL=1 is present.")
   }
 
   if (isProduction && !hasValue(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) && !hasValue(process.env.KIDSEEDSHUB_TRUSTED_IMAGE_HOSTS)) {
