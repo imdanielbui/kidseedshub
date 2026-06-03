@@ -3,6 +3,7 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
+import { getLoginAttemptState, recordBlockedLogin, recordFailedLogin, recordSuccessfulLogin } from "@/lib/backend/login-attempts"
 import { ensureRuntimePermissionMatrixLoaded } from "@/lib/backend/permission-matrix"
 import { prisma } from "@/lib/prisma"
 
@@ -10,69 +11,6 @@ const loginSchema = z.object({
   phone: z.string().trim().min(8),
   password: z.string().min(6)
 })
-
-type LoginAttemptState = {
-  failedCount: number
-  firstFailedAt: number
-  lockedUntil?: number
-}
-
-const loginAttemptWindowMs = 15 * 60 * 1000
-const loginLockoutMs = 15 * 60 * 1000
-const maxFailedLoginAttempts = 5
-const globalForLoginAttempts = globalThis as typeof globalThis & {
-  kidSeedsLoginAttempts?: Map<string, LoginAttemptState>
-}
-const loginAttempts = globalForLoginAttempts.kidSeedsLoginAttempts ?? new Map<string, LoginAttemptState>()
-globalForLoginAttempts.kidSeedsLoginAttempts = loginAttempts
-
-function getLoginAttemptState(phone: string) {
-  const now = Date.now()
-  const current = loginAttempts.get(phone)
-
-  if (!current) {
-    return undefined
-  }
-
-  if (!current.lockedUntil && now - current.firstFailedAt > loginAttemptWindowMs) {
-    loginAttempts.delete(phone)
-    return undefined
-  }
-
-  if (current.lockedUntil && now >= current.lockedUntil) {
-    loginAttempts.delete(phone)
-    return undefined
-  }
-
-  return current
-}
-
-function recordFailedLogin(phone: string) {
-  const now = Date.now()
-  const current = getLoginAttemptState(phone)
-  const next: LoginAttemptState = current
-    ? { ...current, failedCount: current.failedCount + 1 }
-    : { failedCount: 1, firstFailedAt: now }
-
-  if (!next.lockedUntil && next.failedCount >= maxFailedLoginAttempts) {
-    next.lockedUntil = now + loginLockoutMs
-  }
-
-  loginAttempts.set(phone, next)
-  return next
-}
-
-async function auditBlockedLogin(phone: string, userId?: string) {
-  await prisma.auditLog.create({
-    data: {
-      action: "auth.login_blocked",
-      entityType: userId ? "User" : "Auth",
-      entityId: userId,
-      summary: "Credential login blocked after repeated failed attempts.",
-      metadata: { phone }
-    }
-  })
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: getAuthSecret(),
@@ -96,10 +34,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
 
-        const lockedState = getLoginAttemptState(parsed.data.phone)
+        const lockedState = await getLoginAttemptState(parsed.data.phone)
 
         if (lockedState?.lockedUntil) {
-          await auditBlockedLogin(parsed.data.phone)
+          await recordBlockedLogin(parsed.data.phone, lockedState.lockedUntil)
           return null
         }
 
@@ -108,10 +46,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         })
 
         if (!user || !user.isActive) {
-          const failedState = recordFailedLogin(parsed.data.phone)
+          const failedState = await recordFailedLogin(parsed.data.phone)
 
-          if (failedState.lockedUntil) {
-            await auditBlockedLogin(parsed.data.phone)
+          if (failedState?.lockedUntil) {
+            await recordBlockedLogin(parsed.data.phone, failedState.lockedUntil)
           }
 
           return null
@@ -120,16 +58,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const isValid = await bcrypt.compare(parsed.data.password, user.password)
 
         if (!isValid) {
-          const failedState = recordFailedLogin(parsed.data.phone)
+          const failedState = await recordFailedLogin(parsed.data.phone, user.id)
 
-          if (failedState.lockedUntil) {
-            await auditBlockedLogin(parsed.data.phone, user.id)
+          if (failedState?.lockedUntil) {
+            await recordBlockedLogin(parsed.data.phone, failedState.lockedUntil, user.id)
           }
 
           return null
         }
 
-        loginAttempts.delete(parsed.data.phone)
+        await recordSuccessfulLogin(parsed.data.phone, user.id)
 
         return {
           id: user.id,
