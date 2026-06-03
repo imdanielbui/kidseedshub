@@ -27,6 +27,12 @@ function parseStage(value: string | null): PipelineStageKey | undefined {
   return pipelineStages.some((stage) => stage.key === value) ? (value as PipelineStageKey) : undefined
 }
 
+function parseDateInput(value: string | null) {
+  if (!value) return undefined
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
 function dayDiff(from: Date, to = new Date()) {
   return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 86_400_000))
 }
@@ -54,16 +60,33 @@ export async function GET(request: Request) {
   const stage = parseStage(searchParams.get("stage"))
   const saleOwnerId = searchParams.get("saleOwnerId")
   const classId = searchParams.get("classId")
+  const createdFromInput = parseDateInput(searchParams.get("createdFrom"))
+  const createdToInput = parseDateInput(searchParams.get("createdTo"))
   const includeNurture = searchParams.get("includeNurture") === "true" || stage === "NURTURE"
   const sort = sortableFields.has(searchParams.get("sort") ?? "") ? searchParams.get("sort")! : "updatedAt"
   const direction = searchParams.get("direction") === "asc" ? "asc" : "desc"
   const now = new Date()
   const stageKeys = pipelineStages.map((item) => item.key) as StudentStatus[]
   const visibleStages = includeNurture ? stageKeys : stageKeys.filter((key) => key !== "NURTURE")
+  const createdFrom = createdFromInput && createdToInput && createdFromInput > createdToInput ? createdToInput : createdFromInput
+  const createdTo = createdFromInput && createdToInput && createdFromInput > createdToInput ? createdFromInput : createdToInput
+  const createdToEndOfDay = createdTo ? new Date(createdTo) : undefined
+
+  if (createdToEndOfDay) {
+    createdToEndOfDay.setHours(23, 59, 59, 999)
+  }
 
   const baseWhere: Prisma.StudentWhereInput = {
     ...(saleOwnerId && saleOwnerId !== "ALL" ? { saleOwnerId } : {}),
     ...(classId && classId !== "ALL" ? { classStudents: { some: { classId, isActive: true } } } : {}),
+    ...(createdFrom || createdToEndOfDay
+      ? {
+          createdAt: {
+            ...(createdFrom ? { gte: createdFrom } : {}),
+            ...(createdToEndOfDay ? { lte: createdToEndOfDay } : {})
+          }
+        }
+      : {}),
     ...(q
       ? {
           OR: [

@@ -1,8 +1,8 @@
 "use client"
 
-import { Archive, ArrowDownAZ, CheckSquare, Clock, Eye, GripVertical, LayoutGrid, ListFilter, MessageSquarePlus, Plus, Rows3, Search, SlidersHorizontal, UserRound, X } from "lucide-react"
+import { Archive, ArrowDownAZ, CheckSquare, Clock, Eye, GripVertical, LayoutGrid, ListFilter, MessageSquarePlus, Pin, Plus, Rows3, Save, Search, SlidersHorizontal, UserRound, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { DialogShell } from "@/components/shared/dialog-shell"
 import { LeadFormPanel, emptyLeadForm, type LeadFormState } from "@/components/shared/lead-form-panel"
@@ -16,7 +16,7 @@ import {
   type PipelineResponse,
   type PipelineStageKey
 } from "@/lib/contracts/crm"
-import { genderLabels, studentStatusLabels, type StudentDetail } from "@/lib/contracts/students"
+import { genderLabels, studentStatusLabels, type StudentDetail, type StudentGenderKey } from "@/lib/contracts/students"
 
 type ViewMode = "database" | "kanban"
 type PanelMode = "lead" | "filters" | "fields" | null
@@ -74,9 +74,32 @@ const defaultColumnOrder: ColumnKey[] = [
   "stageChangedAt"
 ]
 
+const defaultPinnedColumns: ColumnKey[] = ["code", "studentName"]
+
+const pinnedColumnWidths: Partial<Record<ColumnKey, number>> = {
+  code: 104,
+  studentName: 220,
+  parentName: 220,
+  phone: 160,
+  stage: 160,
+  daysInStage: 170
+}
+
 type ContactForm = {
   result: ContactResultKey
   content: string
+}
+
+type StudentEditForm = {
+  studentName: string
+  parentName: string
+  parentPhone: string
+  parentEmail: string
+  gender: StudentGenderKey
+  leadSource: string
+  saleOwnerId: string
+  leadNote: string
+  healthNote: string
 }
 
 type TaskForm = {
@@ -94,6 +117,18 @@ const emptyTaskForm: TaskForm = {
   title: "",
   dueDate: "",
   note: ""
+}
+
+const emptyStudentEditForm: StudentEditForm = {
+  studentName: "",
+  parentName: "",
+  parentPhone: "",
+  parentEmail: "",
+  gender: "UNKNOWN",
+  leadSource: "",
+  saleOwnerId: "",
+  leadNote: "",
+  healthNote: ""
 }
 
 const emptyPipeline: PipelineResponse = {
@@ -122,6 +157,25 @@ function toIsoFromLocalInput(value: string) {
   return value ? new Date(value).toISOString() : ""
 }
 
+function toStudentEditForm(student: StudentDetail, saleOwnerId = ""): StudentEditForm {
+  return {
+    studentName: student.name,
+    parentName: student.parentName,
+    parentPhone: student.parentPhone,
+    parentEmail: student.parentEmail ?? "",
+    gender: student.gender,
+    leadSource: student.leadSource ?? "",
+    saleOwnerId,
+    leadNote: student.leadNote ?? "",
+    healthNote: student.healthNote ?? ""
+  }
+}
+
+function nullableTrim(value: string) {
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
 export default function PipelinePage() {
   const [pipeline, setPipeline] = useState<PipelineResponse>(emptyPipeline)
   const [options, setOptions] = useState<PipelineOptions>({ sales: [], classes: [] })
@@ -135,10 +189,13 @@ export default function PipelinePage() {
   const [draggingColumn, setDraggingColumn] = useState<ColumnKey | null>(null)
   const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(defaultColumnOrder)
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(new Set(defaultColumnOrder))
+  const [pinnedColumns, setPinnedColumns] = useState<Set<ColumnKey>>(new Set(defaultPinnedColumns))
   const [search, setSearch] = useState("")
   const [stageFilter, setStageFilter] = useState<StageFilter>("ALL")
   const [saleFilter, setSaleFilter] = useState("ALL")
   const [classFilter, setClassFilter] = useState("ALL")
+  const [createdFrom, setCreatedFrom] = useState("")
+  const [createdTo, setCreatedTo] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("updatedAt")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [page, setPage] = useState(1)
@@ -146,6 +203,8 @@ export default function PipelinePage() {
   const [form, setForm] = useState<LeadFormState>(emptyLeadForm)
   const [selectedStudent, setSelectedStudent] = useState<StudentDetail | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [studentEditForm, setStudentEditForm] = useState<StudentEditForm>(emptyStudentEditForm)
+  const [isSavingStudent, setIsSavingStudent] = useState(false)
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm)
   const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm)
   const [isSavingActivity, setIsSavingActivity] = useState(false)
@@ -154,7 +213,19 @@ export default function PipelinePage() {
   const includeNurture = stageFilter === "NURTURE"
   const visibleColumnOrder = columnOrder.filter((column) => visibleColumns.has(column))
   const totalPages = Math.max(1, Math.ceil(pipeline.total / pipeline.limit))
-  const hasActiveFilter = search.trim() !== "" || stageFilter !== "ALL" || saleFilter !== "ALL" || classFilter !== "ALL"
+  const hasActiveFilter = search.trim() !== "" || stageFilter !== "ALL" || saleFilter !== "ALL" || classFilter !== "ALL" || createdFrom !== "" || createdTo !== ""
+  const pinnedColumnOffsets = useMemo(() => {
+    let offset = 0
+    const offsets = new Map<ColumnKey, number>()
+
+    visibleColumnOrder.forEach((column) => {
+      if (!pinnedColumns.has(column)) return
+      offsets.set(column, offset)
+      offset += pinnedColumnWidths[column] ?? 180
+    })
+
+    return offsets
+  }, [pinnedColumns, visibleColumnOrder])
 
   async function loadPipeline() {
     setIsLoading(true)
@@ -173,6 +244,8 @@ export default function PipelinePage() {
       if (stageFilter !== "ALL") params.set("stage", stageFilter)
       if (saleFilter !== "ALL") params.set("saleOwnerId", saleFilter)
       if (classFilter !== "ALL") params.set("classId", classFilter)
+      if (createdFrom) params.set("createdFrom", createdFrom)
+      if (createdTo) params.set("createdTo", createdTo)
 
       const [pipelineResponse, optionsResponse] = await Promise.all([
         fetch(`/api/pipeline?${params.toString()}`, { cache: "no-store" }),
@@ -207,7 +280,7 @@ export default function PipelinePage() {
 
     return () => window.clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, stageFilter, saleFilter, classFilter, sortKey, sortDirection])
+  }, [page, limit, search, stageFilter, saleFilter, classFilter, createdFrom, createdTo, sortKey, sortDirection])
 
   const cardsByStage = useMemo(
     () =>
@@ -242,6 +315,16 @@ export default function PipelinePage() {
   const selectedContactLogs = selectedStudent?.contactLogs.slice(0, 3) ?? []
   const selectedTasks = selectedStudent?.tasks.slice(0, 3) ?? []
 
+  function getPipelineSaleOwnerId(studentId: string) {
+    return pipeline.items.find((card) => card.id === studentId)?.saleOwnerId ?? ""
+  }
+
+  function closeStudentDialog() {
+    setSelectedStudent(null)
+    setIsDetailLoading(false)
+    setStudentEditForm(emptyStudentEditForm)
+  }
+
   async function openStudentDialog(studentId: string) {
     setIsDetailLoading(true)
     setError(null)
@@ -256,6 +339,7 @@ export default function PipelinePage() {
       }
 
       setSelectedStudent(payload.data)
+      setStudentEditForm(toStudentEditForm(payload.data, getPipelineSaleOwnerId(studentId)))
       setContactForm(emptyContactForm)
       setTaskForm(emptyTaskForm)
     } catch {
@@ -270,7 +354,57 @@ export default function PipelinePage() {
 
     const response = await fetch(`/api/students/${selectedStudent.id}`, { cache: "no-store" })
     const payload = (await response.json()) as ApiResponse<StudentDetail>
-    if (response.ok && payload.success && payload.data) setSelectedStudent(payload.data)
+    if (response.ok && payload.success && payload.data) {
+      setSelectedStudent(payload.data)
+      setStudentEditForm(toStudentEditForm(payload.data, getPipelineSaleOwnerId(payload.data.id)))
+    }
+  }
+
+  async function saveSelectedStudent(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedStudent) return
+
+    if (!studentEditForm.studentName.trim() || !studentEditForm.parentName.trim() || !studentEditForm.parentPhone.trim()) {
+      setError("Cần nhập tên học viên, tên phụ huynh và số điện thoại phụ huynh.")
+      return
+    }
+
+    setIsSavingStudent(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/students/${selectedStudent.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: studentEditForm.studentName.trim(),
+          gender: studentEditForm.gender,
+          leadSource: nullableTrim(studentEditForm.leadSource),
+          leadNote: nullableTrim(studentEditForm.leadNote),
+          healthNote: nullableTrim(studentEditForm.healthNote),
+          saleOwnerId: studentEditForm.saleOwnerId || null,
+          parent: {
+            name: studentEditForm.parentName.trim(),
+            phone: studentEditForm.parentPhone.trim(),
+            email: nullableTrim(studentEditForm.parentEmail)
+          }
+        })
+      })
+      const payload = (await response.json()) as ApiResponse<StudentDetail>
+
+      if (!response.ok || !payload.success || !payload.data) {
+        setError(payload.error?.message ?? "Không cập nhật được thông tin học viên.")
+        return
+      }
+
+      setSelectedStudent(payload.data)
+      setStudentEditForm(toStudentEditForm(payload.data, studentEditForm.saleOwnerId))
+      await loadPipeline()
+    } catch {
+      setError("Không cập nhật được thông tin học viên.")
+    } finally {
+      setIsSavingStudent(false)
+    }
   }
 
   async function moveCard(card: PipelineCard, nextStage: PipelineStageKey) {
@@ -425,6 +559,8 @@ export default function PipelinePage() {
     setStageFilter("ALL")
     setSaleFilter("ALL")
     setClassFilter("ALL")
+    setCreatedFrom("")
+    setCreatedTo("")
     setPage(1)
   }
 
@@ -456,6 +592,33 @@ export default function PipelinePage() {
       else next.add(column)
       return next
     })
+  }
+
+  function togglePinnedColumn(column: ColumnKey) {
+    setPinnedColumns((current) => {
+      const next = new Set(current)
+      if (next.has(column)) next.delete(column)
+      else next.add(column)
+      return next
+    })
+  }
+
+  function pinnedColumnStyle(column: ColumnKey): CSSProperties | undefined {
+    if (!pinnedColumns.has(column)) return undefined
+    const width = pinnedColumnWidths[column] ?? 180
+
+    return {
+      left: pinnedColumnOffsets.get(column) ?? 0,
+      minWidth: width,
+      width
+    }
+  }
+
+  function pinnedColumnClass(column: ColumnKey, surface: "head" | "body") {
+    if (!pinnedColumns.has(column)) return ""
+    const bgClass = surface === "head" ? "bg-[#f5eeeb]" : "bg-[#fffaf7]"
+    const zClass = surface === "head" ? "z-20" : "z-10"
+    return `sticky ${zClass} ${bgClass} border-r border-brand-red/10 shadow-[8px_0_18px_rgba(88,52,42,0.08)]`
   }
 
   function renderCell(card: PipelineCard, column: ColumnKey) {
@@ -570,67 +733,102 @@ export default function PipelinePage() {
           ) : null}
 
           {panelMode === "filters" ? (
-            <div className="grid gap-2 md:grid-cols-6">
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={stageFilter} onChange={(event) => setStage(event.target.value as StageFilter)}>
-                <option value="ALL">Tất cả trạng thái</option>
-                {pipelineStages.map((stage) => (
-                  <option key={stage.key} value={stage.key}>
-                    {stage.title}
-                  </option>
-                ))}
-              </select>
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={saleFilter} onChange={(event) => { setSaleFilter(event.target.value); setPage(1) }}>
-                <option value="ALL">Tất cả sale</option>
-                {options.sales.map((sale) => (
-                  <option key={sale.id} value={sale.id}>
-                    {sale.name}
-                  </option>
-                ))}
-              </select>
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setPage(1) }}>
-                <option value="ALL">Tất cả lớp</option>
-                {options.classes.map((klass) => (
-                  <option key={klass.id} value={klass.id}>
-                    {klass.name}
-                  </option>
-                ))}
-              </select>
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-                <option value="updatedAt">Sort: cập nhật</option>
-                <option value="stageChangedAt">Sort: đổi bước</option>
-                <option value="daysInStage">Sort: ngày ở bước</option>
-                <option value="code">Sort: mã HS</option>
-                <option value="parentName">Sort: phụ huynh</option>
-                <option value="studentName">Sort: học viên</option>
-              </select>
-              <button className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setSortDirection((current) => (current === "asc" ? "desc" : "asc"))}>
-                <ArrowDownAZ className={`h-4 w-4 ${sortDirection === "desc" ? "rotate-180" : ""}`} />
-                {sortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
-              </button>
-              <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" onClick={clearFilters}>
-                Xóa lọc
-              </button>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Trạng thái
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={stageFilter} onChange={(event) => setStage(event.target.value as StageFilter)}>
+                  <option value="ALL">Tất cả trạng thái</option>
+                  {pipelineStages.map((stage) => (
+                    <option key={stage.key} value={stage.key}>
+                      {stage.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Sale
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={saleFilter} onChange={(event) => { setSaleFilter(event.target.value); setPage(1) }}>
+                  <option value="ALL">Tất cả sale</option>
+                  {options.sales.map((sale) => (
+                    <option key={sale.id} value={sale.id}>
+                      {sale.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Lớp
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setPage(1) }}>
+                  <option value="ALL">Tất cả lớp</option>
+                  {options.classes.map((klass) => (
+                    <option key={klass.id} value={klass.id}>
+                      {klass.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Tạo từ ngày
+                <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="date" value={createdFrom} onChange={(event) => { setCreatedFrom(event.target.value); setPage(1) }} />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Đến ngày
+                <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="date" value={createdTo} onChange={(event) => { setCreatedTo(event.target.value); setPage(1) }} />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Sắp xếp
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setPage(1) }}>
+                  <option value="updatedAt">Cập nhật</option>
+                  <option value="createdAt">Ngày tạo</option>
+                  <option value="stageChangedAt">Đổi bước</option>
+                  <option value="daysInStage">Ngày ở bước</option>
+                  <option value="code">Mã HS</option>
+                  <option value="parentName">Phụ huynh</option>
+                  <option value="studentName">Học viên</option>
+                </select>
+              </label>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
+                <button className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => { setSortDirection((current) => (current === "asc" ? "desc" : "asc")); setPage(1) }}>
+                  <ArrowDownAZ className={`h-4 w-4 ${sortDirection === "desc" ? "rotate-180" : ""}`} />
+                  {sortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
+                </button>
+                <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" onClick={clearFilters}>
+                  Xóa lọc
+                </button>
+              </div>
             </div>
           ) : null}
 
           {panelMode === "fields" ? (
             <div className="flex flex-wrap gap-2">
               {columnOrder.map((column) => (
-                <button
+                <div
                   key={column}
                   draggable
                   onDragStart={() => setDraggingColumn(column)}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => moveColumn(column)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold ${
+                  className={`inline-flex items-center gap-1 rounded-full border p-1 text-xs font-semibold ${
                     visibleColumns.has(column) ? "border-brand-red/20 bg-white text-brand-ink" : "border-stone-200 bg-white/35 text-stone-400"
                   }`}
-                  onClick={() => toggleColumn(column)}
                 >
-                  <GripVertical className="h-3.5 w-3.5" />
-                  <Eye className="h-3.5 w-3.5" />
-                  {columnLabels[column]}
-                </button>
+                  <button type="button" className="inline-flex items-center gap-2 rounded-full px-2 py-1.5" onClick={() => toggleColumn(column)}>
+                    <GripVertical className="h-3.5 w-3.5" />
+                    <Eye className="h-3.5 w-3.5" />
+                    {columnLabels[column]}
+                  </button>
+                  <button
+                    type="button"
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${
+                      pinnedColumns.has(column) ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/60 text-stone-500"
+                    }`}
+                    aria-label={`Ghim ${columnLabels[column]}`}
+                    title={`Ghim ${columnLabels[column]}`}
+                    onClick={() => togglePinnedColumn(column)}
+                  >
+                    <Pin className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           ) : null}
@@ -646,7 +844,7 @@ export default function PipelinePage() {
               <thead className="sticky top-0 z-10 bg-[#f5eeeb] text-xs uppercase tracking-wide text-stone-500">
                 <tr>
                   {visibleColumnOrder.map((column) => (
-                    <th key={column} className="border-b border-brand-red/10 px-4 py-3 font-semibold">
+                    <th key={column} className={`border-b border-brand-red/10 px-4 py-3 font-semibold ${pinnedColumnClass(column, "head")}`} style={pinnedColumnStyle(column)}>
                       {columnLabels[column]}
                     </th>
                   ))}
@@ -664,7 +862,7 @@ export default function PipelinePage() {
                   pipeline.items.map((card) => (
                     <tr key={card.id} className="cursor-pointer border-b border-brand-red/10 transition-shadow hover:shadow-[0_8px_20px_rgba(165,36,39,0.08)]" onClick={() => void openStudentDialog(card.id)}>
                       {visibleColumnOrder.map((column) => (
-                        <td key={column} className={`max-w-64 truncate px-4 py-3 align-middle ${card.isStale && column === "daysInStage" ? "font-semibold text-brand-red" : "text-brand-ink"}`}>
+                        <td key={column} className={`max-w-64 truncate px-4 py-3 align-middle ${pinnedColumnClass(column, "body")} ${card.isStale && column === "daysInStage" ? "font-semibold text-brand-red" : "text-brand-ink"}`} style={pinnedColumnStyle(column)}>
                           {renderCell(card, column)}
                         </td>
                       ))}
@@ -792,14 +990,15 @@ export default function PipelinePage() {
         <DialogShell
           eyebrow="Quick profile"
           title={selectedStudent ? `${selectedStudent.code} · ${selectedStudent.name}` : "Đang tải hồ sơ..."}
-          onClose={() => setSelectedStudent(null)}
+          onClose={closeStudentDialog}
           closeLabel="Đóng quick profile"
           size="lg"
-          bodyClassName={selectedStudent ? "p-5" : "p-8"}
+          panelClassName="border border-brand-red/20 bg-white shadow-[0_32px_90px_rgba(69,38,28,0.28)] ring-1 ring-white"
+          bodyClassName={selectedStudent ? "bg-[#fffaf7] p-5" : "p-8"}
         >
             {selectedStudent ? (
                 <div className="space-y-4">
-                  <div className="rounded-3xl border border-brand-red/10 bg-white/45 p-4">
+                  <div className="rounded-3xl border border-brand-red/15 bg-white p-4 shadow-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-brand-red px-3 py-1 text-xs font-semibold text-white">{studentStatusLabels[selectedStudent.status]}</span>
                       <span className="rounded-full border border-brand-red/15 px-3 py-1 text-xs font-semibold text-brand-red">{selectedStudent.sessionsRemaining} buổi còn lại</span>
@@ -814,7 +1013,7 @@ export default function PipelinePage() {
                       ))}
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-                      <div className="rounded-2xl border border-brand-red/10 bg-white/40 p-3">
+                      <div className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] p-3">
                         <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500"><UserRound className="h-3.5 w-3.5" />Phụ huynh</p>
                         <p className="font-semibold text-brand-ink">{selectedStudent.parentName}</p>
                         <p className="text-sm text-stone-600">{selectedStudent.parentPhone}</p>
@@ -824,7 +1023,7 @@ export default function PipelinePage() {
                         <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
                           Đổi trạng thái
                           <select
-                            className="mt-2 w-full min-w-44 rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-sm font-semibold text-brand-ink outline-none"
+                            className="mt-2 w-full min-w-44 rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm font-semibold text-brand-ink outline-none"
                             value={selectedPipelineCard.stage}
                             disabled={savingCardId === selectedPipelineCard.id}
                             onChange={(event) => void moveCard(selectedPipelineCard, event.target.value as PipelineStageKey)}
@@ -838,18 +1037,75 @@ export default function PipelinePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-brand-red/10 bg-white/45 p-4">
+                  <form className="rounded-3xl border border-brand-red/15 bg-white p-4 shadow-sm" onSubmit={saveSelectedStudent}>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-brand-ink"><UserRound className="h-4 w-4 text-brand-red" />Thông tin học viên</h3>
+                      <button type="submit" className="glass-button-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60" disabled={isSavingStudent}>
+                        <Save className="h-4 w-4" />
+                        {isSavingStudent ? "Đang lưu" : "Lưu thông tin"}
+                      </button>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Tên học viên
+                        <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.studentName} onChange={(event) => setStudentEditForm((current) => ({ ...current, studentName: event.target.value }))} required />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Giới tính
+                        <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.gender} onChange={(event) => setStudentEditForm((current) => ({ ...current, gender: event.target.value as StudentGenderKey }))}>
+                          {Object.entries(genderLabels).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Tên phụ huynh
+                        <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.parentName} onChange={(event) => setStudentEditForm((current) => ({ ...current, parentName: event.target.value }))} required />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        SĐT phụ huynh
+                        <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.parentPhone} onChange={(event) => setStudentEditForm((current) => ({ ...current, parentPhone: event.target.value }))} required />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Email phụ huynh
+                        <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="email" value={studentEditForm.parentEmail} onChange={(event) => setStudentEditForm((current) => ({ ...current, parentEmail: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Nguồn lead
+                        <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.leadSource} onChange={(event) => setStudentEditForm((current) => ({ ...current, leadSource: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500 md:col-span-2">
+                        Sale phụ trách
+                        <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.saleOwnerId} onChange={(event) => setStudentEditForm((current) => ({ ...current, saleOwnerId: event.target.value }))}>
+                          <option value="">Chưa gán sale</option>
+                          {options.sales.map((sale) => (
+                            <option key={sale.id} value={sale.id}>{sale.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500 md:col-span-2">
+                        Ghi chú lead
+                        <textarea className="mt-2 min-h-20 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.leadNote} onChange={(event) => setStudentEditForm((current) => ({ ...current, leadNote: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500 md:col-span-2">
+                        Lưu ý sức khỏe
+                        <textarea className="mt-2 min-h-20 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.healthNote} onChange={(event) => setStudentEditForm((current) => ({ ...current, healthNote: event.target.value }))} />
+                      </label>
+                    </div>
+                  </form>
+
+                  <div className="rounded-3xl border border-brand-red/15 bg-white p-4 shadow-sm">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-brand-ink"><MessageSquarePlus className="h-4 w-4 text-brand-red" />Lịch sử liên hệ</h3>
                       <span className="text-xs text-stone-500">3 mới nhất</span>
                     </div>
                     <div className="mb-3 grid gap-2 md:grid-cols-[150px_1fr_auto]">
-                      <select className="rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-sm outline-none" value={contactForm.result} onChange={(event) => setContactForm((current) => ({ ...current, result: event.target.value as ContactResultKey }))}>
+                      <select className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" value={contactForm.result} onChange={(event) => setContactForm((current) => ({ ...current, result: event.target.value as ContactResultKey }))}>
                         {Object.entries(contactResultLabels).map(([key, label]) => (
                           <option key={key} value={key}>{label}</option>
                         ))}
                       </select>
-                      <input className="rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-sm outline-none" placeholder="Nội dung liên hệ..." value={contactForm.content} onChange={(event) => setContactForm((current) => ({ ...current, content: event.target.value }))} />
+                      <input className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" placeholder="Nội dung liên hệ..." value={contactForm.content} onChange={(event) => setContactForm((current) => ({ ...current, content: event.target.value }))} />
                       <button className="glass-button-primary px-4 py-2 text-sm font-semibold" disabled={isSavingActivity} onClick={() => void createContactLog()}>Lưu</button>
                     </div>
                     <div className="space-y-2">
@@ -865,17 +1121,17 @@ export default function PipelinePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-brand-red/10 bg-white/45 p-4">
+                  <div className="rounded-3xl border border-brand-red/15 bg-white p-4 shadow-sm">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-brand-ink"><CheckSquare className="h-4 w-4 text-brand-red" />Task tiếp theo</h3>
                       <span className="text-xs text-stone-500">3 sắp tới</span>
                     </div>
                     <div className="mb-3 grid gap-2 md:grid-cols-[1fr_180px_auto]">
-                      <input className="rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-sm outline-none" placeholder="Việc cần làm..." value={taskForm.title} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
-                      <input className="rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-sm outline-none" type="datetime-local" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                      <input className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" placeholder="Việc cần làm..." value={taskForm.title} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
+                      <input className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" type="datetime-local" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} />
                       <button className="glass-button-primary px-4 py-2 text-sm font-semibold" disabled={isSavingActivity} onClick={() => void createTask()}>Tạo</button>
                     </div>
-                    <input className="mb-3 w-full rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-sm outline-none" placeholder="Ghi chú task..." value={taskForm.note} onChange={(event) => setTaskForm((current) => ({ ...current, note: event.target.value }))} />
+                    <input className="mb-3 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" placeholder="Ghi chú task..." value={taskForm.note} onChange={(event) => setTaskForm((current) => ({ ...current, note: event.target.value }))} />
                     <div className="space-y-2">
                       {selectedTasks.length ? selectedTasks.map((task) => (
                         <div key={task.id} className="neu-list-item rounded-2xl p-3">
