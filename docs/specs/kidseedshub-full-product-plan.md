@@ -17,7 +17,7 @@ V1 is not the full 50-feature product. V1 must be enough to run the center and c
 
 ## Product Phases
 
-- [ ] Phase 0 - Spec Lock: lock business rules, roles, data model, and assessment model. Status: Todo.
+- [x] Phase 0 - Spec Lock: lock business rules, roles, data model, and assessment model. Status: Verified. Verify: P0.1-P0.4 are locked; this document is the accepted roadmap and source of truth for V1 closeout.
 - [x] Phase 1 - Foundation: app shell, auth, RBAC, Prisma/Postgres, seed data. Status: Verified.
 - [x] Phase 2 - MVP Revenue Flow: lead -> trial -> paid -> attendance -> renewal alert. Status: Verified.
 - [x] Phase 3 - Weekly Assessment: FUN weekly observation + Robotics 8-skill star scoring. Status: Verified.
@@ -130,7 +130,7 @@ V1 is not the full 50-feature product. V1 must be enough to run the center and c
 
 ### Phase 0 - Spec Lock
 
-- [ ] P0.1 - Confirm V1 scope and phase boundaries. Feature IDs: all. Status: Todo. Verify: this document is accepted as the source of truth.
+- [x] P0.1 - Confirm V1 scope and phase boundaries. Feature IDs: all. Status: Verified. Verify: accepted on 2026-06-03 as the source of truth after all 50 feature matrix items and phase tasks P0.2-P8.4 were verified; future scope changes should be captured in new specs.
 - [x] P0.2 - Lock roles and permission rules. Feature IDs: 50. Status: Verified. Verify: static permission map exists in `lib/permissions.ts`; dynamic `PermissionMatrixEntry` stores role overrides for every permission; `/api/permission-matrix` returns labels, defaults, and active roles.
 - [x] P0.3 - Lock data model for students, classes, attendance, finance, and assessment. Feature IDs: 8, 9, 12, 14, 25, 24A, 24B, 24C. Status: Verified. Verify: `DATABASE_URL='postgresql://user:password@localhost:5432/kidseedshub' npx prisma validate` passed.
 - [x] P0.4 - Lock FUN and Robotics rubrics. Feature IDs: 20, 23, 24A, 24B. Status: Verified. Verify: rubric data exists in `lib/assessment-rubrics.ts`, `/assessments` builds successfully, and `/api/assessment-rubrics` is available.
