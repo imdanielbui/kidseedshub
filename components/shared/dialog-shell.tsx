@@ -24,6 +24,7 @@ type DialogShellProps = {
   zIndexClassName?: string
   bodyClassName?: string
   panelClassName?: string
+  overlayClassName?: string
 }
 
 type DialogFormShellProps = DialogShellProps & {
@@ -42,11 +43,13 @@ function DialogFrame({
   zIndexClassName = "z-50",
   bodyClassName = "p-5",
   panelClassName = "",
+  overlayClassName,
   asForm,
   onSubmit
 }: DialogShellProps & { asForm?: boolean; onSubmit?: FormEventHandler<HTMLFormElement> }) {
   const titleId = useId()
   const panelClass = `neu-card flex max-h-[calc(100vh-2rem)] w-full ${sizeClasses[size]} flex-col overflow-hidden rounded-[2rem] bg-brand-bg ${panelClassName}`
+  const overlayClass = overlayClassName ?? "items-center justify-center p-4"
   const content = (
     <>
       <div className="shrink-0 flex items-start justify-between gap-4 border-b border-brand-red/10 p-5">
@@ -65,7 +68,7 @@ function DialogFrame({
   )
 
   return (
-    <div className={`fixed inset-0 ${zIndexClassName} flex items-center justify-center bg-stone-950/35 p-4 backdrop-blur-sm`}>
+    <div className={`fixed inset-0 ${zIndexClassName} !mt-0 flex ${overlayClass} bg-stone-950/35 backdrop-blur-sm`}>
       {asForm ? (
         <form className={panelClass} onSubmit={onSubmit} role="dialog" aria-modal="true" aria-labelledby={titleId}>
           {content}
