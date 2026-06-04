@@ -17,6 +17,17 @@ type SessionPayload = {
   user?: {
     role?: string
   }
+} | null
+
+async function loadSessionRole() {
+  const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" })
+
+  if (!sessionResponse.ok) {
+    return undefined
+  }
+
+  const session = (await sessionResponse.json()) as SessionPayload
+  return session?.user?.role
 }
 
 export function LoginForm() {
@@ -42,26 +53,29 @@ export function LoginForm() {
     setError("")
     setIsSubmitting(true)
 
-    const result = await signIn("credentials", {
-      phone: phone.trim(),
-      password,
-      redirect: false,
-      redirectTo
-    })
+    try {
+      const result = await signIn("credentials", {
+        phone: phone.trim(),
+        password,
+        redirect: false,
+        redirectTo
+      })
 
-    setIsSubmitting(false)
+      if (!result?.ok) {
+        setError("Số điện thoại hoặc mật khẩu chưa đúng.")
+        return
+      }
 
-    if (!result?.ok) {
-      setError("Số điện thoại hoặc mật khẩu chưa đúng.")
-      return
+      const role = await loadSessionRole()
+      const nextPath = role === "PARENT" ? "/parent" : redirectTo
+
+      router.push(nextPath)
+      router.refresh()
+    } catch {
+      setError("Không đăng nhập được. Vui lòng thử lại.")
+    } finally {
+      setIsSubmitting(false)
     }
-
-    const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" })
-    const session = (await sessionResponse.json()) as SessionPayload
-    const nextPath = session.user?.role === "PARENT" ? "/parent" : redirectTo
-
-    router.push(nextPath)
-    router.refresh()
   }
 
   return (
