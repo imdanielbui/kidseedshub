@@ -1,0 +1,68 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+import { classPhotoUploadMaxBytes } from "../lib/contracts/classes"
+import {
+  buildCloudinarySignature,
+  parseClassPhotoUploadForm
+} from "../lib/backend/class-photo-upload"
+
+test("parseClassPhotoUploadForm accepts a valid class photo multipart payload", () => {
+  const formData = new FormData()
+  const file = new File([new Uint8Array([1, 2, 3])], "lesson.jpg", { type: "image/jpeg" })
+
+  formData.set("studentId", "student_1")
+  formData.set("attendanceId", "attendance_1")
+  formData.set("takenAt", "2026-06-04T10:00:00.000Z")
+  formData.set("photo", file)
+
+  const parsed = parseClassPhotoUploadForm(formData)
+
+  assert.equal(parsed.success, true)
+  if (parsed.success) {
+    assert.equal(parsed.data.studentId, "student_1")
+    assert.equal(parsed.data.attendanceId, "attendance_1")
+    assert.equal(parsed.data.file.name, "lesson.jpg")
+  }
+})
+
+test("parseClassPhotoUploadForm rejects unsupported photo mime types", () => {
+  const formData = new FormData()
+  const file = new File([new Uint8Array([1, 2, 3])], "lesson.txt", { type: "text/plain" })
+
+  formData.set("studentId", "student_1")
+  formData.set("photo", file)
+
+  const parsed = parseClassPhotoUploadForm(formData)
+
+  assert.equal(parsed.success, false)
+  if (!parsed.success) {
+    assert.equal(parsed.error.code, "PHOTO_FILE_TYPE_UNSUPPORTED")
+  }
+})
+
+test("parseClassPhotoUploadForm rejects images above the upload limit", () => {
+  const formData = new FormData()
+  const file = new File([new Uint8Array(classPhotoUploadMaxBytes + 1)], "large.jpg", { type: "image/jpeg" })
+
+  formData.set("studentId", "student_1")
+  formData.set("photo", file)
+
+  const parsed = parseClassPhotoUploadForm(formData)
+
+  assert.equal(parsed.success, false)
+  if (!parsed.success) {
+    assert.equal(parsed.error.code, "PHOTO_FILE_TOO_LARGE")
+  }
+})
+
+test("buildCloudinarySignature signs sorted upload parameters", () => {
+  const signature = buildCloudinarySignature(
+    {
+      timestamp: "1710000000",
+      folder: "kidseedshub/class-photos"
+    },
+    "secret"
+  )
+
+  assert.equal(signature, "a7029b71c362d7977c52337160ad1254061df042")
+})

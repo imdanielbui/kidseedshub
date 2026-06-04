@@ -8,6 +8,7 @@
   - `NEXTAUTH_URL`
   - `AUTH_TRUST_HOST=true` for non-Vercel production, or `VERCEL=1` on Vercel
   - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` or `KIDSEEDSHUB_TRUSTED_IMAGE_HOSTS`
+  - `CLOUDINARY_UPLOAD_PRESET` or `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET` for class photo uploads
 - Production bootstrap seed uses `npm run prisma:seed:production` with `KIDSEEDSHUB_ADMIN_*` variables.
 - Demo seed is used only for isolated demo databases with `npm run prisma:seed:demo`.
 - Migrations/data changes approved.

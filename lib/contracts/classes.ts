@@ -57,3 +57,7 @@ export type ClassPhotoListItem = {
   takenAt: string
   isFeatured: boolean
 }
+
+export const classPhotoUploadMaxBytes = 8 * 1024 * 1024
+
+export const classPhotoUploadAcceptedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const

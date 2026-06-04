@@ -2,6 +2,11 @@ import { randomUUID } from "crypto"
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
+import {
+  ClassPhotoUploadError,
+  parseClassPhotoUploadForm,
+  uploadClassPhotoFile
+} from "@/lib/backend/class-photo-upload"
 import { isTrustedClassPhotoUrl } from "@/lib/backend/class-photo-url"
 import type { ClassPhotoListItem } from "@/lib/contracts/classes"
 import { can } from "@/lib/permissions"
@@ -66,23 +71,31 @@ export async function POST(request: Request) {
     return fail({ code: "FORBIDDEN", message: "Bạn không có quyền đăng ảnh lớp." }, { status: 403 })
   }
 
-  const body = await request.json()
-  const parsed = classPhotoCreateSchema.safeParse(body)
+  const contentType = request.headers.get("content-type") ?? ""
+  const isMultipart = contentType.includes("multipart/form-data")
+  const parsed = isMultipart
+    ? parseClassPhotoUploadForm(await request.formData())
+    : classPhotoCreateSchema.safeParse(await request.json())
 
   if (!parsed.success) {
+    if ("code" in parsed.error) {
+      return fail({ code: parsed.error.code, message: parsed.error.message }, { status: 400 })
+    }
+
     return fail({ code: "INVALID_BODY", message: "Thông tin ảnh không hợp lệ." }, { status: 400 })
   }
 
   const data = parsed.data
+  let photoUrl = "url" in data ? data.url : ""
+  let cloudinaryId = `manual:${randomUUID()}`
 
-  if (!isTrustedClassPhotoUrl(data.url)) {
-    return fail(
-      {
-        code: "UNTRUSTED_PHOTO_URL",
-        message: "Nguồn ảnh lớp không nằm trong danh sách upload/storage được tin cậy."
-      },
-      { status: 400 }
-    )
+  const student = await prisma.student.findUnique({
+    where: { id: data.studentId },
+    select: { id: true }
+  })
+
+  if (!student) {
+    return fail({ code: "PHOTO_STUDENT_NOT_FOUND", message: "Không tìm thấy học viên để gắn ảnh." }, { status: 404 })
   }
 
   if (data.attendanceId) {
@@ -96,13 +109,38 @@ export async function POST(request: Request) {
     }
   }
 
+  if ("file" in data) {
+    try {
+      const upload = await uploadClassPhotoFile(data.file)
+      photoUrl = upload.url
+      cloudinaryId = upload.cloudinaryId
+    } catch (error) {
+      if (error instanceof ClassPhotoUploadError) {
+        const status = error.code === "PHOTO_UPLOAD_NOT_CONFIGURED" ? 503 : 502
+        return fail({ code: error.code, message: error.message }, { status })
+      }
+
+      throw error
+    }
+  }
+
+  if (!isTrustedClassPhotoUrl(photoUrl)) {
+    return fail(
+      {
+        code: "UNTRUSTED_PHOTO_URL",
+        message: "Nguồn ảnh lớp không nằm trong danh sách upload/storage được tin cậy."
+      },
+      { status: 400 }
+    )
+  }
+
   try {
     const photo = await prisma.classPhoto.create({
       data: {
         studentId: data.studentId,
         attendanceId: data.attendanceId,
-        url: data.url,
-        cloudinaryId: `manual:${randomUUID()}`,
+        url: photoUrl,
+        cloudinaryId,
         takenAt: data.takenAt ? new Date(data.takenAt) : undefined,
         isFeatured: data.isFeatured
       }

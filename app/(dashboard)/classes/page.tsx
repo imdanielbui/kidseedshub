@@ -1,13 +1,29 @@
 "use client"
 
-import { CalendarDays, CalendarPlus, Check, CircleSlash, Clock, ImagePlus, QrCode, Settings2, StickyNote, UserRound, UsersRound, X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import {
+  CalendarDays,
+  CalendarPlus,
+  Check,
+  CircleSlash,
+  Clock,
+  ImagePlus,
+  QrCode,
+  Settings2,
+  StickyNote,
+  UploadCloud,
+  UserRound,
+  UsersRound,
+  X
+} from "lucide-react"
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { ClassScheduleBoard } from "./class-schedule-board"
 import { absenceRequestStatusLabels, type AbsenceRequestItem, type AbsenceRequestStatusKey } from "@/lib/contracts/absence-requests"
 import { subjectLabels } from "@/lib/contracts/assessment"
 import {
   attendanceStatusLabels,
+  classPhotoUploadAcceptedMimeTypes,
+  classPhotoUploadMaxBytes,
   type AttendanceMarkResult,
   type AttendanceStatusKey,
   type ClassPhotoListItem,
@@ -35,6 +51,20 @@ const pageTabs: Array<{ id: ClassPageTab; label: string; icon: typeof UsersRound
   { id: "setup", label: "Thiết lập", icon: Settings2 }
 ]
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function isAcceptedPhotoFile(file: File) {
+  return classPhotoUploadAcceptedMimeTypes.includes(
+    file.type as (typeof classPhotoUploadAcceptedMimeTypes)[number]
+  )
+}
+
 export default function ClassesPage() {
   const [activeTab, setActiveTab] = useState<ClassPageTab>("today")
   const [classes, setClasses] = useState<TodayClassItem[]>([])
@@ -47,10 +77,13 @@ export default function ClassesPage() {
   const [makeupSchedules, setMakeupSchedules] = useState<MakeupScheduleItem[]>([])
   const [makeupDateDrafts, setMakeupDateDrafts] = useState<Record<string, string>>({})
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
+  const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({})
+  const [photoPreviewUrls, setPhotoPreviewUrls] = useState<Record<string, string>>({})
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
   const [qrCode, setQrCode] = useState("")
   const [qrResult, setQrResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const photoPreviewUrlsRef = useRef<Record<string, string>>({})
 
   const selectedClass = useMemo(
     () => classes.find((klass) => klass.id === selectedClassId) ?? classes[0],
@@ -119,6 +152,61 @@ export default function ClassesPage() {
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      Object.values(photoPreviewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [])
+
+  function clearPhotoFile(studentId: string) {
+    setPhotoFiles((current) => {
+      const next = { ...current }
+      delete next[studentId]
+      return next
+    })
+    setPhotoPreviewUrls((current) => {
+      if (current[studentId]) {
+        URL.revokeObjectURL(current[studentId])
+      }
+
+      const next = { ...current }
+      delete next[studentId]
+      photoPreviewUrlsRef.current = next
+      return next
+    })
+  }
+
+  function selectPhotoFile(studentId: string, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!isAcceptedPhotoFile(file)) {
+      setError("Ảnh buổi học chỉ hỗ trợ JPG, PNG, WebP hoặc GIF.")
+      event.target.value = ""
+      return
+    }
+
+    if (file.size > classPhotoUploadMaxBytes) {
+      setError("Ảnh buổi học không được vượt quá 8MB.")
+      event.target.value = ""
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setError(null)
+    setPhotoFiles((current) => ({ ...current, [studentId]: file }))
+    setPhotoUrls((current) => ({ ...current, [studentId]: "" }))
+    setPhotoPreviewUrls((current) => {
+      if (current[studentId]) {
+        URL.revokeObjectURL(current[studentId])
+      }
+
+      const next = { ...current, [studentId]: previewUrl }
+      photoPreviewUrlsRef.current = next
+      return next
+    })
+  }
+
   async function markAttendance(classId: string, student: TodayClassStudent, status: AttendanceStatusKey) {
     if (!student.enrollmentId) {
       setError("Học viên chưa có enrollment active để điểm danh.")
@@ -170,10 +258,11 @@ export default function ClassesPage() {
   }
 
   async function submitPhoto(classId: string, student: TodayClassStudent) {
+    const file = photoFiles[student.studentId]
     const url = photoUrls[student.studentId]?.trim()
 
-    if (!url) {
-      setError("Nhập URL ảnh trước khi lưu.")
+    if (!file && !url) {
+      setError("Chọn file ảnh hoặc nhập URL ảnh trước khi lưu.")
       return
     }
 
@@ -186,16 +275,32 @@ export default function ClassesPage() {
     setError(null)
 
     try {
-      const response = await fetch("/api/class-photos", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          studentId: student.studentId,
-          attendanceId: student.attendanceId,
-          url,
-          takenAt: new Date().toISOString()
+      let response: Response
+
+      if (file) {
+        const formData = new FormData()
+        formData.append("studentId", student.studentId)
+        formData.append("attendanceId", student.attendanceId)
+        formData.append("takenAt", new Date().toISOString())
+        formData.append("photo", file)
+
+        response = await fetch("/api/class-photos", {
+          method: "POST",
+          body: formData
         })
-      })
+      } else {
+        response = await fetch("/api/class-photos", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            studentId: student.studentId,
+            attendanceId: student.attendanceId,
+            url,
+            takenAt: new Date().toISOString()
+          })
+        })
+      }
+
       const payload = (await response.json()) as ApiResponse<ClassPhotoListItem>
 
       if (!response.ok || !payload.success || !payload.data) {
@@ -216,6 +321,7 @@ export default function ClassesPage() {
         )
       )
       setPhotoUrls((current) => ({ ...current, [student.studentId]: "" }))
+      clearPhotoFile(student.studentId)
     } catch {
       setError("Không lưu được ảnh buổi học.")
     } finally {
@@ -649,7 +755,7 @@ export default function ClassesPage() {
                               </div>
                             </div>
                             {isExpanded ? (
-                              <div className="content-border mt-3 grid gap-3 pt-3 lg:grid-cols-[1fr_1fr_auto]">
+                              <div className="content-border mt-3 grid gap-3 pt-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,1.2fr)_auto]">
                                 <label className="block text-xs font-semibold text-stone-600">
                                   Ghi chú buổi học
                                   <input
@@ -659,23 +765,57 @@ export default function ClassesPage() {
                                     placeholder="Điểm nổi bật, lưu ý cần follow-up..."
                                   />
                                 </label>
-                                <label className="block text-xs font-semibold text-stone-600">
-                                  Ảnh buổi học URL
-                                  <input
-                                    className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-3 py-2 text-sm text-brand-ink outline-none placeholder:text-stone-400"
-                                    value={photoUrls[student.studentId] ?? ""}
-                                    onChange={(event) => setPhotoUrls((current) => ({ ...current, [student.studentId]: event.target.value }))}
-                                    placeholder="https://..."
-                                  />
-                                </label>
+                                <div className="space-y-2">
+                                  <label className="block text-xs font-semibold text-stone-600">
+                                    Ảnh buổi học
+                                    <input
+                                      className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-3 py-2 text-sm text-brand-ink outline-none file:mr-3 file:rounded-xl file:border-0 file:bg-brand-red file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                                      type="file"
+                                      accept={classPhotoUploadAcceptedMimeTypes.join(",")}
+                                      onChange={(event) => selectPhotoFile(student.studentId, event)}
+                                    />
+                                  </label>
+                                  {photoPreviewUrls[student.studentId] ? (
+                                    <div className="flex items-center gap-3 rounded-2xl border border-brand-red/10 bg-white/45 p-2">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={photoPreviewUrls[student.studentId]}
+                                        alt={`Ảnh buổi học của ${student.studentName}`}
+                                        className="h-16 w-20 shrink-0 rounded-xl object-cover"
+                                      />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-semibold text-brand-ink">{photoFiles[student.studentId]?.name}</p>
+                                        <p className="mt-1 text-xs text-stone-500">{formatFileSize(photoFiles[student.studentId]?.size ?? 0)}</p>
+                                        <button
+                                          type="button"
+                                          className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand-red"
+                                          onClick={() => clearPhotoFile(student.studentId)}
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                          Gỡ ảnh
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  <label className="block text-xs font-semibold text-stone-600">
+                                    URL ảnh dự phòng
+                                    <input
+                                      className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-3 py-2 text-sm text-brand-ink outline-none placeholder:text-stone-400 disabled:opacity-60"
+                                      value={photoUrls[student.studentId] ?? ""}
+                                      disabled={Boolean(photoFiles[student.studentId])}
+                                      onChange={(event) => setPhotoUrls((current) => ({ ...current, [student.studentId]: event.target.value }))}
+                                      placeholder="https://..."
+                                    />
+                                  </label>
+                                </div>
                                 <button
                                   type="button"
                                   disabled={photoSavingId === student.studentId || !student.attendanceId}
                                   onClick={() => void submitPhoto(selectedClass.id, student)}
                                   className="neu-list-item inline-flex items-center justify-center gap-2 self-end rounded-2xl px-3 py-2 text-sm font-semibold text-stone-600 hover:text-brand-red disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  <ImagePlus className="h-4 w-4" />
-                                  {photoSavingId === student.studentId ? "Đang lưu" : "Lưu ảnh"}
+                                  {photoFiles[student.studentId] ? <UploadCloud className="h-4 w-4" /> : <ImagePlus className="h-4 w-4" />}
+                                  {photoSavingId === student.studentId ? "Đang lưu" : photoFiles[student.studentId] ? "Upload ảnh" : "Lưu ảnh"}
                                 </button>
                               </div>
                             ) : null}

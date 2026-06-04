@@ -44,6 +44,15 @@ function validate() {
     errors.push("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME or KIDSEEDSHUB_TRUSTED_IMAGE_HOSTS is required in production for class photo URL validation.")
   }
 
+  if (
+    isProduction &&
+    hasValue(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) &&
+    !hasValue(process.env.CLOUDINARY_UPLOAD_PRESET) &&
+    (!hasValue(process.env.CLOUDINARY_API_KEY) || !hasValue(process.env.CLOUDINARY_API_SECRET))
+  ) {
+    errors.push("CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY/CLOUDINARY_API_SECRET is required in production for class photo uploads.")
+  }
+
   if (!isProduction && !hasValue(process.env.NEXTAUTH_SECRET) && !hasValue(process.env.AUTH_SECRET)) {
     warnings.push("NEXTAUTH_SECRET/AUTH_SECRET is not set; development fallback secret will be used.")
   }
