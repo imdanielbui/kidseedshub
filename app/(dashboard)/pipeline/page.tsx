@@ -993,7 +993,7 @@ export default function PipelinePage() {
           onClose={closeStudentDialog}
           closeLabel="Đóng quick profile"
           size="lg"
-          panelClassName="self-start -translate-y-8 border border-brand-red/20 bg-white shadow-[0_32px_90px_rgba(69,38,28,0.28)] ring-1 ring-white"
+          panelClassName="self-start -translate-y-6 border border-brand-red/20 bg-white shadow-[0_32px_90px_rgba(69,38,28,0.28)] ring-1 ring-white"
           bodyClassName={selectedStudent ? "bg-[#fffaf7] p-5" : "p-8"}
         >
             {selectedStudent ? (
