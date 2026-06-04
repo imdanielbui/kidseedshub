@@ -1,7 +1,8 @@
 "use client"
 
-import { BellRing, CheckCircle2, Download, MessageSquareText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { DialogFormShell } from "@/components/shared/dialog-shell"
+import { BarChart3, BellRing, CheckCircle2, Download, FileText, Lock, MessageSquareText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import {
   expenseCategoryLabels,
@@ -15,6 +16,16 @@ import {
 import { payrollRunStatusLabels, type PayrollLineItem, type PayrollRunItem } from "@/lib/contracts/payroll"
 import type { QueuedTuitionReminder, TuitionReminderItem, ZaloTemplateItem } from "@/lib/contracts/reminders"
 import type { StudentListItem } from "@/lib/contracts/students"
+
+type FinanceRole = "ADMIN" | "SALE" | "TEACHER" | "PARENT"
+type FinanceTab = "overview" | "receipts" | "expenses" | "payroll" | "reminders"
+type FinanceDialog = "receipt" | "expense" | null
+
+type SessionPayload = {
+  user?: {
+    role?: FinanceRole
+  }
+} | null
 
 type ReceiptFormState = {
   enrollmentId: string
@@ -76,8 +87,16 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+function getReceiptTotal(receipts: ReceiptListItem[]) {
+  return receipts.reduce((total, receipt) => total + Number(receipt.amount), 0)
+}
+
 export default function FinancePage() {
   const [month, setMonth] = useState(getCurrentMonth)
+  const [activeTab, setActiveTab] = useState<FinanceTab>("overview")
+  const [activeDialog, setActiveDialog] = useState<FinanceDialog>(null)
+  const [sessionRole, setSessionRole] = useState<FinanceRole | null>(null)
+  const [isLoadingSession, setIsLoadingSession] = useState(true)
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [receipts, setReceipts] = useState<ReceiptListItem[]>([])
   const [expenses, setExpenses] = useState<ExpenseListItem[]>([])
@@ -98,68 +117,101 @@ export default function FinancePage() {
   const [queueingEnrollmentId, setQueueingEnrollmentId] = useState("")
   const [error, setError] = useState<string | null>(null)
 
+  const isAdmin = sessionRole === "ADMIN"
+  const isSale = sessionRole === "SALE"
+  const canUseFinance = isAdmin || isSale
+  const canCreateReceipt = isAdmin || isSale
+  const canManageReminders = isAdmin || isSale
+
+  const availableTabs = useMemo(
+    () => [
+      { id: "overview" as const, label: "Tổng quan", icon: BarChart3, isAvailable: canUseFinance },
+      { id: "receipts" as const, label: "Phiếu thu", icon: ReceiptText, isAvailable: canUseFinance },
+      { id: "expenses" as const, label: "Phiếu chi", icon: FileText, isAvailable: isAdmin },
+      { id: "payroll" as const, label: "Payroll", icon: WalletCards, isAvailable: isAdmin },
+      { id: "reminders" as const, label: "Nhắc học phí", icon: BellRing, isAvailable: canManageReminders }
+    ].filter((tab) => tab.isAvailable),
+    [canManageReminders, canUseFinance, isAdmin]
+  )
+
   useEffect(() => {
     let isMounted = true
 
+    async function loadSessionRole() {
+      setIsLoadingSession(true)
+
+      try {
+        const response = await fetch("/api/auth/session", { cache: "no-store" })
+        const payload = (await response.json()) as SessionPayload
+
+        if (!isMounted) return
+
+        setSessionRole(payload?.user?.role ?? null)
+      } catch {
+        if (isMounted) setSessionRole(null)
+      } finally {
+        if (isMounted) setIsLoadingSession(false)
+      }
+    }
+
+    loadSessionRole()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const selectedTab = availableTabs.some((tab) => tab.id === activeTab) ? activeTab : availableTabs[0]?.id
+
+  useEffect(() => {
+    if (isLoadingSession) return
+
+    let isMounted = true
+
     async function loadFinance() {
+      if (!canUseFinance) {
+        setSummary(null)
+        setReceipts([])
+        setExpenses([])
+        setPayrollRuns([])
+        setTemplates([])
+        setReminders([])
+        setIsLoading(false)
+        return
+      }
+
       setIsLoading(true)
       setError(null)
 
       try {
-        const [summaryResponse, receiptsResponse, expensesResponse, payrollResponse, templatesResponse, remindersResponse] = await Promise.all([
-          fetch(`/api/finance/summary?month=${month}`, { cache: "no-store" }),
-          fetch(`/api/receipts?month=${month}`, { cache: "no-store" }),
-          fetch(`/api/expenses?month=${month}`, { cache: "no-store" }),
-          fetch(`/api/payroll-runs?month=${month}`, { cache: "no-store" }),
-          fetch("/api/message-templates", { cache: "no-store" }),
-          fetch(`/api/tuition-reminders?templateId=${selectedTemplateId}`, { cache: "no-store" })
+        const summaryRequest = isAdmin ? fetch(`/api/finance/summary?month=${month}`, { cache: "no-store" }) : null
+        const receiptsRequest = fetch(`/api/receipts?month=${month}`, { cache: "no-store" })
+        const expensesRequest = isAdmin ? fetch(`/api/expenses?month=${month}`, { cache: "no-store" }) : null
+        const payrollRequest = isAdmin ? fetch(`/api/payroll-runs?month=${month}`, { cache: "no-store" }) : null
+        const templatesRequest = canManageReminders ? fetch("/api/message-templates", { cache: "no-store" }) : null
+        const remindersRequest = canManageReminders ? fetch(`/api/tuition-reminders?templateId=${selectedTemplateId}`, { cache: "no-store" }) : null
+
+        const [summaryResult, receiptsResult, expensesResult, payrollResult, templatesResult, remindersResult] = await Promise.all([
+          summaryRequest ? summaryRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<FinanceSummary> })) : Promise.resolve(null),
+          receiptsRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<ReceiptListItem[]> })),
+          expensesRequest ? expensesRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<ExpenseListItem[]> })) : Promise.resolve(null),
+          payrollRequest ? payrollRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<PayrollRunItem[]> })) : Promise.resolve(null),
+          templatesRequest ? templatesRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<ZaloTemplateItem[]> })) : Promise.resolve(null),
+          remindersRequest ? remindersRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<TuitionReminderItem[]> })) : Promise.resolve(null)
         ])
-        const [summaryPayload, receiptsPayload, expensesPayload, payrollPayload, templatesPayload, remindersPayload] = (await Promise.all([
-          summaryResponse.json(),
-          receiptsResponse.json(),
-          expensesResponse.json(),
-          payrollResponse.json(),
-          templatesResponse.json(),
-          remindersResponse.json()
-        ])) as [
-          ApiResponse<FinanceSummary>,
-          ApiResponse<ReceiptListItem[]>,
-          ApiResponse<ExpenseListItem[]>,
-          ApiResponse<PayrollRunItem[]>,
-          ApiResponse<ZaloTemplateItem[]>,
-          ApiResponse<TuitionReminderItem[]>
-        ]
 
         if (!isMounted) return
 
-        if (summaryResponse.ok && summaryPayload.success && summaryPayload.data) {
-          setSummary(summaryPayload.data)
-        } else {
-          setSummary(null)
-        }
+        setSummary(summaryResult?.response.ok && summaryResult.payload.success && summaryResult.payload.data ? summaryResult.payload.data : null)
+        setReceipts(receiptsResult.response.ok && receiptsResult.payload.success && receiptsResult.payload.data ? receiptsResult.payload.data : [])
+        setExpenses(expensesResult?.response.ok && expensesResult.payload.success && expensesResult.payload.data ? expensesResult.payload.data : [])
+        setPayrollRuns(payrollResult?.response.ok && payrollResult.payload.success && payrollResult.payload.data ? payrollResult.payload.data : [])
+        setTemplates(templatesResult?.response.ok && templatesResult.payload.success && templatesResult.payload.data ? templatesResult.payload.data : [])
+        setReminders(remindersResult?.response.ok && remindersResult.payload.success && remindersResult.payload.data ? remindersResult.payload.data : [])
 
-        if (receiptsResponse.ok && receiptsPayload.success && receiptsPayload.data) {
-          setReceipts(receiptsPayload.data)
-        } else {
-          setReceipts([])
-        }
-
-        if (expensesResponse.ok && expensesPayload.success && expensesPayload.data) {
-          setExpenses(expensesPayload.data)
-        } else {
-          setExpenses([])
-        }
-
-        if (payrollResponse.ok && payrollPayload.success && payrollPayload.data) {
-          setPayrollRuns(payrollPayload.data)
-        } else {
-          setPayrollRuns([])
-        }
-
-        setTemplates(templatesPayload.success && templatesPayload.data ? templatesPayload.data : [])
-        setReminders(remindersPayload.success && remindersPayload.data ? remindersPayload.data : [])
-
-        const firstError = summaryPayload.error ?? receiptsPayload.error ?? expensesPayload.error ?? payrollPayload.error ?? templatesPayload.error ?? remindersPayload.error
+        const firstError = [summaryResult, receiptsResult, expensesResult, payrollResult, templatesResult, remindersResult]
+          .map((result) => result?.payload.error)
+          .find(Boolean)
         if (firstError) setError(firstError.message)
       } catch {
         if (isMounted) setError("Không tải được dữ liệu tài chính.")
@@ -173,9 +225,11 @@ export default function FinancePage() {
     return () => {
       isMounted = false
     }
-  }, [month, refreshKey, selectedTemplateId])
+  }, [canManageReminders, canUseFinance, isAdmin, isLoadingSession, month, refreshKey, selectedTemplateId])
 
   useEffect(() => {
+    if (!canCreateReceipt) return
+
     let isMounted = true
 
     async function loadStudents() {
@@ -196,9 +250,9 @@ export default function FinancePage() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [canCreateReceipt])
 
-  const summaryCards = useMemo(
+  const adminSummaryCards = useMemo(
     () => [
       { label: "Doanh thu gross", value: summary ? formatMoney(summary.revenue) : "0đ", icon: TrendingUp },
       { label: "Refund", value: summary ? formatMoney(summary.refundExpense) : "0đ", icon: TrendingDown },
@@ -208,6 +262,14 @@ export default function FinancePage() {
       { label: "Lợi nhuận ròng", value: summary ? formatMoney(summary.netProfit) : "0đ", icon: WalletCards }
     ],
     [summary]
+  )
+  const saleSummaryCards = useMemo(
+    () => [
+      { label: "Doanh thu của bạn", value: formatMoney(String(getReceiptTotal(receipts))), icon: TrendingUp },
+      { label: "Phiếu thu", value: `${receipts.length} phiếu`, icon: ReceiptText },
+      { label: "Số buổi đã bán", value: `${receipts.reduce((total, receipt) => total + receipt.sessions, 0)} buổi`, icon: WalletCards }
+    ],
+    [receipts]
   )
   const enrollmentOptions = useMemo(
     () =>
@@ -224,7 +286,7 @@ export default function FinancePage() {
   )
   const payrollRun = payrollRuns[0]
 
-  async function submitReceipt(event: React.FormEvent<HTMLFormElement>) {
+  async function submitReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSubmittingReceipt(true)
     setError(null)
@@ -249,6 +311,7 @@ export default function FinancePage() {
       }
 
       setReceiptForm(emptyReceiptForm)
+      setActiveDialog(null)
       setRefreshKey((current) => current + 1)
     } catch {
       setError("Không tạo được phiếu thu.")
@@ -257,7 +320,7 @@ export default function FinancePage() {
     }
   }
 
-  async function submitExpense(event: React.FormEvent<HTMLFormElement>) {
+  async function submitExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSubmittingExpense(true)
     setError(null)
@@ -282,6 +345,7 @@ export default function FinancePage() {
       }
 
       setExpenseForm(emptyExpenseForm)
+      setActiveDialog(null)
       setRefreshKey((current) => current + 1)
     } catch {
       setError("Không tạo được phiếu chi.")
@@ -425,282 +489,200 @@ export default function FinancePage() {
     }))
   }
 
+  const isPageLoading = isLoadingSession || isLoading
+
   return (
-    <main className="space-y-6">
-      <div className="neu-card rounded-3xl p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <main className="space-y-4">
+      <section className="neu-card rounded-3xl p-4 md:p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Finance</p>
-            <h1 className="mt-2 text-3xl font-semibold text-brand-ink">Tài chính</h1>
-            <p className="mt-2 max-w-2xl text-sm text-stone-600">
-              Phiếu thu, phiếu chi, dashboard tháng và export Excel đối soát.
+            <h1 className="mt-2 text-2xl font-semibold text-brand-ink md:text-3xl">Tài chính</h1>
+            <p className="mt-1 max-w-2xl text-sm text-stone-600">
+              Đối soát theo tháng, xử lý phiếu thu, payroll và nhắc học phí trong từng tab.
             </p>
           </div>
-          <label className="text-sm font-medium text-stone-600">
-            Tháng
-            <input
-              className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-brand-ink outline-none"
-              type="month"
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-            />
-          </label>
-          <a
-            className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
-            href="/api/exports/students-finance"
-          >
-            <Download className="h-4 w-4" />
-            Xuất Excel toàn bộ
-          </a>
-        </div>
-      </div>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        {summaryCards.map((card) => {
-          const Icon = card.icon
-          return (
-            <div key={card.label} className="neu-card rounded-3xl">
-              <div className="p-5">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-stone-500">{card.label}</p>
-                  <div className="neu-pressed flex h-10 w-10 items-center justify-center rounded-2xl">
-                    <Icon className="h-5 w-5 text-brand-red" />
-                  </div>
-                </div>
-              </div>
-              <div className="content-border px-5 py-4">
-                <p className="mt-4 text-3xl font-semibold text-brand-ink">{card.value}</p>
-              </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end xl:justify-end">
+            <label className="text-sm font-medium text-stone-600">
+              Tháng
+              <input
+                className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-brand-ink outline-none"
+                type="month"
+                value={month}
+                onChange={(event) => setMonth(event.target.value)}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="neu-list-item inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red"
+                onClick={() => setRefreshKey((current) => current + 1)}
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Tải lại
+              </button>
+              {canCreateReceipt ? (
+                <button
+                  type="button"
+                  className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+                  onClick={() => setActiveDialog("receipt")}
+                >
+                  <Plus className="h-4 w-4" />
+                  Phiếu thu
+                </button>
+              ) : null}
+              {isAdmin ? (
+                <>
+                  <button
+                    type="button"
+                    className="neu-list-item inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red"
+                    onClick={() => setActiveDialog("expense")}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Phiếu chi
+                  </button>
+                  <a
+                    className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+                    href="/api/exports/students-finance"
+                  >
+                    <Download className="h-4 w-4" />
+                    Xuất Excel
+                  </a>
+                </>
+              ) : null}
             </div>
-          )
-        })}
+          </div>
+        </div>
+        <div className="content-border mt-5 pt-4">
+          {availableTabs.length ? (
+            <div className="neu-pressed flex gap-1 overflow-x-auto rounded-2xl p-1">
+              {availableTabs.map((tab) => {
+                const Icon = tab.icon
+                const isActive = selectedTab === tab.id
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                      isActive ? "bg-brand-red text-white" : "text-stone-600 hover:text-brand-red"
+                    }`}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <PermissionState />
+          )}
+        </div>
       </section>
+
       {error ? (
         <p className="rounded-3xl border border-brand-red/15 bg-white/50 p-4 text-sm text-brand-red">{error}</p>
       ) : null}
-      <section className="neu-card rounded-3xl">
-        <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Payroll</p>
-            <h2 className="mt-2 font-semibold text-brand-ink">Payroll tháng {month}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-stone-500">
-              Sinh bảng lương từ hồ sơ nhân sự, giờ dạy đã duyệt và nghỉ không lương; khi chi sẽ tạo phiếu chi lương liên kết.
-            </p>
-          </div>
-          {payrollRun ? (
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
-                {payrollRunStatusLabels[payrollRun.status]}
-              </span>
-              {payrollRun.status === "DRAFT" ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-2xl border border-brand-red/15 px-3 py-2 text-xs font-semibold text-brand-red disabled:opacity-50"
-                  disabled={payrollActionId === `${payrollRun.id}:generate`}
-                  onClick={() => void runPayrollAction(payrollRun, "generate")}
-                >
-                  <RefreshCcw className="h-3.5 w-3.5" />
-                  {payrollActionId === `${payrollRun.id}:generate` ? "Đang sinh" : "Sinh lại dòng"}
-                </button>
-              ) : null}
-              {payrollRun.status === "DRAFT" && payrollRun.lineCount > 0 ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  disabled={payrollActionId === `${payrollRun.id}:approve`}
-                  onClick={() => void runPayrollAction(payrollRun, "approve")}
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {payrollActionId === `${payrollRun.id}:approve` ? "Đang duyệt" : "Duyệt payroll"}
-                </button>
-              ) : null}
-              {payrollRun.status === "APPROVED" ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  disabled={payrollActionId === `${payrollRun.id}:pay`}
-                  onClick={() => void runPayrollAction(payrollRun, "pay")}
-                >
-                  <WalletCards className="h-3.5 w-3.5" />
-                  {payrollActionId === `${payrollRun.id}:pay` ? "Đang chi" : "Tạo phiếu chi lương"}
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isCreatingPayroll}
-              onClick={() => void createPayrollRun()}
-            >
-              <Plus className="h-4 w-4" />
-              {isCreatingPayroll ? "Đang tạo" : "Tạo payroll tháng"}
-            </button>
-          )}
-        </div>
-        <div className="content-border grid gap-3 p-5 md:grid-cols-4">
-          <PayrollMetric label="Tổng gross" value={payrollRun ? formatMoney(payrollRun.totalGrossAmount) : "0đ"} />
-          <PayrollMetric label="Khấu trừ" value={payrollRun ? formatMoney(payrollRun.totalDeductions) : "0đ"} />
-          <PayrollMetric label="Thưởng/điều chỉnh" value={payrollRun ? formatMoney(payrollRun.totalAdjustments) : "0đ"} />
-          <PayrollMetric label="Cần chi" value={payrollRun ? formatMoney(payrollRun.totalFinalAmount) : "0đ"} />
-        </div>
-        {payrollRun ? (
-          <div className="content-border space-y-3 p-5">
-            {payrollRun.lines.length ? (
-              payrollRun.lines.map((line) => {
-                const edit = payrollLineEdits[line.id]
-                const isSavingLine = payrollActionId === `${payrollRun.id}:line:${line.id}`
 
-                return (
-                  <article key={line.id} className="neu-list-item rounded-2xl p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-brand-ink">{line.staffName}</p>
-                        <p className="mt-1 text-xs text-stone-500">
-                          {line.employmentType === "FULL_TIME" ? "Toàn thời gian" : "Bán thời gian"} - {line.hoursWorked}h - gross {formatMoney(line.grossAmount)}
-                        </p>
-                        <p className="mt-1 text-xs text-stone-500">
-                          Khấu trừ {formatMoney(line.deductions)} - Điều chỉnh {formatMoney(line.adjustments)}
-                        </p>
-                      </div>
-                      <p className="text-sm font-semibold text-brand-red">{formatMoney(line.finalAmount)}</p>
-                    </div>
-                    {line.note ? <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs text-stone-600">{line.note}</p> : null}
-                    {payrollRun.status === "DRAFT" ? (
-                      <div className="mt-4 grid gap-3 md:grid-cols-5">
-                        <FinanceInput
-                          label="Giờ"
-                          type="number"
-                          min="0"
-                          value={edit?.hoursWorked ?? ""}
-                          onChange={(value) => updatePayrollLineEdit(line, { hoursWorked: value })}
-                        />
-                        <FinanceInput
-                          label="Khấu trừ"
-                          type="number"
-                          value={edit?.deductions ?? ""}
-                          onChange={(value) => updatePayrollLineEdit(line, { deductions: value })}
-                        />
-                        <FinanceInput
-                          label="Điều chỉnh"
-                          type="number"
-                          value={edit?.adjustments ?? ""}
-                          onChange={(value) => updatePayrollLineEdit(line, { adjustments: value })}
-                        />
-                        <FinanceInput
-                          label="Ghi chú"
-                          value={edit?.note ?? ""}
-                          onChange={(value) => updatePayrollLineEdit(line, { note: value })}
-                        />
-                        <button
-                          type="button"
-                          className="self-end rounded-2xl border border-brand-red/15 px-3 py-3 text-xs font-semibold text-brand-red disabled:opacity-50"
-                          disabled={isSavingLine}
-                          onClick={() => void savePayrollLine(payrollRun, line)}
-                        >
-                          {isSavingLine ? "Đang lưu" : "Lưu chỉnh"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </article>
-                )
-              })
-            ) : (
-              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">
-                Kỳ payroll chưa có dòng lương. Bấm sinh lại dòng để lấy hồ sơ nhân sự và giờ đã duyệt.
-              </p>
-            )}
-            {payrollRun.salaryExpenseCode ? (
-              <p className="rounded-2xl border border-brand-red/10 bg-white/35 p-4 text-sm text-stone-600">
-                Đã tạo phiếu chi lương {payrollRun.salaryExpenseCode} - {formatMoney(payrollRun.salaryExpenseAmount ?? "0")}
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <div className="content-border p-5">
-            <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Chưa có payroll cho tháng đang chọn.</p>
-          </div>
-        )}
-      </section>
-      <section className="neu-card rounded-3xl">
-        <div className="flex flex-col gap-4 p-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Automation</p>
-            <h2 className="mt-2 font-semibold text-brand-ink">Nhắc học phí qua Zalo template</h2>
-            <p className="mt-1 text-sm text-stone-500">Tự tạo nội dung từ template duyệt sẵn cho học viên còn ít buổi.</p>
-          </div>
-          <label className="text-sm font-medium text-stone-600">
-            Template
-            <select
-              className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-              value={selectedTemplateId}
-              onChange={(event) => setSelectedTemplateId(event.target.value)}
-            >
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="content-border grid gap-3 p-5 lg:grid-cols-2">
-          {reminders.length ? (
-            reminders.slice(0, 6).map((reminder) => (
-              <article key={reminder.enrollmentId} className="neu-list-item rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-brand-ink">{reminder.studentName}</p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      PH {reminder.parentName} - {reminder.parentPhone} - {reminder.courseName}
-                    </p>
-                  </div>
-                  <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
-                    Còn {reminder.sessionsRemaining}
-                  </span>
-                </div>
-                <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs leading-5 text-stone-600">{reminder.message}</p>
-                <button
-                  type="button"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  disabled={queueingEnrollmentId === reminder.enrollmentId}
-                  onClick={() => void queueReminder(reminder)}
-                >
-                  <BellRing className="h-3.5 w-3.5" />
-                  {queueingEnrollmentId === reminder.enrollmentId ? "Đang tạo" : "Tạo task nhắc"}
-                </button>
-              </article>
-            ))
-          ) : (
-            <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Không có học viên cần nhắc học phí theo ngưỡng hiện tại.</p>
-          )}
-        </div>
-        {templates.length ? (
-          <div className="content-border flex items-center gap-2 px-5 py-4 text-xs text-stone-500">
-            <MessageSquareText className="h-4 w-4 text-brand-red" />
-            {templates.length} template Zalo đã duyệt sẵn trong hệ thống.
-          </div>
-        ) : null}
-      </section>
-      <section className="grid gap-4 xl:grid-cols-2">
-        <form className="neu-card rounded-3xl" onSubmit={submitReceipt}>
-          <div className="p-5">
-            <h2 className="font-semibold text-brand-ink">Tạo phiếu thu</h2>
-            <p className="mt-1 text-sm text-stone-500">Ghi nhận học phí và tự cộng số buổi vào khóa đã đăng ký.</p>
-          </div>
-          <div className="content-border grid gap-3 p-5 md:grid-cols-2">
-            <select
-              className="neu-pressed rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none md:col-span-2"
-              value={receiptForm.enrollmentId}
-              onChange={(event) => setReceiptForm((current) => ({ ...current, enrollmentId: event.target.value }))}
-              required
-            >
-              <option value="">Chọn học viên / khóa học</option>
-              {enrollmentOptions.map((option) => (
-                <option key={option.enrollmentId} value={option.enrollmentId}>
-                  {option.studentName} - {option.courseName} - còn {option.sessionsRemaining} buổi
-                </option>
-              ))}
-            </select>
+      {!isLoadingSession && !canUseFinance ? (
+        <PermissionState />
+      ) : null}
+
+      {canUseFinance && selectedTab === "overview" ? (
+        <OverviewTab
+          cards={isAdmin ? adminSummaryCards : saleSummaryCards}
+          isAdmin={isAdmin}
+          isLoading={isPageLoading}
+          receipts={receipts}
+          expenses={expenses}
+          summary={summary}
+        />
+      ) : null}
+
+      {canUseFinance && selectedTab === "receipts" ? (
+        <ReceiptsTab
+          canCreateReceipt={canCreateReceipt}
+          isLoading={isPageLoading}
+          receipts={receipts}
+          onCreate={() => setActiveDialog("receipt")}
+        />
+      ) : null}
+
+      {isAdmin && selectedTab === "expenses" ? (
+        <ExpensesTab
+          expenses={expenses}
+          isLoading={isPageLoading}
+          onCreate={() => setActiveDialog("expense")}
+        />
+      ) : null}
+
+      {isAdmin && selectedTab === "payroll" ? (
+        <PayrollTab
+          isCreatingPayroll={isCreatingPayroll}
+          payrollActionId={payrollActionId}
+          payrollLineEdits={payrollLineEdits}
+          payrollRun={payrollRun}
+          month={month}
+          onCreatePayroll={() => void createPayrollRun()}
+          onRunPayrollAction={(run, action) => void runPayrollAction(run, action)}
+          onSavePayrollLine={(run, line) => void savePayrollLine(run, line)}
+          onUpdatePayrollLineEdit={updatePayrollLineEdit}
+        />
+      ) : null}
+
+      {canManageReminders && selectedTab === "reminders" ? (
+        <RemindersTab
+          queueingEnrollmentId={queueingEnrollmentId}
+          reminders={reminders}
+          selectedTemplateId={selectedTemplateId}
+          templates={templates}
+          onQueue={(reminder) => void queueReminder(reminder)}
+          onSelectTemplate={setSelectedTemplateId}
+        />
+      ) : null}
+
+      {activeDialog === "receipt" ? (
+        <DialogFormShell
+          title="Tạo phiếu thu"
+          eyebrow="Receipt"
+          description="Ghi nhận học phí và cộng số buổi vào khóa đã đăng ký."
+          onClose={() => setActiveDialog(null)}
+          onSubmit={submitReceipt}
+          size="lg"
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" className="neu-list-item rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red" onClick={() => setActiveDialog(null)}>
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingReceipt}
+                className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Plus className="h-4 w-4" />
+                {isSubmittingReceipt ? "Đang lưu" : "Lưu phiếu thu"}
+              </button>
+            </div>
+          }
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="md:col-span-2">
+              <span className="text-sm font-medium text-stone-600">Học viên / khóa học</span>
+              <select
+                className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+                value={receiptForm.enrollmentId}
+                onChange={(event) => setReceiptForm((current) => ({ ...current, enrollmentId: event.target.value }))}
+                required
+              >
+                <option value="">Chọn học viên / khóa học</option>
+                {enrollmentOptions.map((option) => (
+                  <option key={option.enrollmentId} value={option.enrollmentId}>
+                    {option.studentName} - {option.courseName} - còn {option.sessionsRemaining} buổi
+                  </option>
+                ))}
+              </select>
+            </label>
             <FinanceInput
               label="Số tiền"
               type="number"
@@ -717,51 +699,68 @@ export default function FinancePage() {
               onChange={(value) => setReceiptForm((current) => ({ ...current, sessions: value }))}
               required
             />
-            <select
-              className="neu-pressed rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
-              value={receiptForm.method}
-              onChange={(event) => setReceiptForm((current) => ({ ...current, method: event.target.value as PaymentMethodKey }))}
-            >
-              {Object.entries(paymentMethodLabels).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <label>
+              <span className="text-sm font-medium text-stone-600">Phương thức</span>
+              <select
+                className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+                value={receiptForm.method}
+                onChange={(event) => setReceiptForm((current) => ({ ...current, method: event.target.value as PaymentMethodKey }))}
+              >
+                {Object.entries(paymentMethodLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <FinanceInput
               label="Ghi chú"
               value={receiptForm.note}
               onChange={(value) => setReceiptForm((current) => ({ ...current, note: value }))}
             />
           </div>
-          <div className="flex justify-end p-5">
-            <button
-              type="submit"
-              disabled={isSubmittingReceipt}
-              className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Plus className="h-4 w-4" />
-              {isSubmittingReceipt ? "Đang lưu" : "Lưu phiếu thu"}
-            </button>
-          </div>
-        </form>
-        <form className="neu-card rounded-3xl" onSubmit={submitExpense}>
-          <div className="p-5">
-            <h2 className="font-semibold text-brand-ink">Tạo phiếu chi</h2>
-            <p className="mt-1 text-sm text-stone-500">Ghi nhận chi phí vận hành theo danh mục.</p>
-          </div>
-          <div className="content-border grid gap-3 p-5 md:grid-cols-2">
-            <select
-              className="neu-pressed rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
-              value={expenseForm.category}
-              onChange={(event) => setExpenseForm((current) => ({ ...current, category: event.target.value as ExpenseCategoryKey }))}
-            >
-              {Object.entries(expenseCategoryLabels).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+        </DialogFormShell>
+      ) : null}
+
+      {activeDialog === "expense" && isAdmin ? (
+        <DialogFormShell
+          title="Tạo phiếu chi"
+          eyebrow="Expense"
+          description="Ghi nhận chi phí vận hành theo danh mục."
+          onClose={() => setActiveDialog(null)}
+          onSubmit={submitExpense}
+          size="lg"
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" className="neu-list-item rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red" onClick={() => setActiveDialog(null)}>
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingExpense}
+                className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Plus className="h-4 w-4" />
+                {isSubmittingExpense ? "Đang lưu" : "Lưu phiếu chi"}
+              </button>
+            </div>
+          }
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <label>
+              <span className="text-sm font-medium text-stone-600">Danh mục</span>
+              <select
+                className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+                value={expenseForm.category}
+                onChange={(event) => setExpenseForm((current) => ({ ...current, category: event.target.value as ExpenseCategoryKey }))}
+              >
+                {Object.entries(expenseCategoryLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <FinanceInput
               label="Ngày chi"
               type="date"
@@ -786,86 +785,506 @@ export default function FinancePage() {
             <label className="md:col-span-2">
               <span className="text-sm font-medium text-stone-600">Mô tả</span>
               <textarea
-                className="neu-pressed mt-2 min-h-20 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
+                className="neu-pressed mt-2 min-h-24 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
                 value={expenseForm.description}
                 onChange={(event) => setExpenseForm((current) => ({ ...current, description: event.target.value }))}
                 required
               />
             </label>
           </div>
-          <div className="flex justify-end p-5">
-            <button
-              type="submit"
-              disabled={isSubmittingExpense}
-              className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Plus className="h-4 w-4" />
-              {isSubmittingExpense ? "Đang lưu" : "Lưu phiếu chi"}
-            </button>
-          </div>
-        </form>
-      </section>
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="neu-card rounded-3xl">
-          <h2 className="p-5 font-semibold text-brand-ink">Phiếu thu gần đây</h2>
-          <div className="content-border space-y-3 p-5">
-            {isLoading ? (
-              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Đang tải phiếu thu...</p>
-            ) : receipts.length ? (
-              receipts.slice(0, 8).map((receipt) => (
-                <article key={receipt.id} className="neu-list-item rounded-2xl p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-brand-ink">{receipt.code}</p>
-                      <p className="mt-1 text-xs text-stone-500">
-                        {receipt.studentName} - {receipt.courseName}
-                      </p>
-                    </div>
-                    <p className="text-sm font-semibold text-brand-red">{formatMoney(receipt.amount)}</p>
-                  </div>
-                  <p className="mt-3 text-xs text-stone-500">
-                    {paymentMethodLabels[receipt.method]} - {receipt.sessions} buổi - {formatDate(receipt.createdAt)}
-                  </p>
-                </article>
-              ))
-            ) : (
-              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Chưa có phiếu thu trong tháng.</p>
-            )}
-          </div>
-        </div>
-        <div className="neu-card rounded-3xl">
-          <h2 className="p-5 font-semibold text-brand-ink">Phiếu chi gần đây</h2>
-          <div className="content-border space-y-3 p-5">
-            {isLoading ? (
-              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Đang tải phiếu chi...</p>
-            ) : expenses.length ? (
-              expenses.slice(0, 8).map((expense) => (
-                <article key={expense.id} className="neu-list-item rounded-2xl p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-brand-ink">{expense.code}</p>
-                      <p className="mt-1 text-xs text-stone-500">{expense.description}</p>
-                    </div>
-                    <p className="text-sm font-semibold text-brand-red">{formatMoney(expense.amount)}</p>
-                  </div>
-                  <p className="mt-3 text-xs text-stone-500">
-                    {expenseCategoryLabels[expense.category]} - {formatDate(expense.date)}
-                  </p>
-                  {expense.refundEntitlementId ? (
-                    <p className="mt-2 inline-flex rounded-full border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-brand-red">
-                      Refund{expense.refundStudentName ? ` - ${expense.refundStudentName}` : ""}
-                    </p>
-                  ) : null}
-                </article>
-              ))
-            ) : (
-              <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Chưa có phiếu chi trong tháng.</p>
-            )}
-          </div>
-        </div>
-      </section>
+        </DialogFormShell>
+      ) : null}
     </main>
   )
+}
+
+function OverviewTab({
+  cards,
+  expenses,
+  isAdmin,
+  isLoading,
+  receipts,
+  summary
+}: {
+  cards: Array<{ label: string; value: string; icon: typeof TrendingUp }>
+  expenses: ExpenseListItem[]
+  isAdmin: boolean
+  isLoading: boolean
+  receipts: ReceiptListItem[]
+  summary: FinanceSummary | null
+}) {
+  return (
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+          {cards.map((card) => {
+            const Icon = card.icon
+            return (
+              <div key={card.label} className="neu-card rounded-3xl p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-stone-500">{card.label}</p>
+                  <div className="neu-pressed flex h-10 w-10 items-center justify-center rounded-2xl">
+                    <Icon className="h-5 w-5 text-brand-red" />
+                  </div>
+                </div>
+                <p className="mt-4 text-2xl font-semibold text-brand-ink">{card.value}</p>
+              </div>
+            )
+          })}
+        </div>
+        {isAdmin ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SummaryBreakdown
+              title="Theo phương thức thu"
+              emptyText="Chưa có phiếu thu trong tháng."
+              rows={summary?.receiptsByMethod.map((row) => ({
+                key: row.method,
+                label: paymentMethodLabels[row.method],
+                amount: row.amount,
+                count: row.count
+              })) ?? []}
+            />
+            <SummaryBreakdown
+              title="Theo danh mục chi"
+              emptyText="Chưa có phiếu chi trong tháng."
+              rows={summary?.expensesByCategory.map((row) => ({
+                key: row.category,
+                label: expenseCategoryLabels[row.category],
+                amount: row.amount,
+                count: row.count
+              })) ?? []}
+            />
+          </div>
+        ) : null}
+      </div>
+      <div className="neu-card rounded-3xl">
+        <SectionHeader title="Hoạt động gần đây" eyebrow={isAdmin ? "Ledger" : "Sale ledger"} />
+        <div className="content-border max-h-[62vh] space-y-3 overflow-auto p-4">
+          {isLoading ? (
+            <PanelState text="Đang tải hoạt động tài chính..." />
+          ) : receipts.length || expenses.length ? (
+            <>
+              {receipts.slice(0, 5).map((receipt) => <ReceiptItem key={receipt.id} receipt={receipt} compact />)}
+              {isAdmin ? expenses.slice(0, 5).map((expense) => <ExpenseItem key={expense.id} expense={expense} compact />) : null}
+            </>
+          ) : (
+            <PanelState text="Chưa có hoạt động trong tháng." />
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ReceiptsTab({
+  canCreateReceipt,
+  isLoading,
+  onCreate,
+  receipts
+}: {
+  canCreateReceipt: boolean
+  isLoading: boolean
+  onCreate: () => void
+  receipts: ReceiptListItem[]
+}) {
+  return (
+    <section className="neu-card rounded-3xl">
+      <SectionHeader
+        title="Sổ phiếu thu"
+        eyebrow="Receipts"
+        action={canCreateReceipt ? (
+          <button type="button" className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={onCreate}>
+            <Plus className="h-4 w-4" />
+            Tạo phiếu thu
+          </button>
+        ) : null}
+      />
+      <div className="content-border max-h-[68vh] space-y-3 overflow-auto p-4">
+        {isLoading ? (
+          <PanelState text="Đang tải phiếu thu..." />
+        ) : receipts.length ? (
+          receipts.map((receipt) => <ReceiptItem key={receipt.id} receipt={receipt} />)
+        ) : (
+          <PanelState text="Chưa có phiếu thu trong tháng." />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function ExpensesTab({
+  expenses,
+  isLoading,
+  onCreate
+}: {
+  expenses: ExpenseListItem[]
+  isLoading: boolean
+  onCreate: () => void
+}) {
+  return (
+    <section className="neu-card rounded-3xl">
+      <SectionHeader
+        title="Sổ phiếu chi"
+        eyebrow="Expenses"
+        action={
+          <button type="button" className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={onCreate}>
+            <Plus className="h-4 w-4" />
+            Tạo phiếu chi
+          </button>
+        }
+      />
+      <div className="content-border max-h-[68vh] space-y-3 overflow-auto p-4">
+        {isLoading ? (
+          <PanelState text="Đang tải phiếu chi..." />
+        ) : expenses.length ? (
+          expenses.map((expense) => <ExpenseItem key={expense.id} expense={expense} />)
+        ) : (
+          <PanelState text="Chưa có phiếu chi trong tháng." />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function PayrollTab({
+  isCreatingPayroll,
+  month,
+  onCreatePayroll,
+  onRunPayrollAction,
+  onSavePayrollLine,
+  onUpdatePayrollLineEdit,
+  payrollActionId,
+  payrollLineEdits,
+  payrollRun
+}: {
+  isCreatingPayroll: boolean
+  month: string
+  onCreatePayroll: () => void
+  onRunPayrollAction: (run: PayrollRunItem, action: "generate" | "approve" | "pay") => void
+  onSavePayrollLine: (run: PayrollRunItem, line: PayrollLineItem) => void
+  onUpdatePayrollLineEdit: (line: PayrollLineItem, patch: Partial<PayrollLineEditState>) => void
+  payrollActionId: string
+  payrollLineEdits: Record<string, PayrollLineEditState>
+  payrollRun?: PayrollRunItem
+}) {
+  return (
+    <section className="neu-card rounded-3xl">
+      <SectionHeader
+        title={`Payroll tháng ${month}`}
+        eyebrow="Payroll"
+        action={payrollRun ? (
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
+              {payrollRunStatusLabels[payrollRun.status]}
+            </span>
+            {payrollRun.status === "DRAFT" ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-2xl border border-brand-red/15 px-3 py-2 text-xs font-semibold text-brand-red disabled:opacity-50"
+                disabled={payrollActionId === `${payrollRun.id}:generate`}
+                onClick={() => onRunPayrollAction(payrollRun, "generate")}
+              >
+                <RefreshCcw className="h-3.5 w-3.5" />
+                {payrollActionId === `${payrollRun.id}:generate` ? "Đang sinh" : "Sinh lại dòng"}
+              </button>
+            ) : null}
+            {payrollRun.status === "DRAFT" && payrollRun.lineCount > 0 ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                disabled={payrollActionId === `${payrollRun.id}:approve`}
+                onClick={() => onRunPayrollAction(payrollRun, "approve")}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {payrollActionId === `${payrollRun.id}:approve` ? "Đang duyệt" : "Duyệt payroll"}
+              </button>
+            ) : null}
+            {payrollRun.status === "APPROVED" ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                disabled={payrollActionId === `${payrollRun.id}:pay`}
+                onClick={() => onRunPayrollAction(payrollRun, "pay")}
+              >
+                <WalletCards className="h-3.5 w-3.5" />
+                {payrollActionId === `${payrollRun.id}:pay` ? "Đang chi" : "Tạo phiếu chi lương"}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isCreatingPayroll}
+            onClick={onCreatePayroll}
+          >
+            <Plus className="h-4 w-4" />
+            {isCreatingPayroll ? "Đang tạo" : "Tạo payroll tháng"}
+          </button>
+        )}
+      />
+      <div className="content-border grid gap-3 p-4 md:grid-cols-4">
+        <PayrollMetric label="Tổng gross" value={payrollRun ? formatMoney(payrollRun.totalGrossAmount) : "0đ"} />
+        <PayrollMetric label="Khấu trừ" value={payrollRun ? formatMoney(payrollRun.totalDeductions) : "0đ"} />
+        <PayrollMetric label="Thưởng/điều chỉnh" value={payrollRun ? formatMoney(payrollRun.totalAdjustments) : "0đ"} />
+        <PayrollMetric label="Cần chi" value={payrollRun ? formatMoney(payrollRun.totalFinalAmount) : "0đ"} />
+      </div>
+      <div className="content-border max-h-[62vh] space-y-3 overflow-auto p-4">
+        {payrollRun ? (
+          payrollRun.lines.length ? (
+            payrollRun.lines.map((line) => {
+              const edit = payrollLineEdits[line.id]
+              const isSavingLine = payrollActionId === `${payrollRun.id}:line:${line.id}`
+
+              return (
+                <article key={line.id} className="neu-list-item rounded-2xl p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-brand-ink">{line.staffName}</p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {line.employmentType === "FULL_TIME" ? "Toàn thời gian" : "Bán thời gian"} - {line.hoursWorked}h - gross {formatMoney(line.grossAmount)}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Khấu trừ {formatMoney(line.deductions)} - Điều chỉnh {formatMoney(line.adjustments)}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-brand-red">{formatMoney(line.finalAmount)}</p>
+                  </div>
+                  {line.note ? <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs text-stone-600">{line.note}</p> : null}
+                  {payrollRun.status === "DRAFT" ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-5">
+                      <FinanceInput label="Giờ" type="number" min="0" value={edit?.hoursWorked ?? ""} onChange={(value) => onUpdatePayrollLineEdit(line, { hoursWorked: value })} />
+                      <FinanceInput label="Khấu trừ" type="number" value={edit?.deductions ?? ""} onChange={(value) => onUpdatePayrollLineEdit(line, { deductions: value })} />
+                      <FinanceInput label="Điều chỉnh" type="number" value={edit?.adjustments ?? ""} onChange={(value) => onUpdatePayrollLineEdit(line, { adjustments: value })} />
+                      <FinanceInput label="Ghi chú" value={edit?.note ?? ""} onChange={(value) => onUpdatePayrollLineEdit(line, { note: value })} />
+                      <button
+                        type="button"
+                        className="self-end rounded-2xl border border-brand-red/15 px-3 py-3 text-xs font-semibold text-brand-red disabled:opacity-50"
+                        disabled={isSavingLine}
+                        onClick={() => onSavePayrollLine(payrollRun, line)}
+                      >
+                        {isSavingLine ? "Đang lưu" : "Lưu chỉnh"}
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              )
+            })
+          ) : (
+            <PanelState text="Kỳ payroll chưa có dòng lương. Bấm sinh lại dòng để lấy hồ sơ nhân sự và giờ đã duyệt." />
+          )
+        ) : (
+          <PanelState text="Chưa có payroll cho tháng đang chọn." />
+        )}
+        {payrollRun?.salaryExpenseCode ? (
+          <p className="rounded-2xl border border-brand-red/10 bg-white/35 p-4 text-sm text-stone-600">
+            Đã tạo phiếu chi lương {payrollRun.salaryExpenseCode} - {formatMoney(payrollRun.salaryExpenseAmount ?? "0")}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function RemindersTab({
+  onQueue,
+  onSelectTemplate,
+  queueingEnrollmentId,
+  reminders,
+  selectedTemplateId,
+  templates
+}: {
+  onQueue: (reminder: TuitionReminderItem) => void
+  onSelectTemplate: (templateId: string) => void
+  queueingEnrollmentId: string
+  reminders: TuitionReminderItem[]
+  selectedTemplateId: string
+  templates: ZaloTemplateItem[]
+}) {
+  return (
+    <section className="neu-card rounded-3xl">
+      <SectionHeader
+        title="Nhắc học phí"
+        eyebrow="Automation"
+        action={
+          <label className="text-sm font-medium text-stone-600">
+            Template
+            <select
+              className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+              value={selectedTemplateId}
+              onChange={(event) => onSelectTemplate(event.target.value)}
+            >
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        }
+      />
+      <div className="content-border max-h-[68vh] overflow-auto p-4">
+        {reminders.length ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {reminders.map((reminder) => (
+              <article key={reminder.enrollmentId} className="neu-list-item rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-brand-ink">{reminder.studentName}</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      PH {reminder.parentName} - {reminder.parentPhone} - {reminder.courseName}
+                    </p>
+                  </div>
+                  <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
+                    Còn {reminder.sessionsRemaining}
+                  </span>
+                </div>
+                <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs leading-5 text-stone-600">{reminder.message}</p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  disabled={queueingEnrollmentId === reminder.enrollmentId}
+                  onClick={() => onQueue(reminder)}
+                >
+                  <BellRing className="h-3.5 w-3.5" />
+                  {queueingEnrollmentId === reminder.enrollmentId ? "Đang tạo" : "Tạo task nhắc"}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <PanelState text="Không có học viên cần nhắc học phí theo ngưỡng hiện tại." />
+        )}
+      </div>
+      {templates.length ? (
+        <div className="content-border flex items-center gap-2 px-5 py-4 text-xs text-stone-500">
+          <MessageSquareText className="h-4 w-4 text-brand-red" />
+          {templates.length} template Zalo đã duyệt sẵn trong hệ thống.
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function ReceiptItem({ compact = false, receipt }: { compact?: boolean; receipt: ReceiptListItem }) {
+  return (
+    <article className="neu-list-item rounded-2xl p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-brand-ink">{receipt.code}</p>
+            <span className="rounded-full border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-stone-500">{paymentMethodLabels[receipt.method]}</span>
+          </div>
+          <p className="mt-1 text-xs text-stone-500">
+            {receipt.studentName} - {receipt.courseName}
+          </p>
+          {!compact ? (
+            <p className="mt-2 text-xs text-stone-500">
+              {receipt.sessions} buổi - {formatDate(receipt.createdAt)} - tạo bởi {receipt.createdByName}
+            </p>
+          ) : null}
+        </div>
+        <div className="text-left sm:text-right">
+          <p className="text-sm font-semibold text-brand-red">{formatMoney(receipt.amount)}</p>
+          {!compact ? (
+            <a className="mt-2 inline-flex text-xs font-semibold text-stone-500 hover:text-brand-red" href={`/receipts/${receipt.id}/print`} target="_blank">
+              In phiếu
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function ExpenseItem({ compact = false, expense }: { compact?: boolean; expense: ExpenseListItem }) {
+  return (
+    <article className="neu-list-item rounded-2xl p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-brand-ink">{expense.code}</p>
+            <span className="rounded-full border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-stone-500">{expenseCategoryLabels[expense.category]}</span>
+            {expense.refundEntitlementId ? (
+              <span className="rounded-full border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-brand-red">
+                Refund{expense.refundStudentName ? ` - ${expense.refundStudentName}` : ""}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs text-stone-500">{expense.description}</p>
+          {!compact ? <p className="mt-2 text-xs text-stone-500">{formatDate(expense.date)} - tạo bởi {expense.createdByName}</p> : null}
+        </div>
+        <p className="text-sm font-semibold text-brand-red">{formatMoney(expense.amount)}</p>
+      </div>
+    </article>
+  )
+}
+
+function SummaryBreakdown({
+  emptyText,
+  rows,
+  title
+}: {
+  emptyText: string
+  rows: Array<{ key: string; label: string; amount: string; count: number }>
+  title: string
+}) {
+  return (
+    <div className="neu-card rounded-3xl">
+      <h2 className="p-5 font-semibold text-brand-ink">{title}</h2>
+      <div className="content-border space-y-2 p-4">
+        {rows.length ? rows.map((row) => (
+          <div key={row.key} className="neu-list-item flex items-center justify-between gap-3 rounded-2xl p-3">
+            <div>
+              <p className="text-sm font-semibold text-brand-ink">{row.label}</p>
+              <p className="mt-1 text-xs text-stone-500">{row.count} giao dịch</p>
+            </div>
+            <p className="text-sm font-semibold text-brand-red">{formatMoney(row.amount)}</p>
+          </div>
+        )) : <PanelState text={emptyText} />}
+      </div>
+    </div>
+  )
+}
+
+function SectionHeader({
+  action,
+  eyebrow,
+  title
+}: {
+  action?: React.ReactNode
+  eyebrow: string
+  title: string
+}) {
+  return (
+    <div className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">{eyebrow}</p>
+        <h2 className="mt-2 text-lg font-semibold text-brand-ink">{title}</h2>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function PermissionState() {
+  return (
+    <section className="neu-card rounded-3xl p-6">
+      <div className="flex items-center gap-3">
+        <div className="neu-pressed flex h-12 w-12 items-center justify-center rounded-2xl">
+          <Lock className="h-5 w-5 text-brand-red" />
+        </div>
+        <div>
+          <p className="font-semibold text-brand-ink">Không có quyền xem tài chính</p>
+          <p className="mt-1 text-sm text-stone-500">Tài khoản này chưa được cấp quyền phù hợp cho workspace tài chính.</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PanelState({ text }: { text: string }) {
+  return <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">{text}</p>
 }
 
 function FinanceInput({
