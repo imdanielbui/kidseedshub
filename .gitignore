@@ -8,3 +8,4 @@ dist
 .playwright-cli
 coverage
 *.tsbuildinfo
+public/uploads/

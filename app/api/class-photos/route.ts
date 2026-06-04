@@ -88,6 +88,7 @@ export async function POST(request: Request) {
   const data = parsed.data
   let photoUrl = "url" in data ? data.url : ""
   let cloudinaryId = `manual:${randomUUID()}`
+  let isUploadedFile = false
 
   const student = await prisma.student.findUnique({
     where: { id: data.studentId },
@@ -114,6 +115,7 @@ export async function POST(request: Request) {
       const upload = await uploadClassPhotoFile(data.file)
       photoUrl = upload.url
       cloudinaryId = upload.cloudinaryId
+      isUploadedFile = true
     } catch (error) {
       if (error instanceof ClassPhotoUploadError) {
         const status = error.code === "PHOTO_UPLOAD_NOT_CONFIGURED" ? 503 : 502
@@ -124,7 +126,7 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!isTrustedClassPhotoUrl(photoUrl)) {
+  if (!isUploadedFile && !isTrustedClassPhotoUrl(photoUrl)) {
     return fail(
       {
         code: "UNTRUSTED_PHOTO_URL",

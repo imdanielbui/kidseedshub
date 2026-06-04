@@ -1,4 +1,6 @@
-import { createHash } from "crypto"
+import { createHash, randomUUID } from "crypto"
+import { mkdir, writeFile } from "fs/promises"
+import { join } from "path"
 import {
   classPhotoUploadAcceptedMimeTypes,
   classPhotoUploadMaxBytes
@@ -131,6 +133,35 @@ function getCloudinaryFolder() {
   return process.env.CLOUDINARY_CLASS_PHOTO_FOLDER?.trim() || "kidseedshub/class-photos"
 }
 
+function getClassPhotoUploadDriver() {
+  return process.env.CLASS_PHOTO_UPLOAD_DRIVER?.trim() || "cloudinary"
+}
+
+function extensionFromMimeType(type: string) {
+  switch (type) {
+    case "image/jpeg":
+      return "jpg"
+    case "image/png":
+      return "png"
+    case "image/webp":
+      return "webp"
+    case "image/gif":
+      return "gif"
+    default:
+      return "jpg"
+  }
+}
+
+function sanitizeFileName(input: string) {
+  const baseName = input
+    .replace(/\.[^/.]+$/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+
+  return baseName || "class-photo"
+}
+
 function getCloudinaryConfig() {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim()
   const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
@@ -151,7 +182,22 @@ function getCloudinaryConfig() {
   return { cloudName, uploadPreset, apiKey, apiSecret, folder: getCloudinaryFolder() }
 }
 
-export async function uploadClassPhotoFile(file: File): Promise<ClassPhotoUploadResult> {
+async function uploadClassPhotoFileToLocalStorage(file: File): Promise<ClassPhotoUploadResult> {
+  const uploadsDir = join(process.cwd(), "public", "uploads", "class-photos")
+  const extension = extensionFromMimeType(file.type)
+  const fileName = `${Date.now()}-${randomUUID()}-${sanitizeFileName(file.name)}.${extension}`
+  const bytes = Buffer.from(await file.arrayBuffer())
+
+  await mkdir(uploadsDir, { recursive: true })
+  await writeFile(join(uploadsDir, fileName), bytes)
+
+  return {
+    url: `/uploads/class-photos/${fileName}`,
+    cloudinaryId: `local:${fileName}`
+  }
+}
+
+async function uploadClassPhotoFileToCloudinary(file: File): Promise<ClassPhotoUploadResult> {
   const fileError = assertUploadableImage(file)
   if (fileError) {
     throw new ClassPhotoUploadError(fileError.code, fileError.message)
@@ -195,7 +241,30 @@ export async function uploadClassPhotoFile(file: File): Promise<ClassPhotoUpload
   }
 }
 
+export async function uploadClassPhotoFile(file: File): Promise<ClassPhotoUploadResult> {
+  const fileError = assertUploadableImage(file)
+  if (fileError) {
+    throw new ClassPhotoUploadError(fileError.code, fileError.message)
+  }
+
+  const driver = getClassPhotoUploadDriver()
+
+  if (driver === "local") {
+    return uploadClassPhotoFileToLocalStorage(file)
+  }
+
+  if (driver !== "cloudinary") {
+    throw new ClassPhotoUploadError("PHOTO_UPLOAD_DRIVER_INVALID", "Cấu hình upload ảnh lớp không hợp lệ.")
+  }
+
+  return uploadClassPhotoFileToCloudinary(file)
+}
+
 export function hasClassPhotoUploadConfig() {
+  if (getClassPhotoUploadDriver() === "local") {
+    return true
+  }
+
   return (
     hasValue(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) &&
     (hasValue(process.env.CLOUDINARY_UPLOAD_PRESET) ||

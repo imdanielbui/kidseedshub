@@ -1,9 +1,12 @@
 import assert from "node:assert/strict"
+import { unlink } from "node:fs/promises"
+import { join } from "node:path"
 import test from "node:test"
 import { classPhotoUploadMaxBytes } from "../lib/contracts/classes"
 import {
   buildCloudinarySignature,
-  parseClassPhotoUploadForm
+  parseClassPhotoUploadForm,
+  uploadClassPhotoFile
 } from "../lib/backend/class-photo-upload"
 
 test("parseClassPhotoUploadForm accepts a valid class photo multipart payload", () => {
@@ -65,4 +68,25 @@ test("buildCloudinarySignature signs sorted upload parameters", () => {
   )
 
   assert.equal(signature, "a7029b71c362d7977c52337160ad1254061df042")
+})
+
+test("uploadClassPhotoFile stores images locally for trial mode", async () => {
+  const previousDriver = process.env.CLASS_PHOTO_UPLOAD_DRIVER
+  process.env.CLASS_PHOTO_UPLOAD_DRIVER = "local"
+
+  try {
+    const file = new File([new Uint8Array([1, 2, 3])], "Trial Lesson.JPG", { type: "image/jpeg" })
+    const result = await uploadClassPhotoFile(file)
+
+    assert.match(result.url, /^\/uploads\/class-photos\/.+-trial-lesson\.jpg$/)
+    assert.match(result.cloudinaryId, /^local:/)
+
+    await unlink(join(process.cwd(), "public", result.url.replace(/^\//, "")))
+  } finally {
+    if (previousDriver === undefined) {
+      delete process.env.CLASS_PHOTO_UPLOAD_DRIVER
+    } else {
+      process.env.CLASS_PHOTO_UPLOAD_DRIVER = previousDriver
+    }
+  }
 })

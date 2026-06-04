@@ -19,6 +19,7 @@ function validate() {
   const errors: string[] = []
   const warnings: string[] = []
   const isProduction = process.env.NODE_ENV === "production"
+  const classPhotoUploadDriver = process.env.CLASS_PHOTO_UPLOAD_DRIVER?.trim() || "cloudinary"
 
   if (!hasValue(process.env.DATABASE_URL)) {
     errors.push("DATABASE_URL is required.")
@@ -40,13 +41,25 @@ function validate() {
     errors.push("AUTH_TRUST_HOST=true is required in production unless VERCEL=1 is present.")
   }
 
+  if (!["cloudinary", "local"].includes(classPhotoUploadDriver)) {
+    errors.push("CLASS_PHOTO_UPLOAD_DRIVER must be cloudinary or local.")
+  }
+
+  if (isProduction && classPhotoUploadDriver === "local") {
+    errors.push("CLASS_PHOTO_UPLOAD_DRIVER=local is only for local development or internal trials.")
+  }
+
   if (isProduction && !hasValue(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) && !hasValue(process.env.KIDSEEDSHUB_TRUSTED_IMAGE_HOSTS)) {
     errors.push("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME or KIDSEEDSHUB_TRUSTED_IMAGE_HOSTS is required in production for class photo URL validation.")
   }
 
+  if (isProduction && classPhotoUploadDriver === "cloudinary" && !hasValue(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME)) {
+    errors.push("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is required in production for Cloudinary class photo uploads.")
+  }
+
   if (
     isProduction &&
-    hasValue(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) &&
+    classPhotoUploadDriver === "cloudinary" &&
     !hasValue(process.env.CLOUDINARY_UPLOAD_PRESET) &&
     (!hasValue(process.env.CLOUDINARY_API_KEY) || !hasValue(process.env.CLOUDINARY_API_SECRET))
   ) {
