@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react"
 import { useId, type FormEventHandler, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 type DialogSize = "sm" | "md" | "lg" | "xl"
 
@@ -50,6 +51,7 @@ function DialogFrame({
   const titleId = useId()
   const panelClass = `neu-card flex max-h-[calc(100vh-2rem)] w-full ${sizeClasses[size]} flex-col overflow-hidden rounded-[2rem] bg-brand-bg ${panelClassName}`
   const overlayClass = overlayClassName ?? "items-center justify-center p-4"
+
   const content = (
     <>
       <div className="shrink-0 flex items-start justify-between gap-4 border-b border-brand-red/10 p-5">
@@ -67,7 +69,9 @@ function DialogFrame({
     </>
   )
 
-  return (
+  if (typeof document === "undefined") return null
+
+  return createPortal(
     <div className={`fixed inset-0 ${zIndexClassName} !mt-0 flex ${overlayClass} bg-stone-950/35 backdrop-blur-sm`}>
       {asForm ? (
         <form className={panelClass} onSubmit={onSubmit} role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -76,7 +80,8 @@ function DialogFrame({
       ) : (
         <section className={panelClass} role="dialog" aria-modal="true" aria-labelledby={titleId}>{content}</section>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 

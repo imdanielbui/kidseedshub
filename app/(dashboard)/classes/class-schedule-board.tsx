@@ -2,7 +2,7 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight, Maximize2, Minimize2, Plus, RefreshCcw, Search, Trash2 } from "lucide-react"
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { DialogShell } from "@/components/shared/dialog-shell"
+import { DialogFormShell, DialogShell } from "@/components/shared/dialog-shell"
 import type { ApiResponse } from "@/lib/api-response"
 import { subjectLabels } from "@/lib/contracts/assessment"
 import type { ClassCalendarSessionItem, ClassListItem, ClassStudentItem, CourseListItem } from "@/lib/contracts/courses"
@@ -135,6 +135,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<ClassCalendarSessionItem | null>(null)
   const [selectedManagedClassId, setSelectedManagedClassId] = useState<string | null>(null)
+  const [isEventDialogOpen, setIsEventDialogOpen] = useState(false)
   const [classSearch, setClassSearch] = useState("")
   const [classSubjectFilter, setClassSubjectFilter] = useState<ClassSubjectFilter>("ALL")
   const [classStatusFilter, setClassStatusFilter] = useState<ClassStatusFilter>("ALL")
@@ -425,8 +426,9 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
         return
       }
 
-      setMessage(`Đã tạo lịch nghỉ/sự kiện. Đã dời ${payload.data.movedSessions ?? 0} buổi học.`)
+      setMessage(`Đã tạo lịch nghỉ/sự kiện. Đã dời ${payload.data.movedSessions ?? 0} buổi học sang ngày học kế tiếp.`)
       setEventForm((current) => ({ ...emptyEventForm, date: current.date }))
+      setIsEventDialogOpen(false)
       await loadSchedule()
     } catch {
       setError("Không tạo được lịch nghỉ/sự kiện.")
@@ -890,77 +892,34 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
       ) : null}
 
       {setupPanel === "events" ? (
-      <form className="content-border grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-5" onSubmit={createScheduleEvent}>
-        <div className="flex flex-col gap-3 md:col-span-2 md:flex-row md:items-center md:justify-between xl:col-span-5">
+      <section className="content-border space-y-4 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-brand-ink">Lịch nghỉ lễ / sự kiện</p>
-            <p className="mt-1 text-xs text-stone-500">Ngày có bật tự động dời lịch sẽ chuyển các buổi học chưa điểm danh sang tuần sau.</p>
+            <p className="mt-1 text-xs text-stone-500">Ngày có bật tự động chuyển lịch sẽ chuyển các buổi học chưa điểm danh sang ngày học kế tiếp.</p>
           </div>
-          <button
-            type="button"
-            disabled={!canManageSchedule || isSaving === "vietnam-holidays"}
-            className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold disabled:opacity-60"
-            onClick={() => void importVietnamHolidays()}
-          >
-            <CalendarDays className="h-4 w-4" />
-            {isSaving === "vietnam-holidays" ? "Đang nạp" : `Nạp lễ/sự kiện VN ${selectedYear}`}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!canManageSchedule || isSaving === "vietnam-holidays"}
+              className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold disabled:opacity-60"
+              onClick={() => void importVietnamHolidays()}
+            >
+              <CalendarDays className="h-4 w-4" />
+              {isSaving === "vietnam-holidays" ? "Đang nạp" : `Nạp lễ/sự kiện VN ${selectedYear}`}
+            </button>
+            <button
+              type="button"
+              disabled={!canManageSchedule}
+              className="glass-button-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold disabled:opacity-60"
+              onClick={() => setIsEventDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Thêm lịch nghỉ
+            </button>
+          </div>
         </div>
-        <label className="block text-sm font-semibold text-stone-700 xl:col-span-2">
-          Tên ngày nghỉ / sự kiện
-          <input
-            className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-            value={eventForm.title}
-            onChange={(event) => setEventForm((current) => ({ ...current, title: event.target.value }))}
-            required
-          />
-        </label>
-        <label className="block text-sm font-semibold text-stone-700">
-          Ngày
-          <input
-            className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-            type="date"
-            value={eventForm.date}
-            onChange={(event) => setEventForm((current) => ({ ...current, date: event.target.value }))}
-            required
-          />
-        </label>
-        <label className="block text-sm font-semibold text-stone-700">
-          Loại
-          <select
-            className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-            value={eventForm.type}
-            onChange={(event) => setEventForm((current) => ({ ...current, type: event.target.value as EventFormState["type"] }))}
-          >
-            <option value="HOLIDAY">Nghỉ lễ</option>
-            <option value="EVENT">Sự kiện</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-3 rounded-2xl border border-brand-red/10 px-4 py-3 text-sm font-semibold text-stone-700">
-          <input
-            type="checkbox"
-            checked={eventForm.affectsScheduling}
-            onChange={(event) => setEventForm((current) => ({ ...current, affectsScheduling: event.target.checked }))}
-          />
-          Tự động dời lịch học
-        </label>
-        <label className="block text-sm font-semibold text-stone-700 md:col-span-2 xl:col-span-4">
-          Ghi chú
-          <input
-            className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-            value={eventForm.note}
-            onChange={(event) => setEventForm((current) => ({ ...current, note: event.target.value }))}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={!canManageSchedule || isSaving === "schedule-event"}
-          className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60"
-        >
-          <Plus className="h-4 w-4" />
-          {isSaving === "schedule-event" ? "Đang lưu" : "Thêm"}
-        </button>
-        <div className="md:col-span-2 xl:col-span-5">
+        <div>
           <div className="grid max-h-[42vh] gap-2 overflow-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
             {scheduleEvents.length ? (
               scheduleEvents.map((event) => (
@@ -969,7 +928,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                     <p className="truncate text-sm font-semibold text-brand-ink">{event.title}</p>
                     <p className="truncate text-xs text-stone-500">
                       {event.date.slice(0, 10)} - {scheduleEventTypeLabels[event.type]}
-                      {event.affectsScheduling ? " - tự dời lịch" : ""}
+                      {event.affectsScheduling ? " - tự chuyển lịch" : ""}
                     </p>
                   </div>
                   <button
@@ -988,9 +947,102 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
             )}
           </div>
         </div>
-      </form>
+      </section>
       ) : null}
       </>
+      ) : null}
+
+      {isEventDialogOpen ? (
+        <DialogFormShell
+          eyebrow="Lịch nghỉ"
+          title="Thêm lịch nghỉ / sự kiện"
+          description="Ngày nghỉ có bật tự động chuyển lịch sẽ chuyển các buổi học chưa điểm danh sang ngày học kế tiếp của lớp."
+          onClose={() => setIsEventDialogOpen(false)}
+          closeLabel="Đóng form lịch nghỉ"
+          size="lg"
+          overlayClassName="items-start justify-center px-4 pb-4 pt-6"
+          panelClassName="border border-brand-red/20 bg-white shadow-[0_32px_90px_rgba(69,38,28,0.28)] ring-1 ring-white"
+          bodyClassName="bg-[#fffaf7] p-5"
+          onSubmit={createScheduleEvent}
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                className="neu-list-item inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red"
+                onClick={() => setIsEventDialogOpen(false)}
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={!canManageSchedule || isSaving === "schedule-event"}
+                className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60"
+              >
+                <Plus className="h-4 w-4" />
+                {isSaving === "schedule-event" ? "Đang lưu" : "Thêm lịch nghỉ"}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-brand-red/15 bg-white p-4 shadow-sm">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500 md:col-span-2">
+                  Tên ngày nghỉ / sự kiện
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none"
+                    value={eventForm.title}
+                    onChange={(event) => setEventForm((current) => ({ ...current, title: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  Ngày
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none"
+                    type="date"
+                    value={eventForm.date}
+                    onChange={(event) => setEventForm((current) => ({ ...current, date: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  Loại
+                  <select
+                    className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none"
+                    value={eventForm.type}
+                    onChange={(event) => setEventForm((current) => ({ ...current, type: event.target.value as EventFormState["type"] }))}
+                  >
+                    <option value="HOLIDAY">Nghỉ lễ</option>
+                    <option value="EVENT">Sự kiện</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500 md:col-span-2">
+                  Ghi chú
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none"
+                    value={eventForm.note}
+                    onChange={(event) => setEventForm((current) => ({ ...current, note: event.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-brand-red/15 bg-white p-4 shadow-sm">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-brand-red"
+                checked={eventForm.affectsScheduling}
+                onChange={(event) => setEventForm((current) => ({ ...current, affectsScheduling: event.target.checked }))}
+              />
+              <span>
+                <span className="block text-sm font-semibold text-brand-ink">Tự động chuyển lịch học</span>
+                <span className="mt-1 block text-xs leading-5 text-stone-500">
+                  Chỉ các buổi chưa điểm danh mới được chuyển. Hệ thống chuyển lịch theo chuỗi ngày học kế tiếp của lớp để tránh trùng lịch.
+                </span>
+              </span>
+            </label>
+          </div>
+        </DialogFormShell>
       ) : null}
 
       {selectedSession ? (
