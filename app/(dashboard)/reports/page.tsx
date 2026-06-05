@@ -12,6 +12,36 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 }
 
+const reportMonthChoices = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, "0")
+
+  return { value, label: `Tháng ${value}` }
+})
+
+const reportYearStart = 2020
+const reportYearLookahead = 20
+
+function getMonthPart(value: string) {
+  const monthPart = value.split("-")[1] ?? "01"
+
+  return reportMonthChoices.some((choice) => choice.value === monthPart) ? monthPart : "01"
+}
+
+function getYearPart(value: string) {
+  const yearPart = value.split("-")[0] ?? ""
+
+  return /^\d{4}$/.test(yearPart) ? yearPart : String(new Date().getFullYear())
+}
+
+function buildYearOptions(selectedYear: string) {
+  const currentYear = new Date().getFullYear()
+  const selectedYearNumber = Number(selectedYear)
+  const firstYear = Math.min(reportYearStart, selectedYearNumber)
+  const lastYear = Math.max(currentYear + reportYearLookahead, selectedYearNumber)
+
+  return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => String(lastYear - index))
+}
+
 function formatMoney(value: string) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -46,6 +76,9 @@ export default function ReportsPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const selectedMonthPart = getMonthPart(month)
+  const selectedYearPart = getYearPart(month)
+  const yearOptions = useMemo(() => buildYearOptions(selectedYearPart), [selectedYearPart])
 
   useEffect(() => {
     let isMounted = true
@@ -118,18 +151,42 @@ export default function ReportsPage() {
             <p className="mt-2 max-w-2xl text-sm text-stone-600">Theo dõi lead đã xử lý, tỉ lệ chuyển đổi, doanh thu và task của từng Sale.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="text-sm font-medium text-stone-600">
-              Tháng
-              <input
-                className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-brand-ink outline-none"
-                type="month"
-                value={month}
-                onChange={(event) => {
-                  setIsLoading(true)
-                  setMonth(event.target.value)
-                }}
-              />
-            </label>
+            <div className="grid w-full grid-cols-2 gap-2 sm:w-[280px]">
+              <label className="text-sm font-medium text-stone-600">
+                Tháng
+                <select
+                  className="neu-pressed mt-2 block w-full rounded-2xl bg-transparent px-3 py-3 text-brand-ink outline-none"
+                  value={selectedMonthPart}
+                  onChange={(event) => {
+                    setIsLoading(true)
+                    setMonth(`${selectedYearPart}-${event.target.value}`)
+                  }}
+                >
+                  {reportMonthChoices.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-stone-600">
+                Năm
+                <select
+                  className="neu-pressed mt-2 block w-full rounded-2xl bg-transparent px-3 py-3 text-brand-ink outline-none"
+                  value={selectedYearPart}
+                  onChange={(event) => {
+                    setIsLoading(true)
+                    setMonth(`${event.target.value}-${selectedMonthPart}`)
+                  }}
+                >
+                  {yearOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <button
               type="button"
               className="neu-list-item inline-flex items-center justify-center gap-2 self-end rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red"
