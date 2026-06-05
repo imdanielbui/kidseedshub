@@ -71,27 +71,34 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 }
 
-function shiftMonth(month: string, offset: number) {
-  const [year, monthIndex] = month.split("-").map(Number)
-  const date = new Date(Date.UTC(year, monthIndex - 1 + offset, 1))
+const financeMonthChoices = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, "0")
 
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`
+  return { value, label: `Tháng ${value}` }
+})
+
+const financeYearStart = 2020
+const financeYearLookahead = 20
+
+function getMonthPart(value: string) {
+  const monthPart = value.split("-")[1] ?? "01"
+
+  return financeMonthChoices.some((choice) => choice.value === monthPart) ? monthPart : "01"
 }
 
-function formatMonthLabel(month: string) {
-  const [year, monthIndex] = month.split("-")
-  return `Tháng ${monthIndex}/${year}`
+function getYearPart(value: string) {
+  const yearPart = value.split("-")[0] ?? ""
+
+  return /^\d{4}$/.test(yearPart) ? yearPart : String(new Date().getFullYear())
 }
 
-function buildMonthOptions(selectedMonth: string) {
-  const currentMonth = getCurrentMonth()
-  const months = Array.from({ length: 31 }, (_, index) => shiftMonth(currentMonth, index - 24))
+function buildYearOptions(selectedYear: string) {
+  const currentYear = new Date().getFullYear()
+  const selectedYearNumber = Number(selectedYear)
+  const firstYear = Math.min(financeYearStart, selectedYearNumber)
+  const lastYear = Math.max(currentYear + financeYearLookahead, selectedYearNumber)
 
-  if (!months.includes(selectedMonth)) {
-    months.push(selectedMonth)
-  }
-
-  return months.sort((first, second) => second.localeCompare(first))
+  return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => String(lastYear - index))
 }
 
 function formatMoney(value: string) {
@@ -145,7 +152,9 @@ export default function FinancePage() {
   const canUseFinance = isAdmin || isSale
   const canCreateReceipt = isAdmin || isSale
   const canManageReminders = isAdmin || isSale
-  const monthOptions = useMemo(() => buildMonthOptions(month), [month])
+  const selectedMonthPart = getMonthPart(month)
+  const selectedYearPart = getYearPart(month)
+  const yearOptions = useMemo(() => buildYearOptions(selectedYearPart), [selectedYearPart])
 
   const availableTabs = useMemo(
     () => [
@@ -527,20 +536,36 @@ export default function FinancePage() {
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end xl:justify-end">
-            <label className="text-sm font-medium text-stone-600">
-              Tháng
-              <select
-                className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-brand-ink outline-none"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-              >
-                {monthOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {formatMonthLabel(option)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="grid w-full grid-cols-2 gap-2 sm:w-[280px]">
+              <label className="text-sm font-medium text-stone-600">
+                Tháng
+                <select
+                  className="neu-pressed mt-2 block w-full rounded-2xl bg-transparent px-3 py-3 text-brand-ink outline-none"
+                  value={selectedMonthPart}
+                  onChange={(event) => setMonth(`${selectedYearPart}-${event.target.value}`)}
+                >
+                  {financeMonthChoices.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-stone-600">
+                Năm
+                <select
+                  className="neu-pressed mt-2 block w-full rounded-2xl bg-transparent px-3 py-3 text-brand-ink outline-none"
+                  value={selectedYearPart}
+                  onChange={(event) => setMonth(`${event.target.value}-${selectedMonthPart}`)}
+                >
+                  {yearOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
