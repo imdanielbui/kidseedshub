@@ -77,6 +77,7 @@ export type PipelineOption = {
 export type PipelineOptions = {
   sales: PipelineOption[]
   classes: PipelineOption[]
+  leadSources?: string[]
 }
 
 export const contactResultLabels = {

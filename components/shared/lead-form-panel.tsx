@@ -1,6 +1,7 @@
 "use client"
 
 import { Plus } from "lucide-react"
+import { useId } from "react"
 import type { PipelineOptions } from "@/lib/contracts/crm"
 import { genderLabels, type StudentGenderKey } from "@/lib/contracts/students"
 
@@ -42,6 +43,9 @@ type LeadFormPanelProps = {
 }
 
 export function LeadFormPanel({ value, onChange, options, isSubmitting, onSubmit, submitLabel = "Tạo lead và sinh mã học viên" }: LeadFormPanelProps) {
+  const leadSourceListId = useId()
+  const leadSources = options.leadSources ?? []
+
   function update<Key extends keyof LeadFormState>(key: Key, nextValue: LeadFormState[Key]) {
     onChange({ ...value, [key]: nextValue })
   }
@@ -69,7 +73,20 @@ export function LeadFormPanel({ value, onChange, options, isSubmitting, onSubmit
         </select>
       </label>
 
-      <LeadInput label="Nguồn lead" value={value.leadSource} onChange={(nextValue) => update("leadSource", nextValue)} />
+      <LeadInput
+        label="Nguồn lead"
+        list={leadSources.length ? leadSourceListId : undefined}
+        placeholder={leadSources.length ? "Chọn nguồn đã có hoặc nhập mới" : "Nhập nguồn lead"}
+        value={value.leadSource}
+        onChange={(nextValue) => update("leadSource", nextValue)}
+      />
+      {leadSources.length ? (
+        <datalist id={leadSourceListId}>
+          {leadSources.map((source) => (
+            <option key={source} value={source} />
+          ))}
+        </datalist>
+      ) : null}
 
       <label className="block">
         <span className="text-sm font-medium text-stone-600">Sale bởi</span>
@@ -127,13 +144,17 @@ function LeadInput({
   type = "text",
   value,
   onChange,
-  required = false
+  required = false,
+  list,
+  placeholder
 }: {
   label: string
   type?: string
   value: string
   onChange: (value: string) => void
   required?: boolean
+  list?: string
+  placeholder?: string
 }) {
   return (
     <label className="block">
@@ -142,6 +163,8 @@ function LeadInput({
         className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm text-brand-ink outline-none placeholder:text-stone-400"
         type={type}
         value={value}
+        list={list}
+        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         required={required}
       />
