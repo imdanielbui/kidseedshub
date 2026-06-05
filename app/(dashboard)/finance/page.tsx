@@ -71,6 +71,29 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 }
 
+function shiftMonth(month: string, offset: number) {
+  const [year, monthIndex] = month.split("-").map(Number)
+  const date = new Date(Date.UTC(year, monthIndex - 1 + offset, 1))
+
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`
+}
+
+function formatMonthLabel(month: string) {
+  const [year, monthIndex] = month.split("-")
+  return `Tháng ${monthIndex}/${year}`
+}
+
+function buildMonthOptions(selectedMonth: string) {
+  const currentMonth = getCurrentMonth()
+  const months = Array.from({ length: 31 }, (_, index) => shiftMonth(currentMonth, index - 24))
+
+  if (!months.includes(selectedMonth)) {
+    months.push(selectedMonth)
+  }
+
+  return months.sort((first, second) => second.localeCompare(first))
+}
+
 function formatMoney(value: string) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -122,6 +145,7 @@ export default function FinancePage() {
   const canUseFinance = isAdmin || isSale
   const canCreateReceipt = isAdmin || isSale
   const canManageReminders = isAdmin || isSale
+  const monthOptions = useMemo(() => buildMonthOptions(month), [month])
 
   const availableTabs = useMemo(
     () => [
@@ -505,12 +529,17 @@ export default function FinancePage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end xl:justify-end">
             <label className="text-sm font-medium text-stone-600">
               Tháng
-              <input
+              <select
                 className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-brand-ink outline-none"
-                type="month"
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-              />
+              >
+                {monthOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatMonthLabel(option)}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="flex flex-wrap gap-2">
               <button
