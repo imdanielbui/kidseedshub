@@ -7,9 +7,12 @@ import {
 } from "@/lib/contracts/classes"
 
 export type ParsedClassPhotoUploadForm = {
-  studentId: string
+  studentId?: string
+  classSessionId?: string
   attendanceId?: string
+  caption?: string
   takenAt?: string
+  isPublished: boolean
   isFeatured: boolean
   file: File
 }
@@ -85,13 +88,19 @@ function assertUploadableImage(file: File) {
 }
 
 export function parseClassPhotoUploadForm(formData: FormData): ClassPhotoUploadParseResult {
-  const studentId = formString(formData, "studentId")
+  const studentId = formString(formData, "studentId") || undefined
+  const classSessionId = formString(formData, "classSessionId") || undefined
   const attendanceId = formString(formData, "attendanceId") || undefined
+  const caption = formString(formData, "caption") || undefined
   const takenAt = formString(formData, "takenAt") || undefined
   const fileEntry = formData.get("photo") ?? formData.get("file")
 
-  if (!studentId) {
-    return { success: false, error: { code: "STUDENT_REQUIRED", message: "Thiếu học viên để gắn ảnh." } }
+  if (!studentId && !classSessionId && !attendanceId) {
+    return { success: false, error: { code: "PHOTO_CONTEXT_REQUIRED", message: "Chọn buổi học, học viên hoặc điểm danh để gắn ảnh." } }
+  }
+
+  if (caption && caption.length > 1000) {
+    return { success: false, error: { code: "PHOTO_CAPTION_TOO_LONG", message: "Ghi chú ảnh không được vượt quá 1000 ký tự." } }
   }
 
   if (takenAt && Number.isNaN(Date.parse(takenAt))) {
@@ -111,8 +120,11 @@ export function parseClassPhotoUploadForm(formData: FormData): ClassPhotoUploadP
     success: true,
     data: {
       studentId,
+      classSessionId,
       attendanceId,
+      caption,
       takenAt,
+      isPublished: formBoolean(formData, "isPublished"),
       isFeatured: formBoolean(formData, "isFeatured"),
       file: fileEntry
     }

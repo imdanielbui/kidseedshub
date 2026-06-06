@@ -28,6 +28,26 @@ test("parseClassPhotoUploadForm accepts a valid class photo multipart payload", 
   }
 })
 
+test("parseClassPhotoUploadForm accepts a class session album photo without a student", () => {
+  const formData = new FormData()
+  const file = new File([new Uint8Array([1, 2, 3])], "class-album.jpg", { type: "image/jpeg" })
+
+  formData.set("classSessionId", "session_1")
+  formData.set("caption", "Robot demo activity")
+  formData.set("isPublished", "true")
+  formData.set("photo", file)
+
+  const parsed = parseClassPhotoUploadForm(formData)
+
+  assert.equal(parsed.success, true)
+  if (parsed.success) {
+    assert.equal(parsed.data.studentId, undefined)
+    assert.equal(parsed.data.classSessionId, "session_1")
+    assert.equal(parsed.data.caption, "Robot demo activity")
+    assert.equal(parsed.data.isPublished, true)
+  }
+})
+
 test("parseClassPhotoUploadForm rejects unsupported photo mime types", () => {
   const formData = new FormData()
   const file = new File([new Uint8Array([1, 2, 3])], "lesson.txt", { type: "text/plain" })

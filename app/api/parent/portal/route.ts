@@ -18,8 +18,19 @@ const parentPortalInclude = Prisma.validator<Prisma.ParentInclude>()({
           course: true,
           attendances: {
             include: {
-              classSession: { include: { class: { include: { course: true } } } },
-              photos: { orderBy: { takenAt: "desc" } }
+              classSession: {
+                include: {
+                  class: { include: { course: true } },
+                  photos: {
+                    where: { isPublished: true },
+                    orderBy: { takenAt: "desc" }
+                  }
+                }
+              },
+              photos: {
+                where: { isPublished: true },
+                orderBy: { takenAt: "desc" }
+              }
             },
             orderBy: { date: "desc" }
           }
@@ -209,20 +220,25 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
 
       const journal = student.enrollments
         .flatMap((enrollment) =>
-          enrollment.attendances.map((attendance) => ({
-            id: attendance.id,
-            date: dateKey(attendance.date),
-            courseName: enrollment.course.name,
-            subject: enrollment.course.subject,
-            className: attendance.classSession?.class.name,
-            status: attendance.status,
-            note: attendance.note ?? undefined,
-            photos: attendance.photos.map((photo) => ({
-              id: photo.id,
-              url: photo.url,
-              takenAt: photo.takenAt.toISOString()
-            }))
-          }))
+          enrollment.attendances.map((attendance) => {
+            const photos = [...attendance.photos, ...(attendance.classSession?.photos ?? []).filter((photo) => !photo.studentId || photo.studentId === student.id)]
+            const uniquePhotos = Array.from(new Map(photos.map((photo) => [photo.id, photo])).values())
+
+            return {
+              id: attendance.id,
+              date: dateKey(attendance.date),
+              courseName: enrollment.course.name,
+              subject: enrollment.course.subject,
+              className: attendance.classSession?.class.name,
+              status: attendance.status,
+              note: attendance.note ?? undefined,
+              photos: uniquePhotos.map((photo) => ({
+                id: photo.id,
+                url: photo.url,
+                takenAt: photo.takenAt.toISOString()
+              }))
+            }
+          })
         )
         .sort((first, second) => second.date.localeCompare(first.date))
         .slice(0, 10)

@@ -30,6 +30,7 @@ export async function GET() {
       }
     },
     include: {
+      _count: { select: { photos: true } },
       class: {
         include: {
           course: true,
@@ -74,6 +75,7 @@ export async function GET() {
 
     return {
       id: klass.id,
+      sessionId: classSession.id,
       name: klass.name,
       courseName: klass.course.name,
       subject: klass.course.subject,
@@ -81,6 +83,7 @@ export async function GET() {
       startTime: classSession.startTime ?? klass.startTime,
       endTime: classSession.endTime ?? klass.endTime,
       room: classSession.room ?? klass.room ?? undefined,
+      photoCount: classSession._count.photos,
       students: klass.students.map(({ student }) => {
         const enrollment = student.enrollments.find((item) => item.courseId === klass.courseId) ?? student.enrollments[0]
         const attendance = enrollment?.attendances[0]
@@ -158,6 +161,7 @@ export async function GET() {
     startTime: klass.startTime,
     endTime: klass.endTime,
     room: klass.room ?? undefined,
+    photoCount: 0,
     students: klass.students.map(({ student }) => {
       const enrollment = student.enrollments.find((item) => item.courseId === klass.courseId) ?? student.enrollments[0]
       const attendance = enrollment?.attendances[0]

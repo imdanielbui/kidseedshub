@@ -25,6 +25,7 @@ export type TodayClassStudent = {
 
 export type TodayClassItem = {
   id: string
+  sessionId?: string
   name: string
   courseName: string
   subject: SubjectKey
@@ -32,6 +33,7 @@ export type TodayClassItem = {
   startTime: string
   endTime: string
   room?: string
+  photoCount: number
   students: TodayClassStudent[]
 }
 
@@ -51,11 +53,17 @@ export type AttendanceMarkResult = {
 
 export type ClassPhotoListItem = {
   id: string
-  studentId: string
+  studentId?: string
+  studentName?: string
+  classSessionId?: string
   attendanceId?: string
   url: string
+  caption?: string
   takenAt: string
   isFeatured: boolean
+  isPublished: boolean
+  sentToParentAt?: string
+  createdByName?: string
 }
 
 export const classPhotoUploadMaxBytes = 8 * 1024 * 1024

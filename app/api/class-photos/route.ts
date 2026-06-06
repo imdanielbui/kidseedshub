@@ -15,19 +15,31 @@ import { classPhotoCreateSchema, classPhotoListQuerySchema } from "@/lib/validat
 
 function toClassPhotoListItem(photo: {
   id: string
-  studentId: string
+  studentId: string | null
+  student?: { name: string } | null
+  classSessionId: string | null
   attendanceId: string | null
   url: string
+  caption: string | null
   takenAt: Date
   isFeatured: boolean
+  isPublished: boolean
+  sentToParentAt: Date | null
+  createdBy?: { name: string } | null
 }): ClassPhotoListItem {
   return {
     id: photo.id,
-    studentId: photo.studentId,
+    studentId: photo.studentId ?? undefined,
+    studentName: photo.student?.name,
+    classSessionId: photo.classSessionId ?? undefined,
     attendanceId: photo.attendanceId ?? undefined,
     url: photo.url,
+    caption: photo.caption ?? undefined,
     takenAt: photo.takenAt.toISOString(),
-    isFeatured: photo.isFeatured
+    isFeatured: photo.isFeatured,
+    isPublished: photo.isPublished,
+    sentToParentAt: photo.sentToParentAt?.toISOString(),
+    createdByName: photo.createdBy?.name
   }
 }
 
@@ -52,7 +64,12 @@ export async function GET(request: Request) {
   const photos = await prisma.classPhoto.findMany({
     where: {
       studentId: parsed.data.studentId,
+      classSessionId: parsed.data.classSessionId,
       attendanceId: parsed.data.attendanceId
+    },
+    include: {
+      student: { select: { name: true } },
+      createdBy: { select: { name: true } }
     },
     orderBy: { takenAt: "desc" }
   })
@@ -90,23 +107,40 @@ export async function POST(request: Request) {
   let cloudinaryId = `manual:${randomUUID()}`
   let isUploadedFile = false
 
-  const student = await prisma.student.findUnique({
-    where: { id: data.studentId },
-    select: { id: true }
-  })
+  if (data.studentId) {
+    const student = await prisma.student.findUnique({
+      where: { id: data.studentId },
+      select: { id: true }
+    })
 
-  if (!student) {
-    return fail({ code: "PHOTO_STUDENT_NOT_FOUND", message: "Không tìm thấy học viên để gắn ảnh." }, { status: 404 })
+    if (!student) {
+      return fail({ code: "PHOTO_STUDENT_NOT_FOUND", message: "Không tìm thấy học viên để gắn ảnh." }, { status: 404 })
+    }
+  }
+
+  if (data.classSessionId) {
+    const classSession = await prisma.classSession.findUnique({
+      where: { id: data.classSessionId },
+      select: { id: true }
+    })
+
+    if (!classSession) {
+      return fail({ code: "PHOTO_CLASS_SESSION_NOT_FOUND", message: "Không tìm thấy buổi học để gắn ảnh." }, { status: 404 })
+    }
   }
 
   if (data.attendanceId) {
     const attendance = await prisma.attendance.findUnique({
       where: { id: data.attendanceId },
-      select: { enrollment: { select: { studentId: true } } }
+      select: { classSessionId: true, enrollment: { select: { studentId: true } } }
     })
 
-    if (!attendance || attendance.enrollment.studentId !== data.studentId) {
+    if (!attendance || (data.studentId && attendance.enrollment.studentId !== data.studentId)) {
       return fail({ code: "ATTENDANCE_NOT_MATCHED", message: "Điểm danh không khớp với học viên." }, { status: 400 })
+    }
+
+    if (data.classSessionId && attendance.classSessionId && attendance.classSessionId !== data.classSessionId) {
+      return fail({ code: "ATTENDANCE_SESSION_NOT_MATCHED", message: "Điểm danh không khớp với buổi học." }, { status: 400 })
     }
   }
 
@@ -137,14 +171,24 @@ export async function POST(request: Request) {
   }
 
   try {
+    const createData: Prisma.ClassPhotoUncheckedCreateInput = {
+      studentId: data.studentId,
+      classSessionId: data.classSessionId,
+      attendanceId: data.attendanceId,
+      url: photoUrl,
+      cloudinaryId,
+      caption: data.caption,
+      takenAt: data.takenAt ? new Date(data.takenAt) : undefined,
+      isFeatured: data.isFeatured,
+      isPublished: data.isPublished,
+      sentToParentAt: data.isPublished ? new Date() : undefined,
+      createdById: session.user.id
+    }
     const photo = await prisma.classPhoto.create({
-      data: {
-        studentId: data.studentId,
-        attendanceId: data.attendanceId,
-        url: photoUrl,
-        cloudinaryId,
-        takenAt: data.takenAt ? new Date(data.takenAt) : undefined,
-        isFeatured: data.isFeatured
+      data: createData,
+      include: {
+        student: { select: { name: true } },
+        createdBy: { select: { name: true } }
       }
     })
 

@@ -209,6 +209,7 @@ model User {
   auditLogs                  AuditLog[]                    @relation("AuditActor")
   notificationsReceived      InternalNotification[]        @relation("NotificationRecipient")
   notificationsTriggered     InternalNotification[]        @relation("NotificationActor")
+  classPhotosUploaded        ClassPhoto[]                  @relation("ClassPhotoCreatedBy")
 }
 
 model Parent {
@@ -346,6 +347,7 @@ model ClassSession {
   absenceRequests    AbsenceRequest[]
   makeupEntitlements MakeupEntitlement[]
   timesheetEntry     StaffTimesheetEntry?
+  photos             ClassPhoto[]
 
   @@unique([classId, date])
   @@index([substituteTeacherId])
@@ -607,15 +609,28 @@ model StudentWalletEntry {
 }
 
 model ClassPhoto {
-  id           String      @id @default(cuid())
-  studentId    String
-  student      Student     @relation(fields: [studentId], references: [id])
-  attendanceId String?
-  attendance   Attendance? @relation(fields: [attendanceId], references: [id])
-  url          String
-  cloudinaryId String
-  takenAt      DateTime    @default(now())
-  isFeatured   Boolean     @default(false)
+  id             String        @id @default(cuid())
+  studentId      String?
+  student        Student?      @relation(fields: [studentId], references: [id])
+  classSessionId String?
+  classSession   ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  attendanceId   String?
+  attendance     Attendance?   @relation(fields: [attendanceId], references: [id])
+  url            String
+  cloudinaryId   String
+  caption        String?
+  takenAt        DateTime      @default(now())
+  isFeatured     Boolean       @default(false)
+  isPublished    Boolean       @default(false)
+  sentToParentAt DateTime?
+  createdById    String?
+  createdBy      User?         @relation("ClassPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([classSessionId, takenAt])
+  @@index([studentId, takenAt])
+  @@index([isPublished, sentToParentAt])
 }
 
 model WeeklyAssessment {

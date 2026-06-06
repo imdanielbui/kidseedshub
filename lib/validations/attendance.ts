@@ -12,15 +12,28 @@ export const attendanceCreateSchema = z.object({
 })
 
 export const classPhotoCreateSchema = z.object({
-  studentId: z.string().min(1),
+  studentId: z.string().min(1).optional(),
+  classSessionId: z.string().min(1).optional(),
   attendanceId: z.string().min(1).optional(),
   url: z.string().url(),
+  caption: z.string().max(1000).optional(),
   takenAt: z.string().datetime().optional(),
+  isPublished: z.boolean().default(false),
   isFeatured: z.boolean().default(false)
+}).refine((value) => value.studentId || value.classSessionId || value.attendanceId, {
+  message: "Ảnh cần gắn với buổi học, học viên hoặc điểm danh."
+})
+
+export const classPhotoUpdateSchema = z.object({
+  caption: z.string().max(1000).nullable().optional(),
+  isFeatured: z.boolean().optional(),
+  isPublished: z.boolean().optional(),
+  markSent: z.boolean().optional()
 })
 
 export const classPhotoListQuerySchema = z.object({
   studentId: z.string().min(1).optional(),
+  classSessionId: z.string().min(1).optional(),
   attendanceId: z.string().min(1).optional()
 })
 
