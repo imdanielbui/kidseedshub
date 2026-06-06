@@ -97,6 +97,10 @@ function shiftMonth(month: string, delta: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
 }
 
+function sessionFetchMonths(month: string) {
+  return [shiftMonth(month, -1), month, shiftMonth(month, 1)]
+}
+
 function getMonthCells(month: string) {
   const [year, value] = month.split("-").map(Number)
   const firstDay = new Date(year, value - 1, 1)
@@ -109,6 +113,10 @@ function getMonthCells(month: string) {
     date.setDate(firstCell.getDate() + index)
     return date
   })
+}
+
+function uniqueById<T extends { id: string }>(items: T[]) {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values())
 }
 
 function sessionTone(session: ClassCalendarSessionItem) {
@@ -212,23 +220,25 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     setIsLoading(true)
     setError("")
 
+    const visibleDateKeys = new Set(getMonthCells(month).map(toDateKey))
+    const sessionMonths = sessionFetchMonths(month)
     const [sessionsResponse, eventsResponse, classesResponse, coursesResponse, studentsResponse, usersResponse] = await Promise.all([
-      fetch(`/api/class-sessions?month=${month}`, { cache: "no-store" }),
+      Promise.all(sessionMonths.map((value) => fetch(`/api/class-sessions?month=${value}`, { cache: "no-store" }))),
       fetch(`/api/schedule-events?month=${month}`, { cache: "no-store" }),
       fetch("/api/classes", { cache: "no-store" }),
       fetch("/api/courses", { cache: "no-store" }),
       fetch("/api/students", { cache: "no-store" }),
       fetch("/api/users", { cache: "no-store" })
     ])
-    const [sessionsPayload, eventsPayload, classesPayload, coursesPayload, studentsPayload, usersPayload] = (await Promise.all([
-      sessionsResponse.json(),
+    const [sessionsPayloads, eventsPayload, classesPayload, coursesPayload, studentsPayload, usersPayload] = (await Promise.all([
+      Promise.all(sessionsResponse.map((response) => response.json())),
       eventsResponse.json(),
       classesResponse.json(),
       coursesResponse.json(),
       studentsResponse.json(),
       usersResponse.json()
     ])) as [
-      ApiResponse<ClassCalendarSessionItem[]>,
+      ApiResponse<ClassCalendarSessionItem[]>[],
       ApiResponse<ScheduleEventItem[]>,
       ApiResponse<ClassListItem[]>,
       ApiResponse<CourseListItem[]>,
@@ -236,11 +246,15 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
       ApiResponse<UserListItem[]>
     ]
 
-    if (sessionsPayload.success && sessionsPayload.data) {
-      setSessions(sessionsPayload.data)
+    const failedSessionsPayload = sessionsPayloads.find((payload) => !payload.success)
+    if (!failedSessionsPayload) {
+      setSessions(
+        uniqueById(sessionsPayloads.flatMap((payload) => payload.data ?? []))
+          .filter((session) => visibleDateKeys.has(session.date.slice(0, 10)))
+      )
     } else {
       setSessions([])
-      setError(sessionsPayload.error?.message ?? "Không tải được lịch học.")
+      setError(failedSessionsPayload.error?.message ?? "Không tải được lịch học.")
     }
 
     if (eventsPayload.success && eventsPayload.data) {
@@ -426,7 +440,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
         return
       }
 
-      setMessage(`Đã tạo lịch nghỉ/sự kiện. Đã dời ${payload.data.movedSessions ?? 0} buổi học sang ngày học kế tiếp.`)
+      setMessage(`Đã tạo lịch nghỉ/sự kiện. Đã dời ${payload.data.movedSessions ?? 0} buổi học sang buổi cùng lịch ở tuần kế tiếp.`)
       setEventForm((current) => ({ ...emptyEventForm, date: current.date }))
       setIsEventDialogOpen(false)
       await loadSchedule()
@@ -460,7 +474,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
         return
       }
 
-      setMessage(`Đã nạp lịch ngày lễ/sự kiện Việt Nam ${payload.data.year}: thêm ${payload.data.created} mục, bỏ qua ${payload.data.skipped} mục đã có, dời ${payload.data.movedSessions} buổi học.`)
+      setMessage(`Đã nạp lịch ngày lễ/sự kiện Việt Nam ${payload.data.year}: thêm ${payload.data.created} mục, bỏ qua ${payload.data.skipped} mục đã có, dời ${payload.data.movedSessions} buổi học sang buổi cùng lịch ở tuần kế tiếp.`)
       await loadSchedule()
     } catch {
       setError("Không nạp được ngày nghỉ lễ Việt Nam.")

@@ -19,7 +19,57 @@ function localDate(value: string) {
   return new Date(year, month - 1, day)
 }
 
-test("rescheduleSessionsOnBlockedDate shifts a class through its next scheduled study days", async () => {
+function createScheduleTx(input: {
+  sessions: MockSession[]
+  blockedDates: string[]
+}) {
+  return {
+    scheduleEvent: {
+      findMany: async () => input.blockedDates.map((date) => ({ date: localDate(date) }))
+    },
+    classSession: {
+      findMany: async ({
+        where
+      }: {
+        where: {
+          classId?: string
+          scheduleSlotId?: string
+          date: Date | { gte: Date }
+          status: "SCHEDULED"
+        }
+      }) => {
+        const rows = input.sessions
+          .filter((session) => !where.classId || session.classId === where.classId)
+          .filter((session) => !where.scheduleSlotId || session.scheduleSlotId === where.scheduleSlotId)
+          .filter((session) => session.status === where.status)
+          .filter((session) => {
+            if (where.date instanceof Date) return dateKey(session.date) === dateKey(where.date)
+            return session.date.getTime() >= where.date.gte.getTime()
+          })
+
+        return rows.sort((first, second) => {
+          const dateDelta = second.date.getTime() - first.date.getTime()
+          return dateDelta || second.startTime.localeCompare(first.startTime) || second.createdAt.getTime() - first.createdAt.getTime()
+        })
+      },
+      findUnique: async ({ where }: { where: { classId_date: { classId: string; date: Date } } }) => {
+        const session = input.sessions.find(
+          (item) => item.classId === where.classId_date.classId && dateKey(item.date) === dateKey(where.classId_date.date)
+        )
+
+        return session ? { id: session.id } : null
+      },
+      update: async ({ where, data }: { where: { id: string }; data: Partial<MockSession> }) => {
+        const session = input.sessions.find((item) => item.id === where.id)
+        assert.ok(session)
+        Object.assign(session, data)
+        return session
+      }
+    }
+  }
+}
+
+test("rescheduleSessionsOnBlockedDate shifts only the blocked schedule chain to the same slot next week", async () => {
   const sessions: MockSession[] = [
     {
       id: "session_1",
@@ -55,58 +105,64 @@ test("rescheduleSessionsOnBlockedDate shifts a class through its next scheduled 
       createdAt: localDate("2026-05-03")
     }
   ]
-  const slots = [
-    { id: "slot_monday", classId: "class_1", weekday: 1, startTime: "16:00", endTime: "17:30", room: "A1", isActive: true },
-    { id: "slot_thursday", classId: "class_1", weekday: 4, startTime: "18:00", endTime: "19:30", room: "B1", isActive: true }
-  ]
-  const tx = {
-    scheduleEvent: {
-      findMany: async () => [{ date: localDate("2026-06-01") }]
-    },
-    classScheduleSlot: {
-      findMany: async ({ where }: { where: { classId: string; isActive: boolean } }) =>
-        slots.filter((slot) => slot.classId === where.classId && slot.isActive === where.isActive)
-    },
-    classSession: {
-      findMany: async ({ where }: { where: { classId?: string; date: Date | { gte: Date }; status: "SCHEDULED" } }) => {
-        const rows = sessions
-          .filter((session) => !where.classId || session.classId === where.classId)
-          .filter((session) => session.status === where.status)
-          .filter((session) => {
-            if (where.date instanceof Date) return dateKey(session.date) === dateKey(where.date)
-            return session.date.getTime() >= where.date.gte.getTime()
-          })
-
-        return rows.sort((first, second) => {
-          const dateDelta = second.date.getTime() - first.date.getTime()
-          return dateDelta || second.startTime.localeCompare(first.startTime) || second.createdAt.getTime() - first.createdAt.getTime()
-        })
-      },
-      findUnique: async ({ where }: { where: { classId_date: { classId: string; date: Date } } }) => {
-        const session = sessions.find(
-          (item) => item.classId === where.classId_date.classId && dateKey(item.date) === dateKey(where.classId_date.date)
-        )
-
-        return session ? { id: session.id } : null
-      },
-      update: async ({ where, data }: { where: { id: string }; data: Partial<MockSession> }) => {
-        const session = sessions.find((item) => item.id === where.id)
-        assert.ok(session)
-        Object.assign(session, data)
-        return session
-      }
-    }
-  }
+  const tx = createScheduleTx({ sessions, blockedDates: ["2026-06-01"] })
 
   const movedSessions = await rescheduleSessionsOnBlockedDate(tx as never, localDate("2026-06-01"))
 
   assert.equal(movedSessions, 1)
-  assert.equal(dateKey(sessions[0].date), "2026-06-04")
-  assert.equal(sessions[0].scheduleSlotId, "slot_thursday")
-  assert.equal(sessions[0].startTime, "18:00")
-  assert.equal(sessions[0].room, "B1")
+  assert.equal(dateKey(sessions[0].date), "2026-06-08")
+  assert.equal(sessions[0].scheduleSlotId, "slot_monday")
+  assert.equal(sessions[0].startTime, "16:00")
+  assert.equal(sessions[0].room, "A1")
+  assert.equal(dateKey(sessions[1].date), "2026-06-04")
+  assert.equal(sessions[1].scheduleSlotId, "slot_thursday")
+  assert.equal(dateKey(sessions[2].date), "2026-06-15")
+  assert.equal(sessions[2].scheduleSlotId, "slot_monday")
+})
+
+test("rescheduleSessionsOnBlockedDate does not move a Sunday class into a Monday slot", async () => {
+  const sessions: MockSession[] = [
+    {
+      id: "session_1",
+      classId: "class_1",
+      scheduleSlotId: "slot_sunday",
+      date: localDate("2026-06-07"),
+      startTime: "16:30",
+      endTime: "18:00",
+      room: null,
+      status: "SCHEDULED",
+      createdAt: localDate("2026-05-01")
+    },
+    {
+      id: "session_2",
+      classId: "class_1",
+      scheduleSlotId: "slot_monday",
+      date: localDate("2026-06-08"),
+      startTime: "16:30",
+      endTime: "18:00",
+      room: null,
+      status: "SCHEDULED",
+      createdAt: localDate("2026-05-02")
+    },
+    {
+      id: "session_3",
+      classId: "class_1",
+      scheduleSlotId: "slot_sunday",
+      date: localDate("2026-06-14"),
+      startTime: "16:30",
+      endTime: "18:00",
+      room: null,
+      status: "SCHEDULED",
+      createdAt: localDate("2026-05-03")
+    }
+  ]
+  const tx = createScheduleTx({ sessions, blockedDates: ["2026-06-07"] })
+
+  const movedSessions = await rescheduleSessionsOnBlockedDate(tx as never, localDate("2026-06-07"))
+
+  assert.equal(movedSessions, 1)
+  assert.equal(dateKey(sessions[0].date), "2026-06-14")
   assert.equal(dateKey(sessions[1].date), "2026-06-08")
   assert.equal(sessions[1].scheduleSlotId, "slot_monday")
-  assert.equal(dateKey(sessions[2].date), "2026-06-11")
-  assert.equal(sessions[2].scheduleSlotId, "slot_thursday")
+  assert.equal(dateKey(sessions[2].date), "2026-06-21")
 })

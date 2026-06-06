@@ -77,84 +77,36 @@ async function findNextAvailableClassDate(
   }
 }
 
-type ActiveScheduleSlot = {
-  id: string
-  weekday: number
-  startTime: string
-  endTime: string
-  room: string | null
+function addWeeks(date: Date, weeks: number) {
+  const value = startOfDay(date)
+  value.setDate(value.getDate() + weeks * 7)
+  return value
 }
 
-function compareScheduleSlots(first: ActiveScheduleSlot, second: ActiveScheduleSlot) {
-  return first.weekday - second.weekday || first.startTime.localeCompare(second.startTime)
-}
-
-function nextDateForSlot(afterDate: Date, slot: ActiveScheduleSlot) {
-  const date = startOfDay(afterDate)
-  const delta = (slot.weekday - date.getDay() + 7) % 7 || 7
-  date.setDate(date.getDate() + delta)
-  return date
-}
-
-async function findNextScheduledClassOccurrence(
-  tx: TransactionClient,
-  input: {
-    classId: string
-    date: Date
-    blockedDateKeys: Set<string>
-    excludeSessionId?: string
+function isSameScheduleChain(
+  reference: {
+    scheduleSlotId: string | null
+    startTime: string | null
+    endTime: string | null
+    room: string | null
+  },
+  candidate: {
+    scheduleSlotId: string | null
+    startTime: string | null
+    endTime: string | null
+    room: string | null
   }
 ) {
-  const slots = (await tx.classScheduleSlot.findMany({
-    where: {
-      classId: input.classId,
-      isActive: true
-    },
-    select: {
-      id: true,
-      weekday: true,
-      startTime: true,
-      endTime: true,
-      room: true
-    },
-    orderBy: [{ weekday: "asc" }, { startTime: "asc" }]
-  })).sort(compareScheduleSlots)
-
-  if (!slots.length) {
-    const date = await findNextAvailableClassDate(tx, {
-      classId: input.classId,
-      date: input.date,
-      blockedDateKeys: input.blockedDateKeys,
-      excludeSessionId: input.excludeSessionId
-    })
-
-    return { date, slot: null }
+  if (reference.scheduleSlotId) {
+    return candidate.scheduleSlotId === reference.scheduleSlotId
   }
 
-  let cursor = startOfDay(input.date)
-
-  while (true) {
-    const next = slots
-      .map((slot) => ({ slot, date: nextDateForSlot(cursor, slot) }))
-      .sort((first, second) => first.date.getTime() - second.date.getTime() || first.slot.startTime.localeCompare(second.slot.startTime))[0]
-    const key = dateKey(next.date)
-    const existing = await tx.classSession.findUnique({
-      where: {
-        classId_date: {
-          classId: input.classId,
-          date: next.date
-        }
-      },
-      select: { id: true }
-    })
-    const conflictsWithExisting = existing && existing.id !== input.excludeSessionId
-
-    if (!input.blockedDateKeys.has(key) && !conflictsWithExisting) {
-      return next
-    }
-
-    cursor = next.date
-  }
+  return (
+    !candidate.scheduleSlotId &&
+    candidate.startTime === reference.startTime &&
+    candidate.endTime === reference.endTime &&
+    candidate.room === reference.room
+  )
 }
 
 export function normalizeScheduleSlots(input: {
@@ -285,23 +237,24 @@ export async function rescheduleSessionsOnBlockedDate(tx: TransactionClient, blo
     },
     orderBy: [{ startTime: "asc" }, { createdAt: "asc" }]
   })
-  const affectedClassIds = Array.from(new Set(sessions.map((session) => session.classId)))
 
-  for (const classId of affectedClassIds) {
-    const movableSessions = await tx.classSession.findMany({
+  for (const blockedSession of sessions) {
+    const futureSessions = await tx.classSession.findMany({
       where: {
-        classId,
+        classId: blockedSession.classId,
+        ...(blockedSession.scheduleSlotId ? { scheduleSlotId: blockedSession.scheduleSlotId } : {}),
         date: { gte: startOfDay(blockedDate) },
         status: "SCHEDULED",
         attendances: { none: {} }
       },
       orderBy: [{ date: "desc" }, { startTime: "desc" }, { createdAt: "desc" }]
     })
+    const movableSessions = futureSessions.filter((session) => isSameScheduleChain(blockedSession, session))
 
     for (const session of movableSessions) {
-      const next = await findNextScheduledClassOccurrence(tx, {
+      const nextDate = await findNextAvailableClassDate(tx, {
         classId: session.classId,
-        date: session.date,
+        date: addWeeks(session.date, 1),
         blockedDateKeys,
         excludeSessionId: session.id
       })
@@ -309,11 +262,7 @@ export async function rescheduleSessionsOnBlockedDate(tx: TransactionClient, blo
       await tx.classSession.update({
         where: { id: session.id },
         data: {
-          date: next.date,
-          scheduleSlotId: next.slot?.id ?? session.scheduleSlotId,
-          startTime: next.slot?.startTime ?? session.startTime,
-          endTime: next.slot?.endTime ?? session.endTime,
-          room: next.slot?.room ?? session.room
+          date: nextDate
         }
       })
     }
