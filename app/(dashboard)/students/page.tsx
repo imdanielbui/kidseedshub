@@ -228,7 +228,7 @@ export default function StudentsPage() {
   }
 
   return (
-    <main className="space-y-4">
+    <main className="flex min-h-[calc(100vh-5.5rem)] flex-col gap-4 md:h-[calc(100vh-3.25rem)] md:min-h-0">
       <section className="neu-card rounded-3xl p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
@@ -347,8 +347,8 @@ export default function StudentsPage() {
       {error ? <p className="rounded-2xl border border-brand-red/15 bg-white/50 p-3 text-sm text-brand-red">{error}</p> : null}
 
       {viewMode === "list" ? (
-        <section className="neu-card rounded-3xl p-3">
-          <div className="max-h-[68vh] space-y-2 overflow-auto pr-1">
+        <section className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-3">
+          <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
             {isLoading ? (
               <p className="rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-500">Đang tải học viên...</p>
             ) : students.length ? (
@@ -385,8 +385,8 @@ export default function StudentsPage() {
           <StudentPagination page={page} totalPages={totalPages} limit={limit} setPage={setPage} setLimit={setLimit} />
         </section>
       ) : (
-        <section className="neu-card overflow-hidden rounded-3xl">
-          <div className="max-h-[66vh] overflow-auto">
+        <section className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full min-w-[1240px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#f5eeeb] text-xs uppercase tracking-wide text-stone-500">
                 <tr>
