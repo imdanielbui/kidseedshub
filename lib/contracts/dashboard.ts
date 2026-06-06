@@ -1,4 +1,5 @@
 import type { MakeupEntitlementStatusKey } from "@/lib/contracts/makeup-entitlements"
+import type { PipelineStageCounts } from "@/lib/contracts/crm"
 
 export type LowSessionAlert = {
   enrollmentId: string
@@ -85,3 +86,77 @@ export const dashboardAlertSections = [
   title: string
   emptyText: string
 }>
+
+export type DashboardOverviewReceipt = {
+  id: string
+  code: string
+  studentName: string
+  parentName: string
+  amount: string
+  createdAt: string
+}
+
+export type DashboardOverviewClassSession = {
+  id: string
+  className: string
+  courseName: string
+  teacherName: string
+  startTime: string
+  endTime: string
+  room?: string
+  studentCount: number
+  attendanceMarked: number
+}
+
+export type DashboardOverviewFollowUp = {
+  id: string
+  type: "TRIAL_STALE" | "TASK_DUE" | "LOW_SESSION" | "DEBT"
+  title: string
+  detail: string
+  href?: string
+  priority: "HIGH" | "MEDIUM" | "LOW"
+  dueAt?: string
+}
+
+export type DashboardOverview = {
+  month: string
+  generatedAt: string
+  finance: {
+    scopeLabel: string
+    revenue: string
+    netRevenue: string
+    expense?: string
+    profit?: string
+    receiptCount: number
+    averageReceipt: string
+    latestReceipts: DashboardOverviewReceipt[]
+  } | null
+  pipeline: {
+    scopeLabel: string
+    stageCounts: PipelineStageCounts
+    leadCount: number
+    trialCount: number
+    evaluationCount: number
+    convertedCount: number
+    staleTrialCount: number
+    closedThisMonth: number
+    newLeadsThisMonth: number
+    conversionRate: number
+  } | null
+  classes: {
+    scopeLabel: string
+    activeClassCount: number
+    todaySessionCount: number
+    todayStudentSlots: number
+    attendanceMarked: number
+    attendanceRate: number
+    upcomingToday: DashboardOverviewClassSession[]
+  }
+  students: {
+    scopeLabel: string
+    activeStudentCount: number
+    lowSessionCount: number
+    debtWarningCount: number
+  }
+  followUps: DashboardOverviewFollowUp[]
+}
