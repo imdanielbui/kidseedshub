@@ -114,14 +114,43 @@ function monthTitle(month: string) {
   return new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(new Date(year, value - 1, 1))
 }
 
+function formatWeekdayDate(date: Date) {
+  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit" }).format(date)
+}
+
+function weekTitle(weekStart: Date) {
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekStart.getDate() + 6)
+
+  return `Tuần ${formatWeekdayDate(weekStart)} - ${new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(weekEnd)}`
+}
+
 function shiftMonth(month: string, delta: number) {
   const [year, value] = month.split("-").map(Number)
   const date = new Date(year, value - 1 + delta, 1)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
 }
 
-function sessionFetchMonths(month: string) {
-  return [shiftMonth(month, -1), month, shiftMonth(month, 1)]
+function monthKeyFromDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+}
+
+function startOfWeek(date: Date) {
+  const value = new Date(date)
+  value.setHours(0, 0, 0, 0)
+  const startOffset = (value.getDay() + 6) % 7
+  value.setDate(value.getDate() - startOffset)
+  return value
+}
+
+function shiftWeek(weekStart: Date, delta: number) {
+  const date = new Date(weekStart)
+  date.setDate(weekStart.getDate() + delta * 7)
+  return startOfWeek(date)
 }
 
 function getMonthCells(month: string) {
@@ -136,6 +165,20 @@ function getMonthCells(month: string) {
     date.setDate(firstCell.getDate() + index)
     return date
   })
+}
+
+function getWeekCells(weekStart: Date) {
+  const firstCell = startOfWeek(weekStart)
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(firstCell)
+    date.setDate(firstCell.getDate() + index)
+    return date
+  })
+}
+
+function uniqueMonthKeys(dates: Date[]) {
+  return Array.from(new Set(dates.map(monthKeyFromDate)))
 }
 
 function uniqueById<T extends { id: string }>(items: T[]) {
@@ -163,7 +206,7 @@ function isAcceptedPhotoFile(file: File) {
 }
 
 type ClassScheduleBoardProps = {
-  view?: "calendar" | "setup"
+  view?: "calendar" | "week" | "setup"
 }
 
 export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProps) {
@@ -176,6 +219,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
   const [form, setForm] = useState<ClassFormState>(emptyClassForm)
   const [eventForm, setEventForm] = useState<EventFormState>(emptyEventForm)
   const [month, setMonth] = useState(defaultMonth)
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(today))
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<ClassCalendarSessionItem | null>(null)
@@ -244,6 +288,12 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     [selectedManagedClass, students]
   )
   const monthCells = useMemo(() => getMonthCells(month), [month])
+  const weekCells = useMemo(() => getWeekCells(weekStart), [weekStart])
+  const calendarCells = view === "week" ? weekCells : monthCells
+  const calendarFetchMonths = useMemo(
+    () => (view === "setup" ? [month] : uniqueMonthKeys(calendarCells)),
+    [calendarCells, month, view]
+  )
   const blockedDateKeys = useMemo(
     () => new Set(scheduleEvents.filter((event) => event.affectsScheduling).map((event) => event.date.slice(0, 10))),
     [scheduleEvents]
@@ -273,11 +323,10 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     setIsLoading(true)
     setError("")
 
-    const visibleDateKeys = new Set(getMonthCells(month).map(toDateKey))
-    const sessionMonths = sessionFetchMonths(month)
+    const visibleDateKeys = new Set(calendarCells.map(toDateKey))
     const [sessionsResponse, eventsResponse, classesResponse, coursesResponse, studentsResponse, usersResponse] = await Promise.all([
-      Promise.all(sessionMonths.map((value) => fetch(`/api/class-sessions?month=${value}`, { cache: "no-store" }))),
-      fetch(`/api/schedule-events?month=${month}`, { cache: "no-store" }),
+      Promise.all(calendarFetchMonths.map((value) => fetch(`/api/class-sessions?month=${value}`, { cache: "no-store" }))),
+      Promise.all(calendarFetchMonths.map((value) => fetch(`/api/schedule-events?month=${value}`, { cache: "no-store" }))),
       fetch("/api/classes", { cache: "no-store" }),
       fetch("/api/courses", { cache: "no-store" }),
       fetch("/api/students", { cache: "no-store" }),
@@ -285,14 +334,14 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     ])
     const [sessionsPayloads, eventsPayload, classesPayload, coursesPayload, studentsPayload, usersPayload] = (await Promise.all([
       Promise.all(sessionsResponse.map((response) => response.json())),
-      eventsResponse.json(),
+      Promise.all(eventsResponse.map((response) => response.json())),
       classesResponse.json(),
       coursesResponse.json(),
       studentsResponse.json(),
       usersResponse.json()
     ])) as [
       ApiResponse<ClassCalendarSessionItem[]>[],
-      ApiResponse<ScheduleEventItem[]>,
+      ApiResponse<ScheduleEventItem[]>[],
       ApiResponse<ClassListItem[]>,
       ApiResponse<CourseListItem[]>,
       ApiResponse<StudentListItem[]>,
@@ -310,8 +359,11 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
       setError(failedSessionsPayload.error?.message ?? "Không tải được lịch học.")
     }
 
-    if (eventsPayload.success && eventsPayload.data) {
-      setScheduleEvents(eventsPayload.data)
+    const failedEventsPayload = eventsPayload.find((payload) => !payload.success)
+    if (!failedEventsPayload) {
+      setScheduleEvents(uniqueById(eventsPayload.flatMap((payload) => payload.data ?? [])))
+    } else {
+      setScheduleEvents([])
     }
 
     if (classesPayload.success && classesPayload.data) {
@@ -352,7 +404,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSchedule()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month])
+  }, [month, weekStart, view])
 
   useEffect(() => {
     return () => {
@@ -827,19 +879,50 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     }))
   }
 
+  const isScheduleView = view === "calendar" || view === "week"
+
   return (
     <section className={`neu-card rounded-3xl ${isFullscreen ? "fixed inset-0 z-40 overflow-auto rounded-none bg-brand-bg p-4" : ""}`}>
-      {view === "calendar" ? (
+      {isScheduleView ? (
       <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center xl:justify-between">
-        <h2 className="text-lg font-semibold text-brand-ink">Lịch tháng</h2>
+        <h2 className="text-lg font-semibold text-brand-ink">{view === "week" ? "Lịch tuần" : "Lịch tháng"}</h2>
         <div className="flex flex-wrap gap-2 xl:justify-end">
-          <button type="button" className="neu-list-item rounded-2xl p-3 text-brand-red" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Tháng trước">
+          <button
+            type="button"
+            className="neu-list-item rounded-2xl p-3 text-brand-red"
+            onClick={() => {
+              if (view === "week") {
+                setWeekStart((current) => shiftWeek(current, -1))
+                return
+              }
+              setMonth(shiftMonth(month, -1))
+            }}
+            aria-label={view === "week" ? "Tuần trước" : "Tháng trước"}
+          >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button type="button" className="neu-list-item rounded-2xl px-4 py-3 text-sm font-semibold text-brand-ink" onClick={() => setMonth(defaultMonth)}>
+          <button
+            type="button"
+            className="neu-list-item rounded-2xl px-4 py-3 text-sm font-semibold text-brand-ink"
+            onClick={() => {
+              setMonth(defaultMonth)
+              setWeekStart(startOfWeek(today))
+            }}
+          >
             Hôm nay
           </button>
-          <button type="button" className="neu-list-item rounded-2xl p-3 text-brand-red" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Tháng sau">
+          <button
+            type="button"
+            className="neu-list-item rounded-2xl p-3 text-brand-red"
+            onClick={() => {
+              if (view === "week") {
+                setWeekStart((current) => shiftWeek(current, 1))
+                return
+              }
+              setMonth(shiftMonth(month, 1))
+            }}
+            aria-label={view === "week" ? "Tuần sau" : "Tháng sau"}
+          >
             <ChevronRight className="h-4 w-4" />
           </button>
           <button type="button" className="neu-list-item inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red" onClick={() => void loadSchedule()}>
@@ -897,10 +980,11 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                   isToday ? "bg-brand-red/5" : ""
                 } ${isBlocked ? "bg-brand-red/10" : ""}`}
                 onDragOver={(event) => {
-                  if (!canManageSchedule) return
+                  if (!canManageSchedule || isBlocked) return
                   event.preventDefault()
                 }}
                 onDrop={(event) => {
+                  if (isBlocked) return
                   event.preventDefault()
                   dropSessionOnDate(date)
                 }}
@@ -939,6 +1023,96 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                       <span className="block truncate">{session.className}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      ) : null}
+
+      {view === "week" ? (
+      <div className="content-border mt-5 p-3">
+        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold capitalize text-brand-ink">{weekTitle(weekStart)}</h3>
+            <p className="mt-1 text-xs font-semibold text-stone-500">{sessions.length} buổi trong vùng lịch đang tải</p>
+          </div>
+          <div className="flex gap-2 text-xs font-semibold">
+            <span className="rounded-full bg-lime-500 px-2 py-1 text-white">FUN</span>
+            <span className="rounded-full bg-indigo-500 px-2 py-1 text-white">Robotics</span>
+            <span className="rounded-full bg-brand-red px-2 py-1 text-white">Nghỉ lễ</span>
+          </div>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-7">
+          {weekCells.map((date) => {
+            const key = toDateKey(date)
+            const daySessions = sessionsByDate[key] ?? []
+            const dayEvents = eventsByDate[key] ?? []
+            const weekday = weekdayColumns.find((day) => day.value === date.getDay())
+            const isToday = key === defaultDate
+            const isBlocked = dayEvents.some((event) => event.affectsScheduling)
+
+            return (
+              <div
+                key={key}
+                className={`rounded-3xl border border-brand-red/10 p-3 transition-colors lg:min-h-[28rem] ${
+                  isToday ? "bg-brand-red/5" : "bg-white/25"
+                } ${isBlocked ? "bg-brand-red/10" : ""}`}
+                onDragOver={(event) => {
+                  if (!canManageSchedule || isBlocked) return
+                  event.preventDefault()
+                }}
+                onDrop={(event) => {
+                  if (isBlocked) return
+                  event.preventDefault()
+                  dropSessionOnDate(date)
+                }}
+              >
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-brand-red">{weekday?.short ?? ""}</p>
+                    <p className="mt-1 text-lg font-semibold text-brand-ink">{formatWeekdayDate(date)}</p>
+                  </div>
+                  <span className="rounded-2xl border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-stone-600">
+                    {daySessions.length} buổi
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {dayEvents.map((event) => (
+                    <div
+                      key={event.id}
+                      className={`rounded-2xl px-2 py-2 text-[11px] font-semibold ${
+                        event.affectsScheduling ? "bg-brand-red text-white" : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      <span className="block truncate">{event.title}</span>
+                    </div>
+                  ))}
+                  {isLoading ? <p className="rounded-2xl border border-brand-red/10 p-2 text-xs text-stone-400">Đang tải...</p> : null}
+                  {daySessions.map((session) => (
+                    <button
+                      key={session.id}
+                      type="button"
+                      draggable={canManageSchedule && !isBlocked}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/plain", session.id)
+                        setDraggingSessionId(session.id)
+                      }}
+                      onDragEnd={() => setDraggingSessionId(null)}
+                      onClick={() => setSelectedSession(session)}
+                      className={`w-full rounded-2xl border px-3 py-2 text-left text-xs font-semibold leading-5 shadow-sm transition hover:shadow-md ${sessionTone(session)} ${
+                        draggingSessionId === session.id ? "opacity-60" : ""
+                      }`}
+                    >
+                      <span className="block truncate">{session.startTime} - {session.endTime}</span>
+                      <span className="block truncate">{session.className}</span>
+                      <span className="mt-1 block truncate text-[11px] opacity-80">GV {session.substituteTeacherName ?? session.teacherName}</span>
+                    </button>
+                  ))}
+                  {!isLoading && !dayEvents.length && !daySessions.length ? (
+                    <p className="rounded-2xl border border-brand-red/10 p-3 text-xs text-stone-500">Không có lịch.</p>
+                  ) : null}
                 </div>
               </div>
             )

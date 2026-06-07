@@ -3,6 +3,7 @@
 import {
   CalendarDays,
   CalendarPlus,
+  CalendarRange,
   Check,
   CircleSlash,
   Clock,
@@ -46,10 +47,11 @@ const attendanceActions: Array<{
   { status: "ABSENT_NO_EXCUSE", label: "Vắng", icon: X }
 ]
 
-type ClassPageTab = "today" | "calendar" | "makeup" | "setup"
+type ClassPageTab = "today" | "week" | "calendar" | "makeup" | "setup"
 
 const pageTabs: Array<{ id: ClassPageTab; label: string; icon: typeof UsersRound }> = [
   { id: "today", label: "Lớp hôm nay", icon: UsersRound },
+  { id: "week", label: "Lịch tuần", icon: CalendarRange },
   { id: "calendar", label: "Lịch tháng", icon: CalendarDays },
   { id: "makeup", label: "Học bù", icon: CalendarPlus },
   { id: "setup", label: "Thiết lập", icon: Settings2 }
@@ -561,7 +563,7 @@ export default function ClassesPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Classes</p>
             <h1 className="mt-2 text-2xl font-semibold text-brand-ink md:text-3xl">Lớp học</h1>
-            <p className="mt-1 max-w-2xl text-sm text-stone-600">Chuyển tab để làm đúng việc: điểm danh hôm nay, xem lịch tháng, hoặc thiết lập lớp.</p>
+            <p className="mt-1 max-w-2xl text-sm text-stone-600">Chuyển tab để làm đúng việc: điểm danh hôm nay, xem lịch tuần/tháng, hoặc thiết lập lớp.</p>
           </div>
           <div className="neu-pressed flex gap-1 overflow-x-auto rounded-2xl p-1">
             {pageTabs.map((tab) => {
@@ -668,6 +670,7 @@ export default function ClassesPage() {
         </section>
       ) : null}
 
+      {activeTab === "week" ? <ClassScheduleBoard view="week" /> : null}
       {activeTab === "calendar" ? <ClassScheduleBoard view="calendar" /> : null}
       {activeTab === "makeup" ? (
         <section className="neu-card rounded-3xl p-5">
