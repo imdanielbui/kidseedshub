@@ -82,6 +82,9 @@ const emptyEventForm: EventFormState = {
   note: ""
 }
 
+const dialogPanelClassName = "border border-brand-red/20 bg-white shadow-[0_32px_90px_rgba(69,38,28,0.28)] ring-1 ring-white"
+const dialogBodyClassName = "bg-[#fffaf7] p-5"
+
 function toDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 }
@@ -197,14 +200,20 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     [selectedManagedClass, students]
   )
   const monthCells = useMemo(() => getMonthCells(month), [month])
+  const blockedDateKeys = useMemo(
+    () => new Set(scheduleEvents.filter((event) => event.affectsScheduling).map((event) => event.date.slice(0, 10))),
+    [scheduleEvents]
+  )
   const sessionsByDate = useMemo(
     () =>
       sessions.reduce<Record<string, ClassCalendarSessionItem[]>>((grouped, session) => {
         const key = session.date.slice(0, 10)
+        if (blockedDateKeys.has(key)) return grouped
+
         grouped[key] = [...(grouped[key] ?? []), session].sort((first, second) => first.startTime.localeCompare(second.startTime))
         return grouped
       }, {}),
-    [sessions]
+    [blockedDateKeys, sessions]
   )
   const eventsByDate = useMemo(
     () =>
@@ -974,9 +983,8 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
           onClose={() => setIsEventDialogOpen(false)}
           closeLabel="Đóng form lịch nghỉ"
           size="lg"
-          overlayClassName="items-start justify-center px-4 pb-4 pt-6"
-          panelClassName="border border-brand-red/20 bg-white shadow-[0_32px_90px_rgba(69,38,28,0.28)] ring-1 ring-white"
-          bodyClassName="bg-[#fffaf7] p-5"
+          panelClassName={dialogPanelClassName}
+          bodyClassName={dialogBodyClassName}
           onSubmit={createScheduleEvent}
           footer={
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1067,6 +1075,8 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
           onClose={() => setSelectedSession(null)}
           closeLabel="Đóng thông tin buổi học"
           size="lg"
+          panelClassName={dialogPanelClassName}
+          bodyClassName={dialogBodyClassName}
         >
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-brand-red/10 p-4">
@@ -1160,7 +1170,8 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
           onClose={() => setSelectedManagedClassId(null)}
           closeLabel="Đóng quản lý lớp"
           size="xl"
-          bodyClassName="p-0"
+          panelClassName={dialogPanelClassName}
+          bodyClassName="bg-[#fffaf7] p-0"
         >
             <div className="content-border grid gap-3 p-5 md:grid-cols-3 xl:grid-cols-4">
               <ClassMetric label="Khóa học" value={selectedManagedClass.courseName} />

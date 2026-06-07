@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { classCalendarSessionInclude, dateKey } from "@/lib/backend/class-schedule"
+import { filterSessionsOutsideBlockedDates } from "@/lib/backend/class-session-visibility"
 import type { ClassCalendarSessionItem } from "@/lib/contracts/courses"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -67,6 +68,17 @@ export async function GET(request: Request) {
   }
 
   const range = monthRange(parsed.data.month)
+  const blockedEvents = await prisma.scheduleEvent.findMany({
+    where: {
+      affectsScheduling: true,
+      date: {
+        gte: range.start,
+        lte: range.end
+      }
+    },
+    select: { date: true }
+  })
+  const blockedDateKeys = new Set(blockedEvents.map((event) => dateKey(event.date)))
   const sessions = await prisma.classSession.findMany({
     where: {
       date: {
@@ -82,5 +94,5 @@ export async function GET(request: Request) {
     orderBy: [{ date: "asc" }, { startTime: "asc" }]
   })
 
-  return ok(sessions.map(toCalendarSessionItem))
+  return ok(filterSessionsOutsideBlockedDates(sessions, blockedDateKeys).map(toCalendarSessionItem))
 }

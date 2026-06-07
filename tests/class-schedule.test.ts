@@ -110,6 +110,7 @@ test("rescheduleSessionsOnBlockedDate shifts only the blocked schedule chain to 
   const movedSessions = await rescheduleSessionsOnBlockedDate(tx as never, localDate("2026-06-01"))
 
   assert.equal(movedSessions, 1)
+  assert.equal(sessions.some((session) => dateKey(session.date) === "2026-06-01"), false)
   assert.equal(dateKey(sessions[0].date), "2026-06-08")
   assert.equal(sessions[0].scheduleSlotId, "slot_monday")
   assert.equal(sessions[0].startTime, "16:00")
@@ -161,6 +162,7 @@ test("rescheduleSessionsOnBlockedDate does not move a Sunday class into a Monday
   const movedSessions = await rescheduleSessionsOnBlockedDate(tx as never, localDate("2026-06-07"))
 
   assert.equal(movedSessions, 1)
+  assert.equal(sessions.some((session) => dateKey(session.date) === "2026-06-07"), false)
   assert.equal(dateKey(sessions[0].date), "2026-06-14")
   assert.equal(dateKey(sessions[1].date), "2026-06-08")
   assert.equal(sessions[1].scheduleSlotId, "slot_monday")
