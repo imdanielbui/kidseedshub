@@ -831,8 +831,8 @@ export default function PipelinePage() {
       {error ? <p className="rounded-2xl border border-brand-red/15 bg-white/50 p-3 text-sm text-brand-red">{error}</p> : null}
 
       {viewMode === "database" ? (
-        <section className="neu-card overflow-hidden rounded-3xl" style={{ flex: "0 0 auto" }}>
-          <div className="max-h-[62vh] overflow-auto">
+        <section className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#f5eeeb] text-xs uppercase tracking-wide text-stone-500">
                 <tr>
@@ -883,7 +883,7 @@ export default function PipelinePage() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-red/10 px-3 py-2 text-sm">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-brand-red/10 px-3 py-2 text-sm">
             <div className="flex items-center gap-2 text-stone-600">
               <span>
                 Trang {pipeline.page}/{totalPages}
