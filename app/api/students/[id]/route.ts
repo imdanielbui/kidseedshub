@@ -7,7 +7,7 @@ import { taskInclude, toTaskItem } from "@/lib/backend/task-mapper"
 import { assessmentStatusLabels } from "@/lib/contracts/assessment"
 import { attendanceStatusLabels } from "@/lib/contracts/classes"
 import type { StudentDetail } from "@/lib/contracts/students"
-import { can } from "@/lib/permissions"
+import { can, type Role } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { studentUpdateSchema } from "@/lib/validations/student"
 
@@ -70,7 +70,30 @@ const studentDetailInclude = Prisma.validator<Prisma.StudentInclude>()({
       }
     }
   },
-  photos: { orderBy: { takenAt: "desc" } },
+  photos: {
+    include: {
+      createdBy: { select: { name: true } },
+      attendance: {
+        include: {
+          classSession: {
+            include: {
+              class: {
+                include: { course: true }
+              }
+            }
+          }
+        }
+      },
+      classSession: {
+        include: {
+          class: {
+            include: { course: true }
+          }
+        }
+      }
+    },
+    orderBy: { takenAt: "desc" }
+  },
   contactLogs: { include: { loggedBy: true }, orderBy: { createdAt: "desc" } },
   tasks: { include: taskInclude, orderBy: { dueDate: "asc" } }
 })
@@ -147,13 +170,16 @@ function toLearningTimeline(student: StudentDetailRecord): StudentDetail["learni
   }
 
   for (const photo of student.photos) {
+    const className = photo.attendance?.classSession?.class.name ?? photo.classSession?.class.name
+    const courseName = photo.attendance?.classSession?.class.course.name ?? photo.classSession?.class.course.name
+
     items.push({
       id: `photo-${photo.id}`,
       type: "photo",
       title: photo.isFeatured ? "Ảnh nổi bật" : "Ảnh buổi học",
-      description: photo.attendanceId ? "Gắn với một buổi điểm danh." : undefined,
+      description: [photo.caption, className ? `Lớp ${className}` : undefined].filter(Boolean).join(" · ") || (photo.attendanceId ? "Gắn với một buổi điểm danh." : undefined),
       date: photo.takenAt.toISOString(),
-      meta: "Album"
+      meta: courseName ?? "Album"
     })
   }
 
@@ -190,7 +216,7 @@ function toAssessmentProgress(student: StudentDetailRecord): StudentDetail["asse
   })
 }
 
-function toStudentDetail(student: StudentDetailRecord): StudentDetail {
+function toStudentDetail(student: StudentDetailRecord, role: Role): StudentDetail {
   const activeClassByCourseId = new Map(
     student.classStudents
       .filter((classStudent) => classStudent.isActive && classStudent.class.isActive)
@@ -251,10 +277,19 @@ function toStudentDetail(student: StudentDetailRecord): StudentDetail {
     })),
     photos: student.photos.map((photo) => ({
       id: photo.id,
+      studentId: photo.studentId ?? undefined,
       url: photo.url,
+      caption: photo.caption ?? undefined,
       attendanceId: photo.attendanceId ?? undefined,
+      classSessionId: photo.classSessionId ?? photo.attendance?.classSessionId ?? undefined,
+      className: photo.attendance?.classSession?.class.name ?? photo.classSession?.class.name,
+      courseName: photo.attendance?.classSession?.class.course.name ?? photo.classSession?.class.course.name,
+      attendanceStatus: photo.attendance?.status,
       takenAt: photo.takenAt.toISOString(),
-      isFeatured: photo.isFeatured
+      isFeatured: photo.isFeatured,
+      isPublished: photo.isPublished,
+      sentToParentAt: photo.sentToParentAt?.toISOString(),
+      createdByName: photo.createdBy?.name
     })),
     learningTimeline: toLearningTimeline(student),
     assessmentProgress: toAssessmentProgress(student),
@@ -266,6 +301,9 @@ function toStudentDetail(student: StudentDetailRecord): StudentDetail {
       createdAt: log.createdAt.toISOString()
     })),
     tasks: student.tasks.map(toTaskItem),
+    permissions: {
+      canPublishPhotos: can(role, "photos:publish")
+    },
     createdAt: student.createdAt.toISOString(),
     updatedAt: student.updatedAt.toISOString()
   }
@@ -297,7 +335,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return fail({ code: "FORBIDDEN", message: "Bạn chỉ được xem học viên mình phụ trách." }, { status: 403 })
   }
 
-  return ok(toStudentDetail(student))
+  return ok(toStudentDetail(student, session.user.role))
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -370,7 +408,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       return fail({ code: "NOT_FOUND", message: "Học viên không tồn tại." }, { status: 404 })
     }
 
-    return ok(toStudentDetail(student))
+    return ok(toStudentDetail(student, session.user.role))
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return fail({ code: "DUPLICATE_PARENT", message: "Số điện thoại hoặc email phụ huynh đã tồn tại." }, { status: 409 })

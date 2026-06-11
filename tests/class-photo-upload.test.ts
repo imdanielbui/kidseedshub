@@ -24,6 +24,7 @@ test("parseClassPhotoUploadForm accepts a valid class photo multipart payload", 
   if (parsed.success) {
     assert.equal(parsed.data.studentId, "student_1")
     assert.equal(parsed.data.attendanceId, "attendance_1")
+    assert.equal(parsed.data.isPublished, false)
     assert.equal(parsed.data.file.name, "lesson.jpg")
   }
 })

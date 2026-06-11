@@ -43,6 +43,7 @@ export type ParentPortalJournalItem = {
   photos: Array<{
     id: string
     url: string
+    caption?: string
     takenAt: string
   }>
 }

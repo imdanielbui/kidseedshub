@@ -119,10 +119,19 @@ export type StudentClassItem = {
 
 export type StudentPhotoItem = {
   id: string
+  studentId?: string
   url: string
+  caption?: string
   attendanceId?: string
+  classSessionId?: string
+  className?: string
+  courseName?: string
+  attendanceStatus?: AttendanceStatusKey
   takenAt: string
   isFeatured: boolean
+  isPublished: boolean
+  sentToParentAt?: string
+  createdByName?: string
 }
 
 export type StudentLearningTimelineItem = {
@@ -162,4 +171,7 @@ export type StudentDetail = StudentListItem & {
   assessmentProgress: StudentAssessmentProgressItem[]
   contactLogs: StudentContactLogItem[]
   tasks: StudentTaskItem[]
+  permissions: {
+    canPublishPhotos: boolean
+  }
 }

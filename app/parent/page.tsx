@@ -52,7 +52,7 @@ export default function ParentPortalPage() {
   const totalBought = activeCourses.reduce((sum, course) => sum + course.sessionsBought, 0)
   const totalUsed = activeCourses.reduce((sum, course) => sum + course.sessionsUsed, 0)
   const progressPercent = totalBought ? Math.min(100, Math.round((totalUsed / totalBought) * 100)) : 0
-  const galleryPhotos = selectedChild?.journal.flatMap((item) => item.photos.map((photo) => ({ ...photo, date: item.date, note: item.note }))) ?? []
+  const galleryPhotos = selectedChild?.journal.flatMap((item) => item.photos.map((photo) => ({ ...photo, date: item.date, note: photo.caption ?? item.note }))) ?? []
   const nextSession = selectedChild?.upcomingSessions[0]
 
   useEffect(() => {

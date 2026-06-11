@@ -4,14 +4,11 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Eye,
-  EyeOff,
   Maximize2,
   Minimize2,
   Plus,
   RefreshCcw,
   Search,
-  Send,
   StickyNote,
   Trash2,
   UploadCloud
@@ -241,7 +238,6 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
   const [sessionPhotoPreviewUrls, setSessionPhotoPreviewUrls] = useState<string[]>([])
   const [sessionPhotoUrl, setSessionPhotoUrl] = useState("")
   const [sessionPhotoCaption, setSessionPhotoCaption] = useState("")
-  const [sessionPhotoPublish, setSessionPhotoPublish] = useState(true)
   const [photoCaptionDrafts, setPhotoCaptionDrafts] = useState<Record<string, string>>({})
   const sessionPhotoPreviewUrlsRef = useRef<string[]>([])
 
@@ -501,7 +497,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
         formData.append("classSessionId", sessionId)
         formData.append("takenAt", new Date().toISOString())
         formData.append("caption", sessionPhotoCaption.trim())
-        formData.append("isPublished", String(sessionPhotoPublish))
+        formData.append("isPublished", "false")
         formData.append("photo", file)
 
         const response = await fetch("/api/class-photos", {
@@ -526,7 +522,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
             classSessionId: sessionId,
             url,
             caption: sessionPhotoCaption.trim() || undefined,
-            isPublished: sessionPhotoPublish,
+            isPublished: false,
             takenAt: new Date().toISOString()
           })
         })
@@ -1537,15 +1533,15 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Album buổi học</p>
-                  <h3 className="mt-1 text-base font-semibold text-brand-ink">Ảnh gửi phụ huynh</h3>
+                  <h3 className="mt-1 text-base font-semibold text-brand-ink">Ảnh lớp nội bộ</h3>
                   <p className="mt-1 text-xs text-stone-500">
-                    Quản lý ảnh theo buổi học, dùng được cả khi giáo viên bổ sung ảnh sau ngày học.
+                    Quản lý ảnh theo buổi học. Ảnh riêng của bé sẽ được duyệt gửi trong profile học viên.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
                   <span className="rounded-2xl border border-brand-red/10 px-3 py-2">{selectedSessionPhotos.length} ảnh</span>
                   <span className="rounded-2xl border border-brand-red/10 px-3 py-2">
-                    {selectedSessionPhotos.filter((photo) => photo.isPublished).length} phụ huynh thấy
+                    {selectedSessionPhotos.filter((photo) => !photo.studentId).length} ảnh chung
                   </span>
                 </div>
               </div>
@@ -1594,14 +1590,6 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                       onChange={(event) => setSessionPhotoUrl(event.target.value)}
                       placeholder="https://..."
                     />
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
-                    <input
-                      type="checkbox"
-                      checked={sessionPhotoPublish}
-                      onChange={(event) => setSessionPhotoPublish(event.target.checked)}
-                    />
-                    Hiển thị cho phụ huynh sau khi lưu
                   </label>
                 </div>
                 <div className="flex flex-col gap-2 lg:items-end lg:justify-end">
@@ -1660,24 +1648,6 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                         <button
                           type="button"
                           disabled={photoSavingId === photo.id}
-                          className="neu-list-item inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-stone-600 hover:text-brand-red disabled:opacity-50"
-                          onClick={() => void patchClassPhoto(photo.id, photo.isPublished ? { isPublished: false } : { markSent: true })}
-                        >
-                          {photo.isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                          {photo.isPublished ? "Ẩn" : "Hiện"}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={photoSavingId === photo.id}
-                          className="neu-list-item inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-stone-600 hover:text-brand-red disabled:opacity-50"
-                          onClick={() => void patchClassPhoto(photo.id, { markSent: true })}
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                          Gửi PH
-                        </button>
-                        <button
-                          type="button"
-                          disabled={photoSavingId === photo.id}
                           className="neu-list-item inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-brand-red disabled:opacity-50"
                           onClick={() => void deleteClassPhoto(photo)}
                         >
@@ -1689,7 +1659,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                   </article>
                 )) : (
                   <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500 md:col-span-2">
-                    Chưa có ảnh cho buổi học này. Có thể thêm ảnh sau buổi học rồi gửi phụ huynh.
+                    Chưa có ảnh cho buổi học này.
                   </p>
                 )}
               </div>

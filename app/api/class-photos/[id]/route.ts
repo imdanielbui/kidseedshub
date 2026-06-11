@@ -55,6 +55,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params
   const data = parsed.data
+  const changesVisibility = data.isPublished !== undefined || data.markSent
+
+  if (changesVisibility && !can(session.user.role, "photos:publish")) {
+    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền duyệt gửi ảnh cho phụ huynh." }, { status: 403 })
+  }
 
   try {
     const photo = await prisma.classPhoto.update({
@@ -88,7 +93,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return fail({ code: "UNAUTHORIZED", message: "Bạn cần đăng nhập." }, { status: 401 })
   }
 
-  if (!can(session.user.role, "photos:upload")) {
+  if (!can(session.user.role, "photos:publish")) {
     return fail({ code: "FORBIDDEN", message: "Bạn không có quyền xóa ảnh lớp." }, { status: 403 })
   }
 

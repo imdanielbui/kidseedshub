@@ -7,11 +7,8 @@ import {
   Check,
   CircleSlash,
   Clock,
-  Eye,
-  EyeOff,
   ImagePlus,
   QrCode,
-  Send,
   Settings2,
   StickyNote,
   Trash2,
@@ -87,13 +84,16 @@ export default function ClassesPage() {
   const [classPhotoPreviewUrls, setClassPhotoPreviewUrls] = useState<string[]>([])
   const [classPhotoUrl, setClassPhotoUrl] = useState("")
   const [classPhotoCaption, setClassPhotoCaption] = useState("")
-  const [classPhotoPublish, setClassPhotoPublish] = useState(true)
+  const [studentPhotoFilesById, setStudentPhotoFilesById] = useState<Record<string, File[]>>({})
+  const [studentPhotoPreviewUrlsById, setStudentPhotoPreviewUrlsById] = useState<Record<string, string[]>>({})
+  const [studentPhotoCaptionsById, setStudentPhotoCaptionsById] = useState<Record<string, string>>({})
   const [classPhotosBySession, setClassPhotosBySession] = useState<Record<string, ClassPhotoListItem[]>>({})
   const [photoCaptionDrafts, setPhotoCaptionDrafts] = useState<Record<string, string>>({})
   const [qrCode, setQrCode] = useState("")
   const [qrResult, setQrResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const classPhotoPreviewUrlsRef = useRef<string[]>([])
+  const studentPhotoPreviewUrlsRef = useRef<Record<string, string[]>>({})
 
   const selectedClass = useMemo(
     () => classes.find((klass) => klass.id === selectedClassId) ?? classes[0],
@@ -166,6 +166,9 @@ export default function ClassesPage() {
   useEffect(() => {
     return () => {
       classPhotoPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+      // The ref intentionally stores the latest preview URLs created by file inputs.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      Object.values(studentPhotoPreviewUrlsRef.current).flat().forEach((url) => URL.revokeObjectURL(url))
     }
   }, [])
 
@@ -174,6 +177,21 @@ export default function ClassesPage() {
     classPhotoPreviewUrlsRef.current = []
     setClassPhotoFiles([])
     setClassPhotoPreviewUrls([])
+  }
+
+  function clearStudentPhotoFiles(studentId: string) {
+    studentPhotoPreviewUrlsRef.current[studentId]?.forEach((url) => URL.revokeObjectURL(url))
+    delete studentPhotoPreviewUrlsRef.current[studentId]
+    setStudentPhotoFilesById((current) => {
+      const next = { ...current }
+      delete next[studentId]
+      return next
+    })
+    setStudentPhotoPreviewUrlsById((current) => {
+      const next = { ...current }
+      delete next[studentId]
+      return next
+    })
   }
 
   function selectClassPhotoFiles(event: ChangeEvent<HTMLInputElement>) {
@@ -199,6 +217,30 @@ export default function ClassesPage() {
     setClassPhotoFiles(files)
     setClassPhotoPreviewUrls(previewUrls)
     setClassPhotoUrl("")
+  }
+
+  function selectStudentPhotoFiles(studentId: string, event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    if (!files.length) return
+
+    if (files.some((file) => !isAcceptedPhotoFile(file))) {
+      setError("Ảnh học viên chỉ hỗ trợ JPG, PNG, WebP hoặc GIF.")
+      event.target.value = ""
+      return
+    }
+
+    if (files.some((file) => file.size > classPhotoUploadMaxBytes)) {
+      setError("Ảnh học viên không được vượt quá 8MB.")
+      event.target.value = ""
+      return
+    }
+
+    clearStudentPhotoFiles(studentId)
+    const previewUrls = files.map((file) => URL.createObjectURL(file))
+    studentPhotoPreviewUrlsRef.current[studentId] = previewUrls
+    setError(null)
+    setStudentPhotoFilesById((current) => ({ ...current, [studentId]: files }))
+    setStudentPhotoPreviewUrlsById((current) => ({ ...current, [studentId]: previewUrls }))
   }
 
   async function markAttendance(classId: string, student: TodayClassStudent, status: AttendanceStatusKey) {
@@ -308,7 +350,7 @@ export default function ClassesPage() {
         formData.append("classSessionId", sessionId)
         formData.append("takenAt", new Date().toISOString())
         formData.append("caption", classPhotoCaption.trim())
-        formData.append("isPublished", String(classPhotoPublish))
+        formData.append("isPublished", "false")
         formData.append("photo", file)
 
         const response = await fetch("/api/class-photos", {
@@ -334,7 +376,7 @@ export default function ClassesPage() {
             classSessionId: sessionId,
             url,
             caption: classPhotoCaption.trim() || undefined,
-            isPublished: classPhotoPublish,
+            isPublished: false,
             takenAt: new Date().toISOString()
           })
         })
@@ -366,6 +408,83 @@ export default function ClassesPage() {
       clearClassPhotoFiles()
     } catch {
       setError("Không lưu được ảnh buổi học.")
+    } finally {
+      setPhotoSavingId(null)
+    }
+  }
+
+  async function submitStudentPhotos(classId: string, student: TodayClassStudent) {
+    const sessionId = selectedClass?.sessionId
+    const files = studentPhotoFilesById[student.studentId] ?? []
+    const caption = studentPhotoCaptionsById[student.studentId]?.trim() ?? ""
+
+    if (!sessionId || !student.attendanceId) {
+      setError("Cần điểm danh học viên trong buổi học này trước khi upload ảnh bé.")
+      return
+    }
+
+    if (!files.length) {
+      setError("Chọn ảnh bé trước khi lưu.")
+      return
+    }
+
+    setPhotoSavingId(`student-${student.studentId}`)
+    setError(null)
+
+    try {
+      const createdPhotos: ClassPhotoListItem[] = []
+
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append("studentId", student.studentId)
+        formData.append("attendanceId", student.attendanceId)
+        formData.append("classSessionId", sessionId)
+        formData.append("takenAt", new Date().toISOString())
+        formData.append("caption", caption)
+        formData.append("isPublished", "false")
+        formData.append("photo", file)
+
+        const response = await fetch("/api/class-photos", {
+          method: "POST",
+          body: formData
+        })
+        const payload = (await response.json()) as ApiResponse<ClassPhotoListItem>
+
+        if (!response.ok || !payload.success || !payload.data) {
+          setError(payload.error?.message ?? "Không lưu được ảnh học viên.")
+          return
+        }
+
+        createdPhotos.push(payload.data)
+      }
+
+      setClasses((current) =>
+        current.map((klass) =>
+          klass.id === classId
+            ? {
+                ...klass,
+                photoCount: klass.photoCount + createdPhotos.length,
+                students: klass.students.map((item) =>
+                  item.studentId === student.studentId
+                    ? { ...item, photoCount: item.photoCount + createdPhotos.length }
+                    : item
+                )
+              }
+            : klass
+        )
+      )
+      setClassPhotosBySession((current) => ({
+        ...current,
+        [sessionId]: [...createdPhotos, ...(current[sessionId] ?? [])]
+      }))
+      setPhotoCaptionDrafts((current) => ({
+        ...current,
+        ...Object.fromEntries(createdPhotos.map((photo) => [photo.id, photo.caption ?? ""]))
+      }))
+      setStudentPhotoCaptionsById((current) => ({ ...current, [student.studentId]: "" }))
+      clearStudentPhotoFiles(student.studentId)
+    } catch {
+      setError("Không lưu được ảnh học viên.")
     } finally {
       setPhotoSavingId(null)
     }
@@ -811,12 +930,13 @@ export default function ClassesPage() {
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Album buổi học</p>
-                      <h3 className="mt-1 text-base font-semibold text-brand-ink">Ảnh gửi phụ huynh</h3>
+                      <h3 className="mt-1 text-base font-semibold text-brand-ink">Ảnh lớp nội bộ</h3>
+                      <p className="mt-1 text-xs text-stone-500">Ảnh riêng của bé upload ở từng học viên và duyệt gửi trong profile.</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
                       <span className="rounded-2xl border border-brand-red/10 px-3 py-2">{selectedClassPhotos.length} ảnh</span>
                       <span className="rounded-2xl border border-brand-red/10 px-3 py-2">
-                        {selectedClassPhotos.filter((photo) => photo.isPublished).length} đã gửi
+                        {selectedClassPhotos.filter((photo) => !photo.studentId).length} ảnh chung
                       </span>
                     </div>
                   </div>
@@ -866,14 +986,6 @@ export default function ClassesPage() {
                           onChange={(event) => setClassPhotoUrl(event.target.value)}
                           placeholder="https://..."
                         />
-                      </label>
-                      <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
-                        <input
-                          type="checkbox"
-                          checked={classPhotoPublish}
-                          onChange={(event) => setClassPhotoPublish(event.target.checked)}
-                        />
-                        Hiển thị cho phụ huynh sau khi lưu
                       </label>
                     </div>
                     <div className="flex flex-col gap-2 xl:items-end xl:justify-end">
@@ -928,24 +1040,6 @@ export default function ClassesPage() {
                             >
                               <StickyNote className="h-3.5 w-3.5" />
                               Lưu
-                            </button>
-                            <button
-                              type="button"
-                              disabled={photoSavingId === photo.id}
-                              className="neu-list-item inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-stone-600 hover:text-brand-red disabled:opacity-50"
-                              onClick={() => void patchClassPhoto(photo.id, photo.isPublished ? { isPublished: false } : { markSent: true })}
-                            >
-                              {photo.isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                              {photo.isPublished ? "Ẩn" : "Hiện"}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={photoSavingId === photo.id}
-                              className="neu-list-item inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-stone-600 hover:text-brand-red disabled:opacity-50"
-                              onClick={() => void patchClassPhoto(photo.id, { markSent: true })}
-                            >
-                              <Send className="h-3.5 w-3.5" />
-                              Gửi PH
                             </button>
                             <button
                               type="button"
@@ -1029,7 +1123,7 @@ export default function ClassesPage() {
                               </div>
                             </div>
                             {isExpanded ? (
-                              <div className="content-border mt-3 grid gap-3 pt-3">
+                              <div className="content-border mt-3 grid gap-4 pt-3">
                                 <label className="block text-xs font-semibold text-stone-600">
                                   Ghi chú buổi học
                                   <input
@@ -1039,6 +1133,78 @@ export default function ClassesPage() {
                                     placeholder="Điểm nổi bật, lưu ý cần follow-up..."
                                   />
                                 </label>
+                                <div className="rounded-2xl border border-brand-red/10 bg-white/35 p-3">
+                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                      <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Ảnh bé</p>
+                                      <p className="mt-1 text-xs text-stone-500">
+                                        Ảnh lưu nháp vào profile học viên. Admin/Sale duyệt trước khi phụ huynh thấy.
+                                      </p>
+                                    </div>
+                                    <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-stone-600">
+                                      {student.photoCount} ảnh đã lưu
+                                    </span>
+                                  </div>
+                                  <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px_auto]">
+                                    <div className="space-y-3">
+                                      <label className="block text-xs font-semibold text-stone-600">
+                                        Chọn ảnh của bé
+                                        <input
+                                          className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-3 py-2 text-sm text-brand-ink outline-none file:mr-3 file:rounded-xl file:border-0 file:bg-brand-red file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white disabled:opacity-60"
+                                          type="file"
+                                          multiple
+                                          accept={classPhotoUploadAcceptedMimeTypes.join(",")}
+                                          disabled={!student.attendanceId}
+                                          onChange={(event) => selectStudentPhotoFiles(student.studentId, event)}
+                                        />
+                                      </label>
+                                      {studentPhotoPreviewUrlsById[student.studentId]?.length ? (
+                                        <div className="grid gap-2 sm:grid-cols-3">
+                                          {studentPhotoPreviewUrlsById[student.studentId].map((url, index) => (
+                                            <div key={url} className="rounded-2xl border border-brand-red/10 bg-white/45 p-2">
+                                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                                              <img src={url} alt={`Ảnh ${student.studentName} ${index + 1}`} className="h-24 w-full rounded-xl object-cover" />
+                                              <p className="mt-2 truncate text-xs font-semibold text-brand-ink">{studentPhotoFilesById[student.studentId]?.[index]?.name}</p>
+                                              <p className="mt-1 text-xs text-stone-500">{formatFileSize(studentPhotoFilesById[student.studentId]?.[index]?.size ?? 0)}</p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                      {!student.attendanceId ? (
+                                        <p className="text-xs font-semibold text-stone-500">Điểm danh học viên trước, sau đó mới upload ảnh bé.</p>
+                                      ) : null}
+                                    </div>
+                                    <label className="block text-xs font-semibold text-stone-600">
+                                      Ghi chú ảnh
+                                      <textarea
+                                        className="neu-pressed mt-2 min-h-20 w-full resize-none rounded-2xl bg-transparent px-3 py-2 text-sm text-brand-ink outline-none placeholder:text-stone-400"
+                                        value={studentPhotoCaptionsById[student.studentId] ?? ""}
+                                        onChange={(event) => setStudentPhotoCaptionsById((current) => ({ ...current, [student.studentId]: event.target.value }))}
+                                        placeholder="Khoảnh khắc, sản phẩm, hoạt động của bé..."
+                                      />
+                                    </label>
+                                    <div className="flex flex-col gap-2 lg:items-end lg:justify-end">
+                                      <button
+                                        type="button"
+                                        disabled={!student.attendanceId || photoSavingId === `student-${student.studentId}`}
+                                        onClick={() => void submitStudentPhotos(selectedClass.id, student)}
+                                        className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-50"
+                                      >
+                                        <UploadCloud className="h-4 w-4" />
+                                        {photoSavingId === `student-${student.studentId}` ? "Đang lưu" : "Lưu nháp"}
+                                      </button>
+                                      {studentPhotoFilesById[student.studentId]?.length ? (
+                                        <button
+                                          type="button"
+                                          className="rounded-2xl border border-brand-red/15 px-4 py-2 text-xs font-semibold text-brand-red"
+                                          onClick={() => clearStudentPhotoFiles(student.studentId)}
+                                        >
+                                          Gỡ ảnh chọn
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             ) : null}
                             {!isExpanded && (student.attendanceNote || student.photoCount > 0) ? (

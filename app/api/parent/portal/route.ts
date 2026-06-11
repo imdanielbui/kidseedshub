@@ -235,6 +235,7 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
               photos: uniquePhotos.map((photo) => ({
                 id: photo.id,
                 url: photo.url,
+                caption: photo.caption ?? undefined,
                 takenAt: photo.takenAt.toISOString()
               }))
             }
