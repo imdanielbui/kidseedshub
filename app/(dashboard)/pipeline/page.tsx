@@ -650,16 +650,10 @@ export default function PipelinePage() {
   }
 
   return (
-    <main className="space-y-4">
-      <section className="neu-card rounded-3xl p-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">CRM Database</p>
-            <h1 className="truncate text-2xl font-semibold text-brand-ink">Pipeline Sale</h1>
-          </div>
-
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <label className="inline-flex min-w-56 flex-1 items-center gap-2 rounded-full border border-brand-red/10 bg-white/50 px-4 py-2 text-sm text-stone-600 xl:max-w-sm">
+    <main className="space-y-3">
+      <section className="neu-card rounded-3xl p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex min-w-56 flex-1 items-center gap-2 rounded-full border border-brand-red/10 bg-white/50 px-4 py-2 text-sm text-stone-600 xl:max-w-md">
               <Search className="h-4 w-4" />
               <input
                 className="w-full bg-transparent outline-none"
@@ -691,10 +685,9 @@ export default function PipelinePage() {
               <SlidersHorizontal className="h-4 w-4" />
               Trường
             </button>
-          </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-stone-600">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600">
           <span className="rounded-full border border-brand-red/10 bg-white/40 px-3 py-1 font-semibold text-brand-red">{pipeline.total} lead</span>
           {visibleStageChips.map((stage) => (
             <button
@@ -890,20 +883,20 @@ export default function PipelinePage() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brand-red/10 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-red/10 px-3 py-2 text-sm">
             <div className="flex items-center gap-2 text-stone-600">
               <span>
                 Trang {pipeline.page}/{totalPages}
               </span>
-              <select className="rounded-full border border-brand-red/10 bg-white/50 px-3 py-2 outline-none" value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1) }}>
+              <select className="rounded-full border border-brand-red/10 bg-white/50 px-3 py-1.5 text-sm outline-none" value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1) }}>
                 <option value={25}>25 dòng</option>
                 <option value={50}>50 dòng</option>
                 <option value={100}>100 dòng</option>
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Trước</button>
-              <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Sau</button>
+              <button className="glass-button-secondary px-3 py-1.5 text-xs font-semibold" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Trước</button>
+              <button className="glass-button-secondary px-3 py-1.5 text-xs font-semibold" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Sau</button>
             </div>
           </div>
         </section>

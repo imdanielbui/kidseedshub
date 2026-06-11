@@ -39,11 +39,11 @@ const mobileNavItems = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useSidebarState()
-  const sidebarWidth = isCollapsed ? "md:pl-28" : "md:pl-72"
+  const sidebarWidth = isCollapsed ? "md:pl-24" : "md:pl-[17rem]"
 
   return (
     <div className="min-h-screen pb-20 text-brand-ink md:pb-0">
-      <aside className={`fixed inset-y-0 left-0 hidden p-5 transition-[width] duration-300 md:block ${isCollapsed ? "w-28" : "w-72"}`}>
+      <aside className={`fixed inset-y-0 left-0 hidden p-4 transition-[width] duration-300 md:block ${isCollapsed ? "w-24" : "w-[17rem]"}`}>
         <div className="neu-panel flex h-full flex-col rounded-3xl p-4">
           <div className="mb-6 flex items-center justify-center">
             <BrandLogo
@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
-        <div className="dashboard-content flex min-h-[calc(100vh-5rem)] flex-col p-4 transition-[padding] md:px-8 md:pb-5 md:pt-8">{children}</div>
+        <div className="dashboard-content flex min-h-[calc(100vh-5rem)] flex-col p-4 transition-[padding] md:px-5 md:pb-5 md:pt-6">{children}</div>
         <nav className="fixed inset-x-0 bottom-0 grid grid-cols-4 border-t border-brand-red/10 bg-brand-cream/90 px-3 py-2 backdrop-blur md:hidden">
           {mobileNavItems.map((item) => {
             const Icon = item.icon
