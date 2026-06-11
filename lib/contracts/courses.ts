@@ -12,6 +12,7 @@ export type CourseListItem = {
 
 export type ClassListItem = {
   id: string
+  code?: string
   name: string
   courseId: string
   courseName: string

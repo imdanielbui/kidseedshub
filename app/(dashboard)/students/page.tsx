@@ -18,8 +18,10 @@ type SortDirection = "asc" | "desc"
 type ColumnKey =
   | "code"
   | "name"
+  | "dataSource"
   | "parentName"
   | "parentPhone"
+  | "address"
   | "status"
   | "sessionsRemaining"
   | "courses"
@@ -33,8 +35,10 @@ type ColumnKey =
 const columnLabels: Record<ColumnKey, string> = {
   code: "Mã HS",
   name: "Học viên",
+  dataSource: "Nguồn dữ liệu",
   parentName: "Phụ huynh",
   parentPhone: "SĐT",
+  address: "Địa chỉ",
   status: "Trạng thái",
   sessionsRemaining: "Buổi còn",
   courses: "Khóa",
@@ -49,8 +53,10 @@ const columnLabels: Record<ColumnKey, string> = {
 const defaultColumnOrder: ColumnKey[] = [
   "code",
   "name",
+  "dataSource",
   "parentName",
   "parentPhone",
+  "address",
   "status",
   "sessionsRemaining",
   "courses",
@@ -172,6 +178,7 @@ export default function StudentsPage() {
           leadSource: leadForm.leadSource.trim() || undefined,
           leadNote: leadForm.leadNote.trim() || undefined,
           healthNote: leadForm.healthNote.trim() || undefined,
+          address: leadForm.address.trim() || undefined,
           saleOwnerId: leadForm.saleOwnerId || undefined,
           classId: leadForm.classId || undefined,
           parent: {
@@ -221,6 +228,7 @@ export default function StudentsPage() {
 
   function renderCell(student: StudentListItem, column: ColumnKey) {
     if (column === "status") return studentStatusLabels[student.status]
+    if (column === "dataSource") return student.code.startsWith("HV-") ? "Dữ liệu thật" : "Demo/seed"
     if (column === "sessionsRemaining") return `${student.sessionsRemaining} buổi`
     if (column === "courses") return student.courses.length ? `${student.courses.length} khóa` : "Chưa có khóa"
     if (column === "createdAt" || column === "updatedAt") return formatDate(student[column])

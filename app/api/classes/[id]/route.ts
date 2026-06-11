@@ -24,6 +24,7 @@ type ClassListRecord = Prisma.ClassGetPayload<{ include: typeof classListInclude
 function toClassListItem(klass: ClassListRecord): ClassListItem {
   return {
     id: klass.id,
+    code: klass.code ?? undefined,
     name: klass.name,
     courseId: klass.courseId,
     courseName: klass.course.name,
@@ -114,6 +115,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         where: { id },
         data: {
           name: parsed.data.name,
+          code: parsed.data.code,
           courseId: parsed.data.courseId,
           teacherId: parsed.data.teacherId,
           weekday: primarySlot.weekday,

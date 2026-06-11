@@ -63,6 +63,7 @@ export type StudentListItem = {
   name: string
   status: StudentStatusKey
   gender: StudentGenderKey
+  address?: string
   parentName: string
   parentPhone: string
   leadSource?: string

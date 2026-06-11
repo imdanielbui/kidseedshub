@@ -9,6 +9,7 @@ export type LeadFormState = {
   parentName: string
   parentPhone: string
   parentEmail: string
+  address: string
   studentName: string
   birthDate: string
   gender: StudentGenderKey
@@ -23,6 +24,7 @@ export const emptyLeadForm: LeadFormState = {
   parentName: "",
   parentPhone: "",
   parentEmail: "",
+  address: "",
   studentName: "",
   birthDate: "",
   gender: "UNKNOWN",
@@ -56,6 +58,7 @@ export function LeadFormPanel({ value, onChange, options, isSubmitting, onSubmit
       <LeadInput label="Số điện thoại" value={value.parentPhone} onChange={(nextValue) => update("parentPhone", nextValue)} required />
       <LeadInput label="Tên học viên" value={value.studentName} onChange={(nextValue) => update("studentName", nextValue)} required />
       <LeadInput label="Email phụ huynh" type="email" value={value.parentEmail} onChange={(nextValue) => update("parentEmail", nextValue)} />
+      <LeadInput label="Địa chỉ" value={value.address} onChange={(nextValue) => update("address", nextValue)} />
       <LeadInput label="Ngày sinh" type="date" value={value.birthDate} onChange={(nextValue) => update("birthDate", nextValue)} />
 
       <label className="block">

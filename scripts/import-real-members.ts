@@ -1,0 +1,687 @@
+import { spawnSync } from "node:child_process"
+import path from "node:path"
+import bcrypt from "bcryptjs"
+import { Prisma, PrismaClient, type CourseSubject, type Gender, type StudentStatus } from "@prisma/client"
+import { replaceClassSchedule, type ScheduleSlotInput } from "../lib/backend/class-schedule"
+import { createParentInitialPassword } from "../lib/backend/parent-password"
+
+const prisma = new PrismaClient()
+
+const defaultFiles = [
+  "/Users/mac/Downloads/danh_sach_thanh_vien(1).xls",
+  "/Users/mac/Downloads/danh_sach_thanh_vien(2).xls"
+]
+
+type RawRow = Record<string, unknown>
+
+type ParsedClass = {
+  code: string
+  name: string
+  status?: string
+  ageRange?: string
+  subject: CourseSubject
+  courseName: string
+  startDate?: string
+  weekday: number
+  startTime: string
+  endTime: string
+  slots: ScheduleSlotInput[]
+  isActive: boolean
+}
+
+type ParsedMember = {
+  rowNumber: number
+  sourceFile: string
+  code: string
+  name: string
+  parentName: string
+  parentPhone: string
+  parentEmail?: string
+  invalidEmail?: string
+  birthDate?: Date
+  gender: Gender
+  address?: string
+  status: StudentStatus
+  leadSource?: string
+  healthNote?: string
+  leadNote: string
+  createdAt?: Date
+  classes: ParsedClass[]
+}
+
+type ImportStats = {
+  files: number
+  rows: number
+  studentsCreated: number
+  studentsUpdated: number
+  parentsCreated: number
+  parentsUpdated: number
+  coursesCreated: number
+  classesCreated: number
+  classSchedulesRefreshed: number
+  classMembershipsCreated: number
+  classMembershipsUpdated: number
+  enrollmentsCreated: number
+  enrollmentsUpdated: number
+  invalidPhoneFallbacks: number
+  invalidEmailsSkipped: number
+  skippedRows: number
+}
+
+type Tx = Prisma.TransactionClient
+
+function argValue(name: string) {
+  const prefix = `--${name}=`
+  return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length)
+}
+
+function hasFlag(name: string) {
+  return process.argv.includes(`--${name}`)
+}
+
+function text(value: unknown) {
+  return String(value ?? "").trim()
+}
+
+function parseWorkbook(filePath: string): RawRow[] {
+  const result = spawnSync("npx", ["--yes", "xlsx-cli", "--json", filePath], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024 * 20
+  })
+
+  if (result.status !== 0) {
+    throw new Error(`Không đọc được file ${filePath}: ${result.stderr || result.stdout}`)
+  }
+
+  const parsed = JSON.parse(result.stdout) as unknown
+  if (!Array.isArray(parsed)) {
+    throw new Error(`File ${filePath} không trả về danh sách dòng hợp lệ.`)
+  }
+
+  return parsed as RawRow[]
+}
+
+function normalizePhone(value: string, code: string) {
+  const candidates = value
+    .split(/[\n,;/|]+/)
+    .map((part) => part.replace(/\D/g, ""))
+    .filter(Boolean)
+
+  const valid = candidates.find((candidate) => candidate.length >= 8)
+  return {
+    phone: valid ?? `IMPORT-${code}`,
+    usedFallback: !valid
+  }
+}
+
+function normalizeEmail(value: string) {
+  if (!value || !value.includes("@")) return undefined
+  const normalized = value.toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : undefined
+}
+
+function parseDateOnly(value: string) {
+  const normalized = value.trim()
+  if (!normalized || normalized.startsWith("0001-")) return undefined
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return undefined
+  const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+function parseDateTime(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return undefined
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}))?/)
+  if (!match) return undefined
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4] ?? "0"),
+    Number(match[5] ?? "0")
+  )
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+function parseClassStartDate(value: string) {
+  const match = value.match(/(?:^|[_\s])(\d{2})\/(\d{2})\/(\d{2})(?:[_\s]|$)/)
+  if (!match) return undefined
+  const year = 2000 + Number(match[1])
+  return `${year}-${match[2]}-${match[3]}`
+}
+
+function parseGender(value: string): Gender {
+  const normalized = value.toLowerCase()
+  if (normalized.includes("nữ") || normalized.includes("nu")) return "FEMALE"
+  if (normalized.includes("nam")) return "MALE"
+  return "UNKNOWN"
+}
+
+function parseStatus(row: RawRow, classes: ParsedClass[]): StudentStatus {
+  const relationship = text(row["Mối quan hệ"]).toLowerCase()
+  const hasInvoice = Boolean(text(row["Hóa đơn đầu tiên"]))
+  const hasActiveClass = classes.some((klass) => klass.isActive)
+
+  if (hasActiveClass || hasInvoice) return "ACTIVE"
+  if (relationship.includes("học thử") || relationship.includes("hứa đi học")) return "TRIAL"
+  if (relationship.includes("thẩm định")) return "EVALUATION"
+  if (relationship.includes("đăng ký form")) return "CONVERTED"
+  return "LEAD"
+}
+
+function parseTimeToken(value: string) {
+  const match = value.match(/(\d{1,2})H(?:(\d{2}))?-(\d{1,2})H(?:(\d{2}))?/i)
+  if (!match) return undefined
+  const startHour = match[1].padStart(2, "0")
+  const startMinute = (match[2] ?? "00").padStart(2, "0")
+  const endHour = match[3].padStart(2, "0")
+  const endMinute = (match[4] ?? "00").padStart(2, "0")
+  return {
+    startTime: `${startHour}:${startMinute}`,
+    endTime: `${endHour}:${endMinute}`
+  }
+}
+
+function parseWeekdays(value: string) {
+  const compact = value.replace(/\s+/g, "_").toUpperCase()
+  const segment = compact.match(/(?:^|[_/])T((?:[2-7]|CN|&)+)(?=[_/]|$)/)?.[1]
+  if (!segment) return []
+
+  const weekdays: number[] = []
+  for (let index = 0; index < segment.length; index += 1) {
+    const token = segment[index]
+    if (token >= "2" && token <= "7") {
+      weekdays.push(Number(token) - 1)
+    } else if (token === "C" && segment[index + 1] === "N") {
+      weekdays.push(0)
+      index += 1
+    }
+  }
+
+  return Array.from(new Set(weekdays))
+}
+
+function inferSubject(value: string): CourseSubject {
+  const normalized = value.toUpperCase()
+  return normalized.includes("RO") || normalized.includes("ROBOTICS") ? "ROBOTICS" : "FUN"
+}
+
+function inferCourseName(value: string, subject: CourseSubject) {
+  const normalized = value.toUpperCase()
+  if (subject === "ROBOTICS") return "Imported Robotics"
+  if (normalized.includes("ENG")) return "Imported English"
+  if (normalized.includes("BIO") || normalized.includes("SINH")) return "Imported Biology"
+  if (normalized.includes("WS")) return "Imported Workshop"
+  if (normalized.includes("TIỀN") || normalized.includes("TIỀN")) return "Imported Tien Tieu Hoc"
+  return "Imported FUN"
+}
+
+function parseClassEntry(value: string): ParsedClass | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+
+  const statusMatch = trimmed.match(/\(([^()]*)\)\s*$/)
+  const status = statusMatch?.[1]?.trim()
+  const statusIndex = statusMatch?.index ?? trimmed.length
+  const withoutStatus = status ? trimmed.slice(0, statusIndex).trim() : trimmed
+  const ageMatch = withoutStatus.match(/\(([^()]*)\)\s*$/)
+  const ageRange = ageMatch?.[1]?.trim()
+  const ageIndex = ageMatch?.index ?? withoutStatus.length
+  const code = (ageRange ? withoutStatus.slice(0, ageIndex).trim() : withoutStatus).trim()
+
+  if (!code) return undefined
+
+  const subject = inferSubject(code)
+  const time = parseTimeToken(code) ?? { startTime: "17:00", endTime: "18:30" }
+  const weekdays = parseWeekdays(code)
+  const isActive = !["finished", "no class schedule yet"].includes((status ?? "").toLowerCase())
+  const slots = (weekdays.length ? weekdays : [1]).map((weekday) => ({
+    weekday,
+    startTime: time.startTime,
+    endTime: time.endTime,
+    isActive
+  }))
+
+  return {
+    code: code.slice(0, 160),
+    name: code,
+    status,
+    ageRange,
+    subject,
+    courseName: inferCourseName(code, subject),
+    startDate: parseClassStartDate(code),
+    weekday: slots[0].weekday,
+    startTime: time.startTime,
+    endTime: time.endTime,
+    slots,
+    isActive
+  }
+}
+
+function parseClasses(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return []
+
+  return normalized
+    .split(/\n+/)
+    .map(parseClassEntry)
+    .filter((klass): klass is ParsedClass => Boolean(klass))
+}
+
+function buildLeadNote(row: RawRow, sourceFile: string, rowNumber: number, invalidEmail?: string) {
+  const notes = [
+    `Import dữ liệu thật từ ${path.basename(sourceFile)} dòng ${rowNumber}.`,
+    text(row["Mối quan hệ"]) ? `Mối quan hệ: ${text(row["Mối quan hệ"])}` : "",
+    text(row["Được sale bởi"]) ? `Sale gốc: ${text(row["Được sale bởi"])}` : "",
+    text(row["Giáo viên phụ trách"]) ? `Giáo viên phụ trách gốc: ${text(row["Giáo viên phụ trách"])}` : "",
+    text(row["Được tạo bởi"]) ? `Người tạo gốc: ${text(row["Được tạo bởi"])}` : "",
+    text(row["Hóa đơn đầu tiên"]) ? `Hóa đơn đầu tiên: ${text(row["Hóa đơn đầu tiên"])}` : "",
+    invalidEmail ? `Email gốc không hợp lệ: ${invalidEmail}` : "",
+    text(row["Mô tả"]) ? `Mô tả: ${text(row["Mô tả"])}` : ""
+  ]
+
+  return notes.filter(Boolean).join("\n")
+}
+
+function parseMembers(files: string[]) {
+  const members: ParsedMember[] = []
+  const skippedRows: Array<{ file: string; rowNumber: number; reason: string }> = []
+
+  for (const file of files) {
+    const rows = parseWorkbook(file)
+    rows.forEach((row, index) => {
+      const rowNumber = index + 2
+      const code = text(row["Mã số"])
+      const name = text(row["Họ và tên"])
+
+      if (!code || !name) {
+        skippedRows.push({ file, rowNumber, reason: "Thiếu mã số hoặc họ tên" })
+        return
+      }
+
+      const phone = normalizePhone(text(row["Số điện thoại"]), code)
+      const rawEmail = text(row["Thư điện tử"])
+      const parentEmail = normalizeEmail(rawEmail)
+      const classes = parseClasses(text(row["Lớp học"]))
+      const parentName = text(row["Tên phụ huynh"]) || text(row["Phụ huynh"]) || `PH - ${name}`
+
+      members.push({
+        rowNumber,
+        sourceFile: file,
+        code,
+        name,
+        parentName,
+        parentPhone: phone.phone,
+        parentEmail,
+        invalidEmail: rawEmail && !parentEmail ? rawEmail : undefined,
+        birthDate: parseDateOnly(text(row["Sinh nhật"])),
+        gender: parseGender(text(row["Giới tính"])),
+        address: text(row["Địa chỉ"]) || undefined,
+        status: parseStatus(row, classes),
+        leadSource: text(row["Nguồn khách hàng"]) || undefined,
+        healthNote: text(row["Lưu ý sức khỏe"]) || undefined,
+        leadNote: buildLeadNote(row, file, rowNumber, rawEmail && !parentEmail ? rawEmail : undefined),
+        createdAt: parseDateTime(text(row["Ngày tạo tài khoản"])),
+        classes
+      })
+    })
+  }
+
+  return { members, skippedRows }
+}
+
+async function safeEmailForPhone(tx: Tx, email: string | undefined, phone: string) {
+  if (!email) return undefined
+  const existing = await tx.user.findUnique({ where: { email }, select: { phone: true } })
+  return !existing || existing.phone === phone ? email : undefined
+}
+
+async function findStaff(tx: Tx, role: "ADMIN" | "TEACHER", subject?: CourseSubject) {
+  const preferredName =
+    role === "ADMIN" ? undefined : subject === "ROBOTICS" ? "Teacher Robotics" : "Teacher FUN"
+  const user = await tx.user.findFirst({
+    where: {
+      role,
+      isActive: true,
+      ...(preferredName ? { name: preferredName } : {})
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true }
+  })
+
+  if (user) return user.id
+
+  const fallback = await tx.user.findFirst({
+    where: { role, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true }
+  })
+
+  return fallback?.id
+}
+
+async function getOrCreateCourse(tx: Tx, klass: ParsedClass, stats: ImportStats) {
+  const existing = await tx.course.findFirst({
+    where: {
+      name: klass.courseName,
+      subject: klass.subject
+    }
+  })
+
+  if (existing) return existing
+
+  stats.coursesCreated += 1
+  return tx.course.create({
+    data: {
+      name: klass.courseName,
+      subject: klass.subject,
+      description: `Khóa học import từ dữ liệu học viên thật (${klass.subject}).`,
+      totalSessions: 16,
+      price: new Prisma.Decimal(0),
+      isActive: true
+    }
+  })
+}
+
+async function getOrCreateClass(
+  tx: Tx,
+  klass: ParsedClass,
+  stats: ImportStats,
+  refreshClassSchedules: boolean,
+  refreshedClassCodes: Set<string>
+) {
+  const existing = await tx.class.findUnique({
+    where: { code: klass.code },
+    include: { course: true }
+  })
+
+  if (existing) {
+    if (refreshClassSchedules && !refreshedClassCodes.has(klass.code)) {
+      const updated = await tx.class.update({
+        where: { id: existing.id },
+        data: {
+          weekday: klass.weekday,
+          startTime: klass.startTime,
+          endTime: klass.endTime,
+          room: klass.ageRange,
+          startDate: klass.startDate ? new Date(`${klass.startDate}T00:00:00`) : existing.startDate,
+          plannedSessions: existing.course.totalSessions,
+          isActive: klass.isActive
+        },
+        include: { course: true }
+      })
+      await replaceClassSchedule(tx, {
+        classId: updated.id,
+        startDate: klass.startDate,
+        plannedSessions: updated.course.totalSessions,
+        slots: klass.slots
+      })
+      stats.classSchedulesRefreshed += 1
+      refreshedClassCodes.add(klass.code)
+      return updated
+    }
+
+    return existing
+  }
+
+  const course = await getOrCreateCourse(tx, klass, stats)
+  const teacherId = await findStaff(tx, "TEACHER", klass.subject)
+  if (!teacherId) {
+    throw new Error(`Không tìm thấy teacher active cho lớp ${klass.code}.`)
+  }
+
+  const created = await tx.class.create({
+    data: {
+      code: klass.code,
+      name: klass.name,
+      courseId: course.id,
+      teacherId,
+      weekday: klass.weekday,
+      startTime: klass.startTime,
+      endTime: klass.endTime,
+      room: klass.ageRange,
+      startDate: klass.startDate ? new Date(`${klass.startDate}T00:00:00`) : undefined,
+      plannedSessions: course.totalSessions,
+      isActive: klass.isActive
+    },
+    include: { course: true }
+  })
+
+  await replaceClassSchedule(tx, {
+    classId: created.id,
+    startDate: klass.startDate,
+    plannedSessions: course.totalSessions,
+    slots: klass.slots
+  })
+
+  stats.classesCreated += 1
+  return created
+}
+
+async function upsertEnrollment(tx: Tx, input: {
+  studentId: string
+  courseId: string
+  startDate?: string
+  isActive: boolean
+  stats: ImportStats
+}) {
+  const existing = await tx.enrollment.findFirst({
+    where: {
+      studentId: input.studentId,
+      courseId: input.courseId
+    }
+  })
+
+  if (existing) {
+    input.stats.enrollmentsUpdated += 1
+    return tx.enrollment.update({
+      where: { id: existing.id },
+      data: {
+        startDate: input.startDate ? new Date(`${input.startDate}T00:00:00`) : existing.startDate,
+        isActive: input.isActive
+      }
+    })
+  }
+
+  input.stats.enrollmentsCreated += 1
+  return tx.enrollment.create({
+    data: {
+      studentId: input.studentId,
+      courseId: input.courseId,
+      sessionsBought: 16,
+      sessionsUsed: 0,
+      totalCourseSessionsAtJoin: 16,
+      startDate: input.startDate ? new Date(`${input.startDate}T00:00:00`) : undefined,
+      isActive: input.isActive
+    }
+  })
+}
+
+async function importMembers(members: ParsedMember[], stats: ImportStats, refreshClassSchedules: boolean) {
+  const adminId = await findStaff(prisma, "ADMIN")
+  if (!adminId) throw new Error("Không tìm thấy admin active để ghi createdBy/audit.")
+  const refreshedClassCodes = new Set<string>()
+
+  await prisma.$transaction(async (tx) => {
+    for (const member of members) {
+      const safeEmail = await safeEmailForPhone(tx, member.parentEmail, member.parentPhone)
+      if (member.parentEmail && !safeEmail) stats.invalidEmailsSkipped += 1
+
+      const existingParentUser = await tx.user.findUnique({
+        where: { phone: member.parentPhone },
+        select: { id: true }
+      })
+      const parentPassword = createParentInitialPassword(member.parentPhone)
+      const parentPasswordHash = await bcrypt.hash(parentPassword.plainText, 10)
+      const parentUser = await tx.user.upsert({
+        where: { phone: member.parentPhone },
+        create: {
+          name: member.parentName,
+          phone: member.parentPhone,
+          email: safeEmail,
+          password: parentPasswordHash,
+          role: "PARENT",
+          isActive: member.status === "ACTIVE"
+        },
+        update: {
+          name: member.parentName,
+          ...(safeEmail ? { email: safeEmail } : {})
+        }
+      })
+
+      if (existingParentUser) stats.parentsUpdated += 1
+      else stats.parentsCreated += 1
+
+      const parent = await tx.parent.upsert({
+        where: { userId: parentUser.id },
+        create: { userId: parentUser.id },
+        update: {}
+      })
+
+      const existingStudent = await tx.student.findUnique({
+        where: { code: member.code },
+        select: { id: true }
+      })
+
+      const student = await tx.student.upsert({
+        where: { code: member.code },
+        create: {
+          code: member.code,
+          name: member.name,
+          birthDate: member.birthDate,
+          address: member.address,
+          parentId: parent.id,
+          status: member.status,
+          leadSource: member.leadSource,
+          leadNote: member.leadNote,
+          healthNote: member.healthNote,
+          gender: member.gender,
+          stageChangedAt: new Date(),
+          createdById: adminId,
+          createdAt: member.createdAt
+        },
+        update: {
+          name: member.name,
+          birthDate: member.birthDate,
+          address: member.address,
+          parentId: parent.id,
+          status: member.status,
+          leadSource: member.leadSource,
+          leadNote: member.leadNote,
+          healthNote: member.healthNote,
+          gender: member.gender
+        }
+      })
+
+      if (existingStudent) stats.studentsUpdated += 1
+      else stats.studentsCreated += 1
+
+      for (const klass of member.classes) {
+        const createdClass = await getOrCreateClass(tx, klass, stats, refreshClassSchedules, refreshedClassCodes)
+        await upsertEnrollment(tx, {
+          studentId: student.id,
+          courseId: createdClass.courseId,
+          startDate: klass.startDate,
+          isActive: klass.isActive,
+          stats
+        })
+
+        const existingMembership = await tx.classStudent.findUnique({
+          where: {
+            classId_studentId: {
+              classId: createdClass.id,
+              studentId: student.id
+            }
+          },
+          select: { id: true }
+        })
+
+        await tx.classStudent.upsert({
+          where: {
+            classId_studentId: {
+              classId: createdClass.id,
+              studentId: student.id
+            }
+          },
+          create: {
+            classId: createdClass.id,
+            studentId: student.id,
+            joinedAt: klass.startDate ? new Date(`${klass.startDate}T00:00:00`) : undefined,
+            isActive: klass.isActive
+          },
+          update: {
+            isActive: klass.isActive
+          }
+        })
+
+        if (existingMembership) stats.classMembershipsUpdated += 1
+        else stats.classMembershipsCreated += 1
+      }
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId: adminId,
+        action: "students.import_real_members",
+        entityType: "StudentImport",
+        summary: `Import ${stats.studentsCreated} học viên thật, cập nhật ${stats.studentsUpdated} học viên.`,
+        metadata: stats as unknown as Prisma.InputJsonValue
+      }
+    })
+  }, { timeout: 120_000 })
+}
+
+async function main() {
+  const commit = hasFlag("commit")
+  const refreshClassSchedules = hasFlag("refresh-class-schedules")
+  const files = argValue("files")?.split(",").map((file) => file.trim()).filter(Boolean) ?? defaultFiles
+  const { members, skippedRows } = parseMembers(files)
+  const stats: ImportStats = {
+    files: files.length,
+    rows: members.length,
+    studentsCreated: 0,
+    studentsUpdated: 0,
+    parentsCreated: 0,
+    parentsUpdated: 0,
+    coursesCreated: 0,
+    classesCreated: 0,
+    classSchedulesRefreshed: 0,
+    classMembershipsCreated: 0,
+    classMembershipsUpdated: 0,
+    enrollmentsCreated: 0,
+    enrollmentsUpdated: 0,
+    invalidPhoneFallbacks: members.filter((member) => member.parentPhone.startsWith("IMPORT-")).length,
+    invalidEmailsSkipped: members.filter((member) => member.invalidEmail).length,
+    skippedRows: skippedRows.length
+  }
+
+  const classCodes = Array.from(new Set(members.flatMap((member) => member.classes.map((klass) => klass.code)))).sort()
+
+  if (commit) {
+    await importMembers(members, stats, refreshClassSchedules)
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        mode: commit ? "commit" : "dry-run",
+        stats,
+        classCount: classCodes.length,
+        classCodes,
+        skippedRows
+      },
+      null,
+      2
+    )
+  )
+}
+
+main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

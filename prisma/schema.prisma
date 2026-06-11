@@ -227,6 +227,7 @@ model Student {
   code              String        @unique
   name              String
   birthDate         DateTime?
+  address           String?
   parentId          String
   parent            Parent        @relation(fields: [parentId], references: [id])
   status            StudentStatus @default(LEAD)
@@ -279,6 +280,7 @@ model Course {
 
 model Class {
   id              String    @id @default(cuid())
+  code            String?   @unique
   name            String
   courseId        String
   course          Course    @relation(fields: [courseId], references: [id])

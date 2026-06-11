@@ -242,6 +242,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [profileParentName, setProfileParentName] = useState("")
   const [profileParentPhone, setProfileParentPhone] = useState("")
   const [profileParentEmail, setProfileParentEmail] = useState("")
+  const [profileAddress, setProfileAddress] = useState("")
   const [profileLeadSource, setProfileLeadSource] = useState("")
   const [profileLeadNote, setProfileLeadNote] = useState("")
   const [profileHealthNote, setProfileHealthNote] = useState("")
@@ -406,6 +407,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     setProfileParentName(nextStudent.parentName)
     setProfileParentPhone(nextStudent.parentPhone)
     setProfileParentEmail(nextStudent.parentEmail ?? "")
+    setProfileAddress(nextStudent.address ?? "")
     setProfileLeadSource(nextStudent.leadSource ?? "")
     setProfileLeadNote(nextStudent.leadNote ?? "")
     setProfileHealthNote(nextStudent.healthNote ?? "")
@@ -537,6 +539,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           name: profileName.trim(),
           birthDate: profileBirthDate ? new Date(`${profileBirthDate}T00:00:00`).toISOString() : null,
           status: profileStatus,
+          address: profileAddress.trim() || null,
           leadSource: profileLeadSource.trim() || null,
           leadNote: profileLeadNote.trim() || null,
           healthNote: profileHealthNote.trim() || null,
@@ -1016,6 +1019,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
               <DetailInput label="Tên phụ huynh" value={profileParentName} onChange={setProfileParentName} required />
               <DetailInput label="Số điện thoại phụ huynh" value={profileParentPhone} onChange={setProfileParentPhone} required />
               <DetailInput label="Email phụ huynh" type="email" value={profileParentEmail} onChange={setProfileParentEmail} />
+              <DetailInput label="Địa chỉ" value={profileAddress} onChange={setProfileAddress} />
               <label className="block text-sm font-semibold text-stone-700 md:col-span-2">
                 Ghi chú lead
                 <textarea className="neu-pressed mt-2 min-h-24 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400" value={profileLeadNote} onChange={(event) => setProfileLeadNote(event.target.value)} />
@@ -1033,7 +1037,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             </div>
           </form>
           <div className="space-y-4">
-            <InfoCard title="Thông tin phụ huynh" items={[student.parentName, student.parentPhone, student.parentEmail ?? "Chưa có email"]} />
+            <InfoCard title="Thông tin phụ huynh" items={[student.parentName, student.parentPhone, student.parentEmail ?? "Chưa có email", student.address ?? "Chưa có địa chỉ"]} />
             <InfoCard title="Học tập" items={[`Còn ${student.sessionsRemaining} buổi`, student.assignedTeacherName ?? "Chưa phân giáo viên", student.leadSource ?? "Chưa có nguồn lead"]} />
             <InfoCard title="Ghi chú" items={[student.leadNote ?? "Chưa có ghi chú lead", student.healthNote ?? "Chưa có lưu ý sức khỏe"]} />
           </div>

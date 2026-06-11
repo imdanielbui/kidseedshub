@@ -23,6 +23,7 @@ export const classScheduleSlotSchema = z.object({
 })
 
 export const classCreateSchema = z.object({
+  code: z.string().max(160).optional(),
   name: z.string().min(1, "Tên lớp là bắt buộc").max(160),
   courseId: z.string().min(1),
   teacherId: z.string().min(1),

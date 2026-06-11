@@ -6,6 +6,7 @@ export const studentGenders = ["MALE", "FEMALE", "OTHER", "UNKNOWN"] as const
 export const studentCreateSchema = z.object({
   name: z.string().min(1, "Tên học viên là bắt buộc"),
   birthDate: z.string().datetime().optional(),
+  address: z.string().max(500).optional(),
   status: z.enum(studentStatuses).default("LEAD"),
   gender: z.enum(studentGenders).default("UNKNOWN"),
   leadSource: z.string().max(80).optional(),
@@ -24,6 +25,7 @@ export const studentCreateSchema = z.object({
 export const studentUpdateSchema = z.object({
   name: z.string().min(1, "Tên học viên là bắt buộc").optional(),
   birthDate: z.string().datetime().nullable().optional(),
+  address: z.string().max(500).nullable().optional(),
   status: z.enum(studentStatuses).optional(),
   gender: z.enum(studentGenders).optional(),
   leadSource: z.string().max(80).nullable().optional(),

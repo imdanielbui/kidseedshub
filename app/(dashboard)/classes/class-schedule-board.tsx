@@ -35,6 +35,7 @@ type SlotForm = {
 }
 
 type ClassFormState = {
+  code: string
   name: string
   courseId: string
   teacherId: string
@@ -74,6 +75,7 @@ const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padS
 const defaultDate = today.toISOString().slice(0, 10)
 
 const emptyClassForm: ClassFormState = {
+  code: "",
   name: "",
   courseId: "",
   teacherId: "",
@@ -258,7 +260,8 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
     const query = classSearch.trim().toLowerCase()
 
     return classes.filter((klass) => {
-      const matchesSearch = !query || [klass.name, klass.courseName, klass.teacherName, subjectLabels[klass.subject]]
+      const matchesSearch = !query || [klass.code, klass.name, klass.courseName, klass.teacherName, subjectLabels[klass.subject]]
+        .filter((value): value is string => Boolean(value))
         .some((value) => value.toLowerCase().includes(query))
       const matchesSubject = classSubjectFilter === "ALL" || klass.subject === classSubjectFilter
       const matchesStatus = classStatusFilter === "ALL" || (classStatusFilter === "ACTIVE" ? klass.isActive : !klass.isActive)
@@ -636,6 +639,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          code: form.code.trim() || undefined,
           name: form.name.trim(),
           courseId: form.courseId,
           teacherId: form.teacherId,
@@ -1208,6 +1212,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-brand-ink">{klass.name}</p>
+                    {klass.code ? <p className="mt-1 truncate text-xs font-semibold text-brand-red">{klass.code}</p> : null}
                     <p className="mt-1 truncate text-xs text-stone-500">
                       Khóa: {klass.courseName} - {subjectLabels[klass.subject]}
                     </p>
@@ -1237,7 +1242,11 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
 
       {setupPanel === "create" ? (
       <form className="content-border grid gap-3 p-5 xl:grid-cols-4" onSubmit={createClass}>
-        <label className="block text-sm font-semibold text-stone-700 xl:col-span-2">
+        <label className="block text-sm font-semibold text-stone-700">
+          Mã lớp học
+          <input className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} placeholder="VD: RO 001_25/05/31" />
+        </label>
+        <label className="block text-sm font-semibold text-stone-700">
           Tên lớp / khóa học mở
           <input className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
         </label>
@@ -1741,6 +1750,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
         >
             <div className="content-border grid gap-3 p-5 md:grid-cols-3 xl:grid-cols-4">
               <ClassMetric label="Khóa học" value={selectedManagedClass.courseName} />
+              <ClassMetric label="Mã lớp học" value={selectedManagedClass.code ?? "Chưa có"} />
               <ClassMetric label="Môn học" value={subjectLabels[selectedManagedClass.subject]} />
               <ClassMetric label="Giáo viên" value={selectedManagedClass.teacherName} />
               <ClassMetric label="Trạng thái" value={selectedManagedClass.isActive ? "Đang mở" : "Tạm tắt"} />

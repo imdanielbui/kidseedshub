@@ -20,6 +20,7 @@ type ClassListRecord = Prisma.ClassGetPayload<{ include: typeof classListInclude
 function toClassListItem(klass: ClassListRecord): ClassListItem {
   return {
     id: klass.id,
+    code: klass.code ?? undefined,
     name: klass.name,
     courseId: klass.courseId,
     courseName: klass.course.name,
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
     const created = await tx.class.create({
       data: {
         name: data.name,
+        code: data.code,
         courseId: data.courseId,
         teacherId: data.teacherId,
         weekday: primarySlot.weekday,

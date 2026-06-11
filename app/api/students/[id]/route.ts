@@ -253,6 +253,7 @@ function toStudentDetail(student: StudentDetailRecord, role: Role): StudentDetai
     birthDate: student.birthDate?.toISOString(),
     status: student.status,
     gender: student.gender,
+    address: student.address ?? undefined,
     parentName: student.parent.user.name,
     parentPhone: student.parent.user.phone,
     parentEmail: student.parent.user.email ?? undefined,
@@ -391,6 +392,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         data: {
           name: parsed.data.name,
           birthDate: parsed.data.birthDate === undefined ? undefined : parsed.data.birthDate ? new Date(parsed.data.birthDate) : null,
+          address: parsed.data.address,
           status: parsed.data.status,
           stageChangedAt: statusChanged ? new Date() : undefined,
           gender: parsed.data.gender,
