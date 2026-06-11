@@ -650,41 +650,41 @@ export default function PipelinePage() {
   }
 
   return (
-    <main className="space-y-3">
-      <section className="neu-card rounded-3xl p-3">
+    <main className="flex min-h-0 flex-col gap-3 overflow-hidden md:h-[calc(100vh-2.75rem)]">
+      <section className="neu-card shrink-0 rounded-3xl p-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className="inline-flex min-w-56 flex-1 items-center gap-2 rounded-full border border-brand-red/10 bg-white/50 px-4 py-2 text-sm text-stone-600 xl:max-w-md">
-              <Search className="h-4 w-4" />
-              <input
-                className="w-full bg-transparent outline-none"
-                placeholder="Tìm mã HS, phụ huynh, SĐT..."
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
-                  setPage(1)
-                }}
-              />
-            </label>
-            <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "database" ? "text-brand-red" : ""}`} onClick={() => setViewMode("database")}>
-              <Rows3 className="h-4 w-4" />
-              Database
-            </button>
-            <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "kanban" ? "text-brand-red" : ""}`} onClick={() => setViewMode("kanban")}>
-              <LayoutGrid className="h-4 w-4" />
-              Kanban
-            </button>
-            <button className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("lead")}>
-              <Plus className="h-4 w-4" />
-              Lead mới
-            </button>
-            <button className="glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("filters")}>
-              <ListFilter className="h-4 w-4" />
-              Bộ lọc
-            </button>
-            <button className="glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("fields")}>
-              <SlidersHorizontal className="h-4 w-4" />
-              Trường
-            </button>
+            <Search className="h-4 w-4" />
+            <input
+              className="w-full bg-transparent outline-none"
+              placeholder="Tìm mã HS, phụ huynh, SĐT..."
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPage(1)
+              }}
+            />
+          </label>
+          <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "database" ? "text-brand-red" : ""}`} onClick={() => setViewMode("database")}>
+            <Rows3 className="h-4 w-4" />
+            Database
+          </button>
+          <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "kanban" ? "text-brand-red" : ""}`} onClick={() => setViewMode("kanban")}>
+            <LayoutGrid className="h-4 w-4" />
+            Kanban
+          </button>
+          <button className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("lead")}>
+            <Plus className="h-4 w-4" />
+            Lead mới
+          </button>
+          <button className="glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("filters")}>
+            <ListFilter className="h-4 w-4" />
+            Bộ lọc
+          </button>
+          <button className="glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("fields")}>
+            <SlidersHorizontal className="h-4 w-4" />
+            Trường
+          </button>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600">
@@ -710,7 +710,7 @@ export default function PipelinePage() {
       </section>
 
       {panelMode ? (
-        <section className="neu-card rounded-3xl p-4">
+        <section className="neu-card shrink-0 rounded-3xl p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-brand-ink">
               {panelMode === "lead" ? "Tạo lead mới" : panelMode === "filters" ? "Bộ lọc pipeline" : "Ẩn/hiện và sắp xếp trường"}
@@ -828,7 +828,7 @@ export default function PipelinePage() {
         </section>
       ) : null}
 
-      {error ? <p className="rounded-2xl border border-brand-red/15 bg-white/50 p-3 text-sm text-brand-red">{error}</p> : null}
+      {error ? <p className="shrink-0 rounded-2xl border border-brand-red/15 bg-white/50 p-3 text-sm text-brand-red">{error}</p> : null}
 
       {viewMode === "database" ? (
         <section className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
