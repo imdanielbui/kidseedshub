@@ -172,7 +172,7 @@ a {
   }
 
   .receipt-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr auto;
     align-items: start;
     border-bottom: 2px solid rgba(165, 36, 39, 0.18);
     padding-bottom: 20px;
@@ -182,6 +182,14 @@ a {
     display: flex;
     align-items: center;
     gap: 14px;
+  }
+
+  .receipt-brand-logo {
+    display: block;
+    height: 86px;
+    width: auto;
+    max-width: 220px;
+    object-fit: contain;
   }
 
   .receipt-logo > span {

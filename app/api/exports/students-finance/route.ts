@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs"
+import { join } from "node:path"
 import { auth } from "@/lib/auth"
 import { fail } from "@/lib/api-response"
 import { expenseCategoryLabels, paymentMethodLabels } from "@/lib/contracts/finance"
@@ -8,8 +9,8 @@ import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
 
-function styleHeader(worksheet: ExcelJS.Worksheet) {
-  const header = worksheet.getRow(1)
+function styleHeader(worksheet: ExcelJS.Worksheet, rowNumber = 1) {
+  const header = worksheet.getRow(rowNumber)
   header.font = { bold: true, color: { argb: "FFFFFFFF" } }
   header.fill = {
     type: "pattern",
@@ -17,6 +18,29 @@ function styleHeader(worksheet: ExcelJS.Worksheet) {
     fgColor: { argb: "FFA52427" }
   }
   header.alignment = { vertical: "middle" }
+}
+
+function addWorksheetBranding(worksheet: ExcelJS.Worksheet, title: string, logoImageId: number) {
+  worksheet.spliceRows(1, 0, [], [], [])
+  worksheet.mergeCells("A1:C3")
+  worksheet.addImage(logoImageId, {
+    tl: { col: 0.15, row: 0.15 },
+    ext: { width: 170, height: 91 }
+  })
+  worksheet.mergeCells("D1:H1")
+  worksheet.mergeCells("D2:H2")
+  worksheet.mergeCells("D3:H3")
+  worksheet.getCell("D1").value = "Kid Seeds Hub"
+  worksheet.getCell("D2").value = title
+  worksheet.getCell("D3").value = "Trung tâm Hạt Giống Nhỏ"
+  worksheet.getCell("D1").font = { bold: true, size: 18, color: { argb: "FFA52427" } }
+  worksheet.getCell("D2").font = { bold: true, size: 13, color: { argb: "FF1C1917" } }
+  worksheet.getCell("D3").font = { italic: true, size: 11, color: { argb: "FF78716C" } }
+  worksheet.getRow(1).height = 28
+  worksheet.getRow(2).height = 22
+  worksheet.getRow(3).height = 20
+  worksheet.views = [{ state: "frozen", ySplit: 4 }]
+  styleHeader(worksheet, 4)
 }
 
 function formatDate(value: Date) {
@@ -68,6 +92,10 @@ export async function GET() {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "Kid Seeds Hub"
   workbook.created = new Date()
+  const logoImageId = workbook.addImage({
+    filename: join(process.cwd(), "public/brand/kid-seeds-hub-logo-print.png"),
+    extension: "png"
+  })
 
   const studentsSheet = workbook.addWorksheet("Students")
   studentsSheet.columns = [
@@ -108,7 +136,7 @@ export async function GET() {
       healthNote: student.healthNote ?? ""
     })
   })
-  styleHeader(studentsSheet)
+  addWorksheetBranding(studentsSheet, "Students Finance Export - Học viên", logoImageId)
 
   const receiptsSheet = workbook.addWorksheet("Receipts")
   receiptsSheet.columns = [
@@ -142,7 +170,7 @@ export async function GET() {
     })
   })
   receiptsSheet.getColumn("amount").numFmt = "#,##0"
-  styleHeader(receiptsSheet)
+  addWorksheetBranding(receiptsSheet, "Students Finance Export - Phiếu thu", logoImageId)
 
   const expensesSheet = workbook.addWorksheet("Expenses")
   expensesSheet.columns = [
@@ -166,7 +194,7 @@ export async function GET() {
     })
   })
   expensesSheet.getColumn("amount").numFmt = "#,##0"
-  styleHeader(expensesSheet)
+  addWorksheetBranding(expensesSheet, "Students Finance Export - Phiếu chi", logoImageId)
 
   const buffer = await workbook.xlsx.writeBuffer()
   const fileName = `kidseedshub-students-finance-${new Date().toISOString().slice(0, 10)}.xlsx`

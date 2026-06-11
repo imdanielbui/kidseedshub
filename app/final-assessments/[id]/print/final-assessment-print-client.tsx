@@ -3,6 +3,7 @@
 import { Printer } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts"
+import { BrandLogo } from "@/components/shared/brand-logo"
 import type { ApiResponse } from "@/lib/api-response"
 import { finalAssessmentStatusLabels, progressLevelDescriptions, progressLevelLabels, subjectLabels, type FinalReportDetail, type ProgressLevelKey } from "@/lib/contracts/assessment"
 
@@ -94,6 +95,9 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
 
       <section className="receipt-sheet">
         <header className="receipt-header">
+          <div className="receipt-logo">
+            <BrandLogo print imageClassName="receipt-brand-logo" />
+          </div>
           <div>
             <p className="receipt-kicker">Kid Seeds Hub</p>
             <h1>Báo cáo cuối khóa</h1>

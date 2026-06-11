@@ -1,8 +1,9 @@
 "use client"
 
-import { BellRing, BookOpenCheck, CalendarDays, Camera, Download, Image as ImageIcon, LogOut, MessageSquareHeart, Palette, Rocket, Sprout, StickyNote, Trophy } from "lucide-react"
+import { BellRing, BookOpenCheck, CalendarDays, Camera, Download, Image as ImageIcon, LogOut, MessageSquareHeart, Palette, Rocket, StickyNote, Trophy } from "lucide-react"
 import { signIn, signOut } from "next-auth/react"
 import { useEffect, useMemo, useState } from "react"
+import { BrandLogo } from "@/components/shared/brand-logo"
 import type { ApiResponse } from "@/lib/api-response"
 import { absenceRequestStatusLabels, type AbsenceRequestItem } from "@/lib/contracts/absence-requests"
 import { subjectLabels } from "@/lib/contracts/assessment"
@@ -211,13 +212,8 @@ export default function ParentPortalPage() {
       <header className="sticky top-0 z-20 border-b border-brand-red/10 bg-brand-cream/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="neu-button flex h-10 w-10 items-center justify-center rounded-2xl">
-              <Sprout className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="font-semibold text-brand-red">Kid Seeds Hub</p>
-              <p className="text-xs text-stone-500">Cổng phụ huynh</p>
-            </div>
+            <BrandLogo imageClassName="h-12 w-auto max-w-[165px] object-contain" />
+            <p className="hidden text-xs font-semibold uppercase tracking-widest text-brand-red sm:block">Cổng phụ huynh</p>
           </div>
           <button
             type="button"
@@ -232,7 +228,8 @@ export default function ParentPortalPage() {
 
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:py-8">
         <section className="neu-card rounded-3xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Parent Portal</p>
+          <BrandLogo imageClassName="h-20 w-auto max-w-[220px] object-contain" />
+          <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-brand-red">Parent Portal</p>
           <h1 className="mt-2 text-3xl font-semibold text-brand-ink">Cổng phụ huynh</h1>
           <p className="mt-1 text-sm text-stone-600">Theo dõi buổi học còn lại, lịch sắp tới, ảnh/nhật ký học và báo cáo cuối khóa.</p>
         </section>

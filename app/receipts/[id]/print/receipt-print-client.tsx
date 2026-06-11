@@ -2,6 +2,7 @@
 
 import { Printer } from "lucide-react"
 import { useEffect, useState } from "react"
+import { BrandLogo } from "@/components/shared/brand-logo"
 import type { ApiResponse } from "@/lib/api-response"
 import { paymentMethodLabels, type ReceiptPrintDetail } from "@/lib/contracts/finance"
 
@@ -96,11 +97,7 @@ export function ReceiptPrintClient({ receiptId }: { receiptId: string }) {
       <article className="receipt-paper">
         <header className="receipt-header">
           <div className="receipt-logo">
-            <span>K</span>
-            <div>
-              <p>Kid Seeds Hub</p>
-              <small>Trung tâm Hạt Giống Nhỏ</small>
-            </div>
+            <BrandLogo print imageClassName="receipt-brand-logo" />
           </div>
           <div className="receipt-meta">
             <p>Số phiếu: <strong>{receipt.code}</strong></p>

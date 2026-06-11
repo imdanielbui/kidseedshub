@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import { useEffect, useState } from "react"
-import { BarChart3, BookOpenCheck, CalendarCheck, ChevronLeft, ChevronRight, ClipboardCheck, DollarSign, LayoutDashboard, LogOut, PanelsTopLeft, Sprout, Users } from "lucide-react"
+import { BarChart3, BookOpenCheck, CalendarCheck, ChevronLeft, ChevronRight, ClipboardCheck, DollarSign, LayoutDashboard, LogOut, PanelsTopLeft, Users } from "lucide-react"
+import { BrandLogo } from "@/components/shared/brand-logo"
 
 const navGroups = [
   {
@@ -45,17 +46,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className={`fixed inset-y-0 left-0 hidden p-5 transition-[width] duration-300 md:block ${isCollapsed ? "w-28" : "w-72"}`}>
         <div className="neu-panel flex h-full flex-col rounded-3xl p-4">
           <div className={`mb-6 flex items-center ${isCollapsed ? "justify-center" : "justify-between gap-3"}`}>
-            <div className="flex items-center gap-3">
-              <div className="neu-button flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
-                <Sprout className="h-6 w-6" />
-              </div>
-              {!isCollapsed ? (
-                <div>
-                  <p className="text-lg font-semibold text-brand-red">Kid Seeds Hub</p>
-                  <p className="text-xs font-medium text-stone-500">Management System</p>
-                </div>
-              ) : null}
-            </div>
+            <BrandLogo
+              className={isCollapsed ? "flex w-full justify-center" : "flex min-h-16 items-center"}
+              imageClassName={isCollapsed ? "h-12 w-16 object-contain" : "h-16 w-auto max-w-[180px] object-contain"}
+            />
           </div>
           <button
             type="button"
@@ -108,10 +102,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className={sidebarWidth}>
         <header className="sticky top-0 z-10 p-3 md:hidden">
           <div className="neu-panel flex items-center gap-3 rounded-2xl px-4 py-3">
-            <div className="neu-button flex h-10 w-10 items-center justify-center rounded-xl">
-              <Sprout className="h-5 w-5" />
-            </div>
-            <p className="font-semibold text-brand-red">Kid Seeds Hub</p>
+            <BrandLogo imageClassName="h-11 w-auto max-w-[145px] object-contain" />
             <button type="button" className="ml-auto text-xs font-semibold text-brand-red" onClick={() => void signOut({ callbackUrl: "/login" })}>
               Đăng xuất
             </button>
