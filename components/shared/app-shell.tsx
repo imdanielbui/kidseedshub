@@ -45,9 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen pb-20 text-brand-ink md:pb-0">
       <aside className={`fixed inset-y-0 left-0 hidden p-5 transition-[width] duration-300 md:block ${isCollapsed ? "w-28" : "w-72"}`}>
         <div className="neu-panel flex h-full flex-col rounded-3xl p-4">
-          <div className={`mb-6 flex items-center ${isCollapsed ? "justify-center" : "justify-between gap-3"}`}>
+          <div className="mb-6 flex items-center justify-center">
             <BrandLogo
-              className={isCollapsed ? "flex w-full justify-center" : "flex min-h-16 items-center"}
+              className="flex w-full justify-center"
               imageClassName={isCollapsed ? "h-12 w-16 object-contain" : "h-16 w-auto max-w-[180px] object-contain"}
             />
           </div>
