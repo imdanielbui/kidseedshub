@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { signOut } from "next-auth/react"
+import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { BarChart3, BookOpenCheck, CalendarCheck, ChevronLeft, ChevronRight, ClipboardCheck, DollarSign, LayoutDashboard, LogOut, PanelsTopLeft, Users } from "lucide-react"
 import { BrandLogo } from "@/components/shared/brand-logo"
@@ -39,46 +40,52 @@ const mobileNavItems = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useSidebarState()
+  const pathname = usePathname()
   const sidebarWidth = isCollapsed ? "md:pl-24" : "md:pl-[17rem]"
 
   return (
     <div className="min-h-screen pb-20 text-brand-ink md:pb-0">
       <aside className={`fixed inset-y-0 left-0 hidden p-4 transition-[width] duration-300 md:block ${isCollapsed ? "w-24" : "w-[17rem]"}`}>
-        <div className="neu-panel flex h-full flex-col rounded-3xl p-4">
-          <div className="mb-6 flex items-center justify-center">
+        <div className={`neu-panel flex h-full flex-col rounded-3xl ${isCollapsed ? "items-center px-3 py-4" : "p-4"}`}>
+          <div className={`${isCollapsed ? "mb-4" : "mb-6"} flex items-center justify-center`}>
             <BrandLogo
               className="flex w-full justify-center"
-              imageClassName={isCollapsed ? "h-12 w-16 object-contain" : "h-16 w-auto max-w-[180px] object-contain"}
+              imageClassName={isCollapsed ? "h-11 w-14 object-contain" : "h-16 w-auto max-w-[180px] object-contain"}
             />
           </div>
           <button
             type="button"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="neu-list-item mb-4 flex items-center justify-center rounded-2xl px-3 py-2 text-brand-red hover:text-brand-redDark"
+            className={`neu-list-item mb-4 flex items-center justify-center text-brand-red hover:text-brand-redDark ${
+              isCollapsed ? "h-11 w-11 rounded-full p-0" : "w-full rounded-2xl px-3 py-2"
+            }`}
             aria-label={isCollapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
-          <nav className="space-y-4 overflow-y-auto pr-1">
+          <nav className={`${isCollapsed ? "w-full space-y-4 overflow-y-auto px-0.5" : "space-y-4 overflow-y-auto pr-1"}`}>
             {navGroups.map((group) => (
-              <div key={group.label} className="space-y-2">
+              <div key={group.label} className={isCollapsed ? "space-y-2" : "space-y-2"}>
                 {!isCollapsed ? (
                   <p className="px-4 text-[11px] font-semibold uppercase tracking-widest text-stone-400">{group.label}</p>
                 ) : (
-                  <div className="mx-auto h-px w-8 bg-brand-red/10" />
+                  <div className="mx-auto h-px w-10 bg-brand-red/15" />
                 )}
                 {group.items.map((item) => {
                   const Icon = item.icon
+                  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       title={isCollapsed ? item.label : undefined}
-                      className={`neu-list-item flex items-center rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red ${
-                        isCollapsed ? "justify-center" : "gap-3"
+                      className={`neu-list-item flex items-center text-sm font-semibold hover:text-brand-red ${
+                        isCollapsed
+                          ? `mx-auto h-12 w-12 justify-center rounded-2xl p-0 ${isActive ? "border-brand-red/30 bg-white/70 text-brand-red shadow-[0_10px_22px_rgba(165,36,39,0.14)]" : "text-stone-600"}`
+                          : `gap-3 rounded-2xl px-4 py-3 ${isActive ? "border-brand-red/25 bg-white/65 text-brand-red shadow-[0_10px_22px_rgba(165,36,39,0.12)]" : "text-stone-600"}`
                       }`}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
+                      <Icon className={isCollapsed ? "h-5 w-5 shrink-0" : "h-4 w-4 shrink-0"} />
                       {!isCollapsed ? item.label : null}
                     </Link>
                   )
@@ -88,8 +95,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <button
             type="button"
-            className={`neu-list-item mt-auto flex items-center rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red ${
-              isCollapsed ? "justify-center" : "gap-3"
+            className={`neu-list-item mt-auto flex items-center text-sm font-semibold text-stone-600 hover:text-brand-red ${
+              isCollapsed ? "h-12 w-12 justify-center rounded-2xl p-0" : "w-full gap-3 rounded-2xl px-4 py-3"
             }`}
             title={isCollapsed ? "Đăng xuất" : undefined}
             onClick={() => void signOut({ callbackUrl: "/login" })}
