@@ -212,20 +212,25 @@ export default function PipelinePage() {
 
   const includeNurture = stageFilter === "NURTURE"
   const visibleColumnOrder = columnOrder.filter((column) => visibleColumns.has(column))
+  const tableColumnOrder = useMemo(() => {
+    const pinned = visibleColumnOrder.filter((column) => pinnedColumns.has(column))
+    const unpinned = visibleColumnOrder.filter((column) => !pinnedColumns.has(column))
+    return [...pinned, ...unpinned]
+  }, [pinnedColumns, visibleColumnOrder])
   const totalPages = Math.max(1, Math.ceil(pipeline.total / pipeline.limit))
   const hasActiveFilter = search.trim() !== "" || stageFilter !== "ALL" || saleFilter !== "ALL" || classFilter !== "ALL" || createdFrom !== "" || createdTo !== ""
   const pinnedColumnOffsets = useMemo(() => {
     let offset = 0
     const offsets = new Map<ColumnKey, number>()
 
-    visibleColumnOrder.forEach((column) => {
+    tableColumnOrder.forEach((column) => {
       if (!pinnedColumns.has(column)) return
       offsets.set(column, offset)
       offset += pinnedColumnWidths[column] ?? 180
     })
 
     return offsets
-  }, [pinnedColumns, visibleColumnOrder])
+  }, [pinnedColumns, tableColumnOrder])
 
   async function loadPipeline() {
     setIsLoading(true)
@@ -836,7 +841,7 @@ export default function PipelinePage() {
             <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#f5eeeb] text-xs uppercase tracking-wide text-stone-500">
                 <tr>
-                  {visibleColumnOrder.map((column) => (
+                  {tableColumnOrder.map((column) => (
                     <th key={column} className={`border-b border-brand-red/10 px-4 py-3 font-semibold ${pinnedColumnClass(column, "head")}`} style={pinnedColumnStyle(column)}>
                       {columnLabels[column]}
                     </th>
@@ -854,7 +859,7 @@ export default function PipelinePage() {
                 ) : pipeline.items.length ? (
                   pipeline.items.map((card) => (
                     <tr key={card.id} className="cursor-pointer border-b border-brand-red/10 transition-shadow hover:shadow-[0_8px_20px_rgba(165,36,39,0.08)]" onClick={() => void openStudentDialog(card.id)}>
-                      {visibleColumnOrder.map((column) => (
+                      {tableColumnOrder.map((column) => (
                         <td key={column} className={`max-w-64 truncate px-4 py-3 align-middle ${pinnedColumnClass(column, "body")} ${card.isStale && column === "daysInStage" ? "font-semibold text-brand-red" : "text-brand-ink"}`} style={pinnedColumnStyle(column)}>
                           {renderCell(card, column)}
                         </td>
