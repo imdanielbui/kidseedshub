@@ -20,6 +20,12 @@ const studentListInclude = Prisma.validator<Prisma.StudentInclude>()({
 
 type StudentListRecord = Prisma.StudentGetPayload<{ include: typeof studentListInclude }>
 
+function parseDateInput(value?: string) {
+  if (!value) return undefined
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
 function toStudentListItem(student: StudentListRecord): StudentListItem {
   const courses = student.enrollments.map((enrollment) => ({
     enrollmentId: enrollment.id,
@@ -81,10 +87,28 @@ export async function GET(request: Request) {
     return fail({ code: "INVALID_QUERY", message: "Bộ lọc học viên không hợp lệ." }, { status: 400 })
   }
 
-  const { status, classId, q, page, limit, sort, direction } = parsed.data
+  const { status, classId, createdFrom, createdTo, q, page, limit, sort, direction } = parsed.data
+  const createdFromInput = parseDateInput(createdFrom)
+  const createdToInput = parseDateInput(createdTo)
+  const createdFromDate = createdFromInput && createdToInput && createdFromInput > createdToInput ? createdToInput : createdFromInput
+  const createdToDate = createdFromInput && createdToInput && createdFromInput > createdToInput ? createdFromInput : createdToInput
+  const createdToEndOfDay = createdToDate ? new Date(createdToDate) : undefined
+
+  if (createdToEndOfDay) {
+    createdToEndOfDay.setHours(23, 59, 59, 999)
+  }
+
+  const createdAtRange =
+    createdFromDate || createdToEndOfDay
+      ? {
+          ...(createdFromDate ? { gte: createdFromDate } : {}),
+          ...(createdToEndOfDay ? { lte: createdToEndOfDay } : {})
+        }
+      : undefined
   const where: Prisma.StudentWhereInput = {
     ...(status ? { status } : {}),
     ...(classId ? { classStudents: { some: { classId, isActive: true } } } : {}),
+    ...(createdAtRange ? { createdAt: createdAtRange } : {}),
     ...(q
       ? {
           OR: [

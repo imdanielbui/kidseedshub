@@ -1,8 +1,8 @@
 "use client"
 
-import { ArrowDownAZ, Eye, GripVertical, LayoutList, ListFilter, Plus, Rows3, Search, SlidersHorizontal, UserRound, UsersRound, X } from "lucide-react"
+import { ArrowDownAZ, Eye, GripVertical, LayoutList, ListFilter, Pin, Plus, Rows3, Search, SlidersHorizontal, UserRound, UsersRound, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { LeadFormPanel, emptyLeadForm, type LeadFormState } from "@/components/shared/lead-form-panel"
 import type { ClassListItem } from "@/lib/contracts/courses"
@@ -67,6 +67,17 @@ const defaultColumnOrder: ColumnKey[] = [
   "updatedAt"
 ]
 
+const defaultPinnedColumns: ColumnKey[] = ["code", "name"]
+
+const pinnedColumnWidths: Partial<Record<ColumnKey, number>> = {
+  code: 120,
+  name: 230,
+  parentName: 220,
+  parentPhone: 160,
+  status: 160,
+  sessionsRemaining: 140
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value))
 }
@@ -80,9 +91,11 @@ export default function StudentsPage() {
   const [options, setOptions] = useState<PipelineOptions>({ sales: [], classes: [] })
   const [status, setStatus] = useState<StudentStatusKey | "">("")
   const [classFilter, setClassFilter] = useState("")
+  const [createdFrom, setCreatedFrom] = useState("")
+  const [createdTo, setCreatedTo] = useState("")
   const [query, setQuery] = useState("")
   const [panelMode, setPanelMode] = useState<PanelMode>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>("list")
+  const [viewMode, setViewMode] = useState<ViewMode>("database")
   const [isSubmittingLead, setIsSubmittingLead] = useState(false)
   const [leadForm, setLeadForm] = useState<LeadFormState>(emptyLeadForm)
   const [isLoading, setIsLoading] = useState(true)
@@ -93,11 +106,29 @@ export default function StudentsPage() {
   const [total, setTotal] = useState(0)
   const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(defaultColumnOrder)
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(new Set(defaultColumnOrder))
+  const [pinnedColumns, setPinnedColumns] = useState<Set<ColumnKey>>(new Set(defaultPinnedColumns))
   const [draggingColumn, setDraggingColumn] = useState<ColumnKey | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const totalPages = Math.max(1, Math.ceil(total / limit))
   const visibleColumnOrder = columnOrder.filter((column) => visibleColumns.has(column))
+  const tableColumnOrder = useMemo(() => {
+    const pinned = visibleColumnOrder.filter((column) => pinnedColumns.has(column))
+    const unpinned = visibleColumnOrder.filter((column) => !pinnedColumns.has(column))
+    return [...pinned, ...unpinned]
+  }, [pinnedColumns, visibleColumnOrder])
+  const pinnedColumnOffsets = useMemo(() => {
+    let offset = 0
+    const offsets = new Map<ColumnKey, number>()
+
+    tableColumnOrder.forEach((column) => {
+      if (!pinnedColumns.has(column)) return
+      offsets.set(column, offset)
+      offset += pinnedColumnWidths[column] ?? 180
+    })
+
+    return offsets
+  }, [pinnedColumns, tableColumnOrder])
   const activeCount = useMemo(() => students.filter((student) => student.status === "ACTIVE").length, [students])
   const remainingSessions = useMemo(() => students.reduce((sum, student) => sum + student.sessionsRemaining, 0), [students])
 
@@ -113,6 +144,8 @@ export default function StudentsPage() {
     })
     if (status) params.set("status", status)
     if (classFilter) params.set("classId", classFilter)
+    if (createdFrom) params.set("createdFrom", createdFrom)
+    if (createdTo) params.set("createdTo", createdTo)
     if (query.trim()) params.set("q", query.trim())
 
     try {
@@ -159,7 +192,7 @@ export default function StudentsPage() {
 
     return () => window.clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, status, classFilter, page, limit, sortKey, sortDirection])
+  }, [query, status, classFilter, createdFrom, createdTo, page, limit, sortKey, sortDirection])
 
   async function submitLead(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -226,6 +259,42 @@ export default function StudentsPage() {
     })
   }
 
+  function togglePinnedColumn(column: ColumnKey) {
+    setPinnedColumns((current) => {
+      const next = new Set(current)
+      if (next.has(column)) next.delete(column)
+      else next.add(column)
+      return next
+    })
+  }
+
+  function pinnedColumnStyle(column: ColumnKey): CSSProperties | undefined {
+    if (!pinnedColumns.has(column)) return undefined
+    const width = pinnedColumnWidths[column] ?? 180
+
+    return {
+      left: pinnedColumnOffsets.get(column) ?? 0,
+      minWidth: width,
+      width
+    }
+  }
+
+  function pinnedColumnClass(column: ColumnKey, surface: "head" | "body") {
+    if (!pinnedColumns.has(column)) return ""
+    const bgClass = surface === "head" ? "bg-[#f5eeeb]" : "bg-[#fffaf7]"
+    const zClass = surface === "head" ? "z-20" : "z-10"
+    return `sticky ${zClass} ${bgClass} border-r border-brand-red/10 shadow-[8px_0_18px_rgba(88,52,42,0.08)]`
+  }
+
+  function clearFilters() {
+    setStatus("")
+    setClassFilter("")
+    setCreatedFrom("")
+    setCreatedTo("")
+    setQuery("")
+    setPage(1)
+  }
+
   function renderCell(student: StudentListItem, column: ColumnKey) {
     if (column === "status") return studentStatusLabels[student.status]
     if (column === "dataSource") return student.code.startsWith("HV-") ? "Dữ liệu thật" : "Demo/seed"
@@ -236,14 +305,9 @@ export default function StudentsPage() {
   }
 
   return (
-    <main className="flex min-h-[calc(100vh-5.5rem)] flex-col gap-4 md:h-[calc(100vh-3.25rem)] md:min-h-0">
-      <section className="neu-card rounded-3xl p-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Students Database</p>
-            <h1 className="truncate text-2xl font-semibold text-brand-ink">Học viên</h1>
-          </div>
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+    <main className="flex min-h-0 flex-col gap-3 overflow-hidden md:h-[calc(100vh-2.75rem)]">
+      <section className="neu-card shrink-0 rounded-3xl p-3">
+        <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex min-w-60 flex-1 items-center gap-2 rounded-full border border-brand-red/10 bg-white/50 px-4 py-2 text-sm text-stone-600 xl:max-w-md">
               <Search className="h-4 w-4" />
               <input
@@ -256,13 +320,13 @@ export default function StudentsPage() {
                 }}
               />
             </label>
-            <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "list" ? "text-brand-red" : ""}`} onClick={() => setViewMode("list")}>
-              <LayoutList className="h-4 w-4" />
-              Danh sách
-            </button>
             <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "database" ? "text-brand-red" : ""}`} onClick={() => setViewMode("database")}>
               <Rows3 className="h-4 w-4" />
               Database
+            </button>
+            <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "list" ? "text-brand-red" : ""}`} onClick={() => setViewMode("list")}>
+              <LayoutList className="h-4 w-4" />
+              Danh sách
             </button>
             <button className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("lead")}>
               <Plus className="h-4 w-4" />
@@ -276,9 +340,8 @@ export default function StudentsPage() {
               <SlidersHorizontal className="h-4 w-4" />
               Trường
             </button>
-          </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+        <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
           <span className="rounded-full border border-brand-red/10 bg-white/40 px-3 py-1 text-brand-red">{total} hồ sơ</span>
           <span className="rounded-full border border-brand-red/10 bg-white/40 px-3 py-1 text-stone-600">Trang này: {students.length}</span>
           <span className="rounded-full border border-brand-red/10 bg-white/40 px-3 py-1 text-stone-600">Đang học: {activeCount}</span>
@@ -303,49 +366,78 @@ export default function StudentsPage() {
           ) : null}
 
           {panelMode === "filters" ? (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={status} onChange={(event) => { setStatus(event.target.value as StudentStatusKey | ""); setPage(1) }}>
-                <option value="">Tất cả trạng thái</option>
-                {statusOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-              </select>
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setPage(1) }}>
-                <option value="">Tất cả lớp học</option>
-                {options.classes.map((klass) => <option key={klass.id} value={klass.id}>{klass.name}</option>)}
-              </select>
-              <select className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-sm outline-none" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-                <option value="updatedAt">Sort: cập nhật</option>
-                <option value="createdAt">Sort: ngày tạo</option>
-                <option value="code">Sort: mã HS</option>
-                <option value="name">Sort: học viên</option>
-                <option value="parentName">Sort: phụ huynh</option>
-                <option value="sessionsRemaining">Sort: buổi còn</option>
-              </select>
-              <button className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setSortDirection((current) => (current === "asc" ? "desc" : "asc"))}>
-                <ArrowDownAZ className={`h-4 w-4 ${sortDirection === "desc" ? "rotate-180" : ""}`} />
-                {sortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
-              </button>
-              <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" onClick={() => { setStatus(""); setClassFilter(""); setQuery(""); setPage(1) }}>
-                Xóa lọc
-              </button>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Trạng thái
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={status} onChange={(event) => { setStatus(event.target.value as StudentStatusKey | ""); setPage(1) }}>
+                  <option value="">Tất cả trạng thái</option>
+                  {statusOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Lớp
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setPage(1) }}>
+                  <option value="">Tất cả lớp học</option>
+                  {options.classes.map((klass) => <option key={klass.id} value={klass.id}>{klass.name}</option>)}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Tạo từ ngày
+                <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="date" value={createdFrom} onChange={(event) => { setCreatedFrom(event.target.value); setPage(1) }} />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Đến ngày
+                <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="date" value={createdTo} onChange={(event) => { setCreatedTo(event.target.value); setPage(1) }} />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Sắp xếp
+                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setPage(1) }}>
+                  <option value="updatedAt">Cập nhật</option>
+                  <option value="createdAt">Ngày tạo</option>
+                  <option value="code">Mã HS</option>
+                  <option value="name">Học viên</option>
+                  <option value="parentName">Phụ huynh</option>
+                  <option value="sessionsRemaining">Buổi còn</option>
+                </select>
+              </label>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
+                <button className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => { setSortDirection((current) => (current === "asc" ? "desc" : "asc")); setPage(1) }}>
+                  <ArrowDownAZ className={`h-4 w-4 ${sortDirection === "desc" ? "rotate-180" : ""}`} />
+                  {sortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
+                </button>
+                <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" onClick={clearFilters}>
+                  Xóa lọc
+                </button>
+              </div>
             </div>
           ) : null}
 
           {panelMode === "fields" ? (
             <div className="flex flex-wrap gap-2">
               {columnOrder.map((column) => (
-                <button
+                <div
                   key={column}
                   draggable
                   onDragStart={() => setDraggingColumn(column)}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => moveColumn(column)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold ${visibleColumns.has(column) ? "border-brand-red/20 bg-white text-brand-ink" : "border-stone-200 bg-white/35 text-stone-400"}`}
-                  onClick={() => toggleColumn(column)}
+                  className={`inline-flex items-center gap-1 rounded-full border p-1 text-xs font-semibold ${visibleColumns.has(column) ? "border-brand-red/20 bg-white text-brand-ink" : "border-stone-200 bg-white/35 text-stone-400"}`}
                 >
-                  <GripVertical className="h-3.5 w-3.5" />
-                  <Eye className="h-3.5 w-3.5" />
-                  {columnLabels[column]}
-                </button>
+                  <button type="button" className="inline-flex items-center gap-2 rounded-full px-2 py-1.5" onClick={() => toggleColumn(column)}>
+                    <GripVertical className="h-3.5 w-3.5" />
+                    <Eye className="h-3.5 w-3.5" />
+                    {columnLabels[column]}
+                  </button>
+                  <button
+                    type="button"
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${pinnedColumns.has(column) ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/60 text-stone-500"}`}
+                    aria-label={`Ghim ${columnLabels[column]}`}
+                    title={`Ghim ${columnLabels[column]}`}
+                    onClick={() => togglePinnedColumn(column)}
+                  >
+                    <Pin className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           ) : null}
@@ -398,16 +490,20 @@ export default function StudentsPage() {
             <table className="w-full min-w-[1240px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#f5eeeb] text-xs uppercase tracking-wide text-stone-500">
                 <tr>
-                  {visibleColumnOrder.map((column) => <th key={column} className="border-b border-brand-red/10 px-4 py-3 font-semibold">{columnLabels[column]}</th>)}
+                  {tableColumnOrder.map((column) => (
+                    <th key={column} className={`border-b border-brand-red/10 px-4 py-3 font-semibold ${pinnedColumnClass(column, "head")}`} style={pinnedColumnStyle(column)}>
+                      {columnLabels[column]}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td className="px-4 py-8 text-stone-500" colSpan={visibleColumnOrder.length}>Đang tải học viên...</td></tr>
+                  <tr><td className="px-4 py-8 text-stone-500" colSpan={tableColumnOrder.length}>Đang tải học viên...</td></tr>
                 ) : students.length ? students.map((student) => (
                   <tr key={student.id} className="border-b border-brand-red/10 transition-shadow hover:shadow-[0_8px_20px_rgba(165,36,39,0.08)]">
-                    {visibleColumnOrder.map((column) => (
-                      <td key={column} className="max-w-64 truncate px-4 py-3 align-middle text-brand-ink">
+                    {tableColumnOrder.map((column) => (
+                      <td key={column} className={`max-w-64 truncate px-4 py-3 align-middle text-brand-ink ${pinnedColumnClass(column, "body")}`} style={pinnedColumnStyle(column)}>
                         {column === "code" || column === "name" ? (
                           <Link href={`/students/${student.id}`} className="inline-flex items-center gap-2 font-semibold hover:text-brand-red">
                             {column === "name" ? <UserRound className="h-4 w-4 text-brand-red" /> : null}
@@ -424,7 +520,7 @@ export default function StudentsPage() {
                     ))}
                   </tr>
                 )) : (
-                  <tr><td className="px-4 py-8 text-stone-500" colSpan={visibleColumnOrder.length}>Chưa có học viên phù hợp.</td></tr>
+                  <tr><td className="px-4 py-8 text-stone-500" colSpan={tableColumnOrder.length}>Chưa có học viên phù hợp.</td></tr>
                 )}
               </tbody>
             </table>

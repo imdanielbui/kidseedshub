@@ -45,6 +45,8 @@ export const studentUpdateSchema = z.object({
 export const studentListQuerySchema = z.object({
   status: z.enum(studentStatuses).optional(),
   classId: z.string().optional(),
+  createdFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  createdTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   q: z.string().optional(),
   sort: z.enum(["updatedAt", "createdAt", "code", "name", "parentName", "sessionsRemaining"]).default("updatedAt"),
   direction: z.enum(["asc", "desc"]).default("desc"),
