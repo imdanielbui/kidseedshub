@@ -2,7 +2,7 @@
 
 import { Archive, ArrowDownAZ, CheckSquare, Clock, Eye, GripVertical, LayoutGrid, ListFilter, MessageSquarePlus, Pin, Plus, Rows3, Save, Search, SlidersHorizontal, UserRound, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { DialogShell } from "@/components/shared/dialog-shell"
 import { LeadFormPanel, emptyLeadForm, type LeadFormState } from "@/components/shared/lead-form-panel"
@@ -208,6 +208,7 @@ export default function PipelinePage() {
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm)
   const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm)
   const [isSavingActivity, setIsSavingActivity] = useState(false)
+  const [copiedStudentCode, setCopiedStudentCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const includeNurture = stageFilter === "NURTURE"
@@ -626,7 +627,49 @@ export default function PipelinePage() {
     return `sticky ${zClass} ${bgClass} border-r border-brand-red/10 shadow-[8px_0_18px_rgba(88,52,42,0.08)]`
   }
 
+  async function copyStudentCode(event: MouseEvent<HTMLButtonElement>, code: string) {
+    event.stopPropagation()
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code)
+      } else {
+        const textArea = document.createElement("textarea")
+        textArea.value = code
+        textArea.style.position = "fixed"
+        textArea.style.opacity = "0"
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textArea)
+      }
+
+      setCopiedStudentCode(code)
+      window.setTimeout(() => {
+        setCopiedStudentCode((current) => (current === code ? null : current))
+      }, 1200)
+    } catch {
+      setError("Không copy được mã học viên.")
+    }
+  }
+
   function renderCell(card: PipelineCard, column: ColumnKey) {
+    if (column === "code") {
+      const isCopied = copiedStudentCode === card.code
+
+      return (
+        <button
+          type="button"
+          className={`-mx-1 inline-flex max-w-full rounded-full px-1.5 py-1 text-left text-xs font-semibold transition ${isCopied ? "bg-brand-red text-white" : "text-brand-red hover:bg-brand-red/10"}`}
+          title={isCopied ? "Đã copy mã học viên" : "Copy mã học viên"}
+          aria-label={`Copy mã học viên ${card.code}`}
+          onClick={(event) => void copyStudentCode(event, card.code)}
+        >
+          <span className="truncate">{card.code}</span>
+        </button>
+      )
+    }
+
     if (column === "stage") {
       return (
         <select
