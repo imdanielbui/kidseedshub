@@ -48,6 +48,7 @@ export function ReceiptPrintClient({ receiptId }: { receiptId: string }) {
   const [receipt, setReceipt] = useState<ReceiptPrintDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const discountTotal = receipt ? Number(receipt.discountAmount) : 0
+  const walletCreditAmount = receipt ? Number(receipt.walletCreditAmount) : 0
 
   useEffect(() => {
     let isMounted = true
@@ -171,7 +172,9 @@ export function ReceiptPrintClient({ receiptId }: { receiptId: string }) {
             <ReceiptRow label="Tổng giảm giá" value={formatCurrency(receipt.discountAmount)} />
             <ReceiptRow label="Chiết khấu %" value={receipt.lines.length > 1 ? "Theo từng dòng" : `${receipt.discountPercent}%`} />
             <ReceiptRow label="Tổng khuyến mãi" value={formatCurrency(discountTotal)} />
-            <ReceiptRow label="Đã thanh toán" value={formatCurrency(receipt.amount)} strong />
+            <ReceiptRow label="Tổng sau giảm" value={formatCurrency(receipt.amountBeforeWalletCredit)} />
+            <ReceiptRow label="Credit chuyển lớp/ví" value={walletCreditAmount > 0 ? `-${formatCurrency(walletCreditAmount)}` : formatCurrency(0)} />
+            <ReceiptRow label="Thực thu phụ huynh" value={formatCurrency(receipt.amount)} strong />
             <ReceiptRow label="Bằng chữ" value={receipt.amountInWords} strong />
           </div>
           {receipt.note ? <p className="receipt-note">Ghi chú phiếu thu: {receipt.note}</p> : null}

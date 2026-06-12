@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, BarChart3, BookOpenCheck, CalendarClock, CheckCircle2, ClipboardCheck, CreditCard, Eye, EyeOff, KeyRound, Pencil, Phone, Plus, Printer, RotateCcw, Save, Send, ShieldCheck, Star, Trash2, UserRound } from "lucide-react"
+import { ArrowLeft, BarChart3, BookOpenCheck, CalendarClock, CheckCircle2, ClipboardCheck, CreditCard, Eye, EyeOff, KeyRound, Pencil, Phone, Plus, Printer, Repeat2, RotateCcw, Save, Send, ShieldCheck, Star, Trash2, UserRound } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
@@ -9,6 +9,7 @@ import { assessmentStatusLabels, subjectLabels } from "@/lib/contracts/assessmen
 import { attendanceStatusLabels, type ClassPhotoListItem } from "@/lib/contracts/classes"
 import { contactResultLabels, type ContactResultKey, taskStatusLabels } from "@/lib/contracts/crm"
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
+import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import { paymentMethodLabels, type PaymentMethodKey, type ReceiptListItem } from "@/lib/contracts/finance"
 import { makeupEntitlementStatusLabels, type MakeupEntitlementItem } from "@/lib/contracts/makeup-entitlements"
@@ -38,6 +39,13 @@ type EnrollmentEditDraft = {
   sessionsBought: string
   sessionsUsed: string
   isActive: boolean
+}
+type EnrollmentTransferDraft = {
+  fromEnrollmentId: string
+  toCourseId: string
+  toClassId: string
+  startDate: string
+  reason: string
 }
 type LearningDetailTarget =
   | { kind: "course"; course: StudentDetail["courses"][number] }
@@ -266,12 +274,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [pendingBillableEnrollmentId, setPendingBillableEnrollmentId] = useState<string | null>(null)
   const [isConfirmingReceiptAmount, setIsConfirmingReceiptAmount] = useState(false)
   const [editingEnrollment, setEditingEnrollment] = useState<EnrollmentEditDraft | null>(null)
+  const [transferDraft, setTransferDraft] = useState<EnrollmentTransferDraft | null>(null)
   const [selectedLearningDetail, setSelectedLearningDetail] = useState<LearningDetailTarget | null>(null)
   const [isConfirmingEnrollmentDelete, setIsConfirmingEnrollmentDelete] = useState(false)
   const [studentReceipts, setStudentReceipts] = useState<ReceiptListItem[]>([])
   const [studentWallet, setStudentWallet] = useState<StudentWalletSummary | null>(null)
   const [makeupEntitlements, setMakeupEntitlements] = useState<MakeupEntitlementItem[]>([])
   const [walletCreditInput, setWalletCreditInput] = useState("")
+  const [isWalletCreditManual, setIsWalletCreditManual] = useState(false)
   const [lastReceipt, setLastReceipt] = useState<ReceiptListItem | null>(null)
   const [temporaryParentPassword, setTemporaryParentPassword] = useState<string | null>(null)
   const [photoReviewFilter, setPhotoReviewFilter] = useState<PhotoReviewFilter>("DRAFT")
@@ -287,6 +297,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [isSubmittingEnrollment, setIsSubmittingEnrollment] = useState(false)
   const [isUpdatingEnrollment, setIsUpdatingEnrollment] = useState(false)
   const [isDeletingEnrollment, setIsDeletingEnrollment] = useState(false)
+  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false)
   const [isSubmittingReceipt, setIsSubmittingReceipt] = useState(false)
   const [isUpdatingParentAccount, setIsUpdatingParentAccount] = useState(false)
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null)
@@ -305,6 +316,24 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     () => classes.filter((klass) => klass.isActive && (!editingCourse || klass.courseId === editingCourse.courseId)),
     [classes, editingCourse]
   )
+  const transferSourceCourse = useMemo(
+    () => transferDraft ? student?.courses.find((course) => course.enrollmentId === transferDraft.fromEnrollmentId) : undefined,
+    [student?.courses, transferDraft]
+  )
+  const transferTargetCourse = useMemo(
+    () => transferDraft ? activeCourseOptions.find((course) => course.id === transferDraft.toCourseId) : undefined,
+    [activeCourseOptions, transferDraft]
+  )
+  const transferClassOptions = useMemo(
+    () => classes.filter((klass) => klass.isActive && (!transferDraft?.toCourseId || klass.courseId === transferDraft.toCourseId)),
+    [classes, transferDraft]
+  )
+  const isCourseTransfer = Boolean(transferSourceCourse && transferTargetCourse && transferSourceCourse.courseId !== transferTargetCourse.id)
+  const transferRemainingSessions = transferSourceCourse ? Math.max(0, transferSourceCourse.sessionsBought - transferSourceCourse.sessionsUsed) : 0
+  const transferUnitPrice = transferSourceCourse?.courseTotalSessions ? Number(transferSourceCourse.coursePrice) / transferSourceCourse.courseTotalSessions : 0
+  const transferCreditPreview = isCourseTransfer ? transferUnitPrice * transferRemainingSessions : 0
+  const transferTargetPrice = transferTargetCourse ? Number(transferTargetCourse.price) : 0
+  const transferTopUpPreview = Math.max(0, transferTargetPrice - transferCreditPreview)
   const selectedEnrollmentCourse = useMemo(
     () => activeCourseOptions.find((course) => course.id === enrollmentCourseId),
     [activeCourseOptions, enrollmentCourseId]
@@ -352,7 +381,8 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const latestReceipt = lastReceipt ?? studentReceipts[0]
   const totalReceiptAmount = studentReceipts.reduce((total, receipt) => total + Number(receipt.amount), 0)
   const walletBalance = Number(studentWallet?.balance ?? 0)
-  const walletCreditAmount = parseMoneyInput(walletCreditInput)
+  const suggestedWalletCreditAmount = Math.min(walletBalance, actualReceiptAmount)
+  const walletCreditAmount = isWalletCreditManual ? parseMoneyInput(walletCreditInput) : suggestedWalletCreditAmount
   const actualReceiptPaymentAmount = Math.max(0, actualReceiptAmount - walletCreditAmount)
   const receiptValidationErrors = useMemo(() => {
     const errors: string[] = []
@@ -825,6 +855,65 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     }
   }
 
+  function openTransferDialog(course: StudentDetail["courses"][number]) {
+    setTransferDraft({
+      fromEnrollmentId: course.enrollmentId,
+      toCourseId: course.courseId,
+      toClassId: "",
+      startDate: new Date().toISOString().slice(0, 10),
+      reason: ""
+    })
+  }
+
+  async function submitTransfer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!transferDraft) return
+
+    if (!transferDraft.reason.trim()) {
+      setError("Cần nhập lý do chuyển lớp/khóa.")
+      return
+    }
+
+    setIsSubmittingTransfer(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/enrollment-transfers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fromEnrollmentId: transferDraft.fromEnrollmentId,
+          toCourseId: transferDraft.toCourseId,
+          toClassId: transferDraft.toClassId || undefined,
+          startDate: transferDraft.startDate ? new Date(`${transferDraft.startDate}T00:00:00`).toISOString() : undefined,
+          reason: transferDraft.reason.trim()
+        })
+      })
+      const payload = (await response.json()) as ApiResponse<EnrollmentTransferResult>
+
+      if (!response.ok || !payload.success || !payload.data) {
+        setError(payload.error?.message ?? "Không chuyển lớp/khóa được.")
+        return
+      }
+
+      setTransferDraft(null)
+      setReceiptAmount("")
+      setIsReceiptAmountOverride(false)
+      setIsWalletCreditManual(false)
+
+      if (payload.data.isCourseTransfer) {
+        setReceiptLines([toReceiptDraftLine(payload.data.enrollment)])
+      }
+
+      await loadStudent()
+      await loadFinanceLedger()
+    } catch {
+      setError("Không chuyển lớp/khóa được.")
+    } finally {
+      setIsSubmittingTransfer(false)
+    }
+  }
+
   async function submitReceipt(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (receiptValidationErrors.length) {
@@ -864,6 +953,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 
       setReceiptAmount("")
       setWalletCreditInput("")
+      setIsWalletCreditManual(false)
       setIsReceiptAmountOverride(false)
       setReceiptNote("")
       setLastReceipt(payload.data)
@@ -913,12 +1003,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     })
     setReceiptAmount("")
     setIsReceiptAmountOverride(false)
+    setIsWalletCreditManual(false)
   }
 
   function updateReceiptLine(enrollmentId: string, patch: Partial<ReceiptDraftLine>) {
     setReceiptLines((current) => current.map((line) => line.enrollmentId === enrollmentId ? { ...line, ...patch } : line))
     setReceiptAmount("")
     setIsReceiptAmountOverride(false)
+    setIsWalletCreditManual(false)
   }
 
   function confirmBillableOverride() {
@@ -1211,6 +1303,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             <StudentWalletCard summary={studentWallet} />
             <MakeupEntitlementCard entitlements={makeupEntitlements} />
           </div>
+          <EnrollmentTransferHistory transfers={student.enrollmentTransfers} />
           <ReceiptHistoryCard receipts={studentReceipts} />
           <div className="grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
           <form className="neu-card rounded-3xl" onSubmit={submitEnrollment}>
@@ -1280,6 +1373,10 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                           </span>
                         </button>
                         <div className="flex shrink-0 items-center gap-2">
+                          <button type="button" onClick={() => openTransferDialog(course)} className="rounded-full border border-brand-red/15 px-3 py-1 text-xs font-semibold text-brand-red">
+                            <Repeat2 className="mr-1 inline h-3.5 w-3.5" />
+                            Chuyển
+                          </button>
                           <button type="button" onClick={() => setEditingEnrollment(toEnrollmentEditDraft(course))} className="rounded-full border border-brand-red/15 px-3 py-1 text-xs font-semibold text-brand-red">
                             <Pencil className="mr-1 inline h-3.5 w-3.5" />
                             Sửa
@@ -1412,15 +1509,26 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                   Dùng credit ví
                   <input
                     className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
-                    value={walletCreditInput}
-                    onChange={(event) => setWalletCreditInput(formatMoneyInput(event.target.value))}
+                    value={isWalletCreditManual ? walletCreditInput : (suggestedWalletCreditAmount > 0 ? formatMoneyInput(Math.round(suggestedWalletCreditAmount)) : "")}
+                    onChange={(event) => {
+                      setIsWalletCreditManual(true)
+                      setWalletCreditInput(formatMoneyInput(event.target.value))
+                    }}
                     placeholder="0"
                     disabled={walletBalance <= 0}
                   />
                   <span className="mt-1 block text-xs text-stone-500">
-                    Số dư {formatCurrency(walletBalance)} · còn thu {formatCurrency(actualReceiptPaymentAmount)}
+                    Số dư {formatCurrency(walletBalance)} · gợi ý tự trừ {formatCurrency(suggestedWalletCreditAmount)}
                   </span>
                 </label>
+                <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm md:col-span-2">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <InfoPill label="Học phí khóa mới" value={formatCurrency(actualReceiptAmount)} />
+                    <InfoPill label="Credit chuyển lớp" value={formatCurrency(walletCreditAmount)} />
+                    <InfoPill label="Mẹ cần bù" value={formatCurrency(actualReceiptPaymentAmount)} />
+                    <InfoPill label="Credit còn lại" value={formatCurrency(Math.max(0, walletBalance - walletCreditAmount))} />
+                  </div>
+                </div>
                 <label className="block text-sm font-semibold text-stone-700">
                   Phương thức
                   <select className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={receiptMethod} onChange={(event) => setReceiptMethod(event.target.value as PaymentMethodKey)}>
@@ -1679,6 +1787,88 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       />
 
       <LearningDetailDialog target={selectedLearningDetail} onClose={() => setSelectedLearningDetail(null)} />
+
+      {transferDraft ? (
+        <DialogFormShell
+          eyebrow="Đối soát chuyển lớp"
+          title={`Chuyển ${transferSourceCourse?.courseName ?? "khóa/lớp"}`}
+          description="Hệ thống tự tính credit từ số buổi còn lại và ghi vào ví học viên khi chuyển sang khóa khác."
+          onClose={() => setTransferDraft(null)}
+          closeLabel="Đóng chuyển lớp/khóa"
+          onSubmit={submitTransfer}
+          size="lg"
+          bodyClassName="p-0"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setTransferDraft(null)} className="glass-button-secondary px-4 py-3 text-sm font-semibold">Hủy</button>
+              <button type="submit" disabled={isSubmittingTransfer || !transferDraft.toCourseId || !transferDraft.reason.trim()} className="glass-button-primary inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">
+                <Repeat2 className="h-4 w-4" />
+                {isSubmittingTransfer ? "Đang chuyển" : "Xác nhận chuyển"}
+              </button>
+            </div>
+          }
+        >
+          <div className="content-border space-y-4 p-5">
+            <div className="grid gap-3 md:grid-cols-4">
+              <InfoPill label="Đã mua" value={`${transferSourceCourse?.sessionsBought ?? 0} buổi`} />
+              <InfoPill label="Đã học" value={`${transferSourceCourse?.sessionsUsed ?? 0} buổi`} />
+              <InfoPill label="Còn lại" value={`${transferRemainingSessions} buổi`} />
+              <InfoPill label="Credit dự kiến" value={formatCurrency(transferCreditPreview)} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block text-sm font-semibold text-stone-700">
+                Khóa/lớp mới
+                <select
+                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+                  value={transferDraft.toCourseId}
+                  onChange={(event) => setTransferDraft({ ...transferDraft, toCourseId: event.target.value, toClassId: "" })}
+                  required
+                >
+                  {activeCourseOptions.map((course) => (
+                    <option key={course.id} value={course.id}>{course.name} · {course.totalSessions} buổi · {formatCurrency(Number(course.price))}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-semibold text-stone-700">
+                Xếp lớp mới
+                <select
+                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+                  value={transferDraft.toClassId}
+                  onChange={(event) => setTransferDraft({ ...transferDraft, toClassId: event.target.value })}
+                  required={!isCourseTransfer}
+                >
+                  <option value="">{isCourseTransfer ? "Chưa xếp lớp" : "Chọn lớp mới"}</option>
+                  {transferClassOptions.map((klass) => (
+                    <option key={klass.id} value={klass.id}>{klass.code ? `${klass.code} · ` : ""}{klass.name} · {klass.startTime}</option>
+                  ))}
+                </select>
+              </label>
+              <DetailInput label="Ngày bắt đầu lớp/khóa mới" type="date" value={transferDraft.startDate} onChange={(value) => setTransferDraft({ ...transferDraft, startDate: value })} />
+              <label className="block text-sm font-semibold text-stone-700">
+                Lý do chuyển
+                <input
+                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
+                  value={transferDraft.reason}
+                  onChange={(event) => setTransferDraft({ ...transferDraft, reason: event.target.value })}
+                  placeholder="Ví dụ: đổi lịch học, chuyển từ FUN sang Robotics..."
+                  required
+                />
+              </label>
+            </div>
+            <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <InfoPill label="Loại chuyển" value={isCourseTransfer ? "Chuyển khóa" : "Đổi lớp cùng khóa"} />
+                <InfoPill label="Học phí khóa mới" value={transferTargetCourse ? formatCurrency(transferTargetPrice) : "Chưa chọn"} />
+                <InfoPill label="Credit sẽ ghi ví" value={formatCurrency(transferCreditPreview)} />
+                <InfoPill label="Mẹ dự kiến bù" value={isCourseTransfer ? formatCurrency(transferTopUpPreview) : "Không phát sinh"} />
+              </div>
+              <p className="mt-3 text-xs text-stone-500">
+                Nếu chuyển khóa, enrollment cũ sẽ tạm dừng, lớp cũ vẫn giữ lịch sử không hoạt động, credit vào ví và phiếu thu khóa mới sẽ tự trừ credit.
+              </p>
+            </div>
+          </div>
+        </DialogFormShell>
+      ) : null}
 
       {editingEnrollment ? (
         <DialogFormShell
@@ -1940,6 +2130,44 @@ function StudentWalletCard({ summary }: { summary: StudentWalletSummary | null }
             </div>
           </article>
         )) : <EmptyState text={summary ? "Chưa có giao dịch ví." : "Không có dữ liệu ví hoặc tài khoản không có quyền xem ví."} />}
+      </div>
+    </section>
+  )
+}
+
+function EnrollmentTransferHistory({ transfers }: { transfers: StudentDetail["enrollmentTransfers"] }) {
+  return (
+    <section className="neu-card rounded-3xl">
+      <div className="flex flex-col gap-2 p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="font-semibold text-brand-ink">Lịch sử chuyển lớp/khóa</h2>
+          <p className="mt-1 text-sm text-stone-500">Audit phí còn dư và lớp/khóa mới sau mỗi lần chuyển.</p>
+        </div>
+        <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">{transfers.length} lần</span>
+      </div>
+      <div className="content-border max-h-[34vh] space-y-3 overflow-auto p-5">
+        {transfers.length ? transfers.map((transfer) => (
+          <article key={transfer.id} className="neu-list-item rounded-2xl p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-brand-ink">
+                  {transfer.fromCourseName}
+                  {transfer.toCourseName ? ` → ${transfer.toCourseName}` : ""}
+                </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  {transfer.fromClassName ? `Lớp cũ ${transfer.fromClassName}` : "Không có lớp cũ"}
+                  {transfer.toClassName ? ` · lớp mới ${transfer.toClassName}` : ""}
+                </p>
+                <p className="mt-2 line-clamp-2 text-xs text-stone-500">{transfer.reason}</p>
+              </div>
+              <div className="shrink-0 text-left md:text-right">
+                <p className="text-sm font-semibold text-brand-red">{formatCurrency(Number(transfer.creditAmount))}</p>
+                <p className="mt-1 text-xs text-stone-500">{transfer.remainingSessions} buổi còn · {formatDate(transfer.createdAt)}</p>
+                <p className="mt-1 text-xs text-stone-500">Tạo bởi {transfer.createdByName}</p>
+              </div>
+            </div>
+          </article>
+        )) : <EmptyState text="Chưa có lịch sử chuyển lớp/khóa." />}
       </div>
     </section>
   )

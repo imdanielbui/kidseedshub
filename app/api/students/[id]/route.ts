@@ -70,6 +70,17 @@ const studentDetailInclude = Prisma.validator<Prisma.StudentInclude>()({
       }
     }
   },
+  enrollmentTransfers: {
+    include: {
+      fromEnrollment: { include: { course: true } },
+      toEnrollment: { include: { course: true } },
+      fromClass: true,
+      toClass: true,
+      createdBy: true
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20
+  },
   photos: {
     include: {
       createdBy: { select: { name: true } },
@@ -275,6 +286,20 @@ function toStudentDetail(student: StudentDetailRecord, role: Role): StudentDetai
       startTime: klass.startTime,
       endTime: klass.endTime,
       progress: toClassProgressSummary(klass)
+    })),
+    enrollmentTransfers: student.enrollmentTransfers.map((transfer) => ({
+      id: transfer.id,
+      fromEnrollmentId: transfer.fromEnrollmentId,
+      toEnrollmentId: transfer.toEnrollmentId ?? undefined,
+      fromClassName: transfer.fromClass?.name,
+      toClassName: transfer.toClass?.name,
+      fromCourseName: transfer.fromEnrollment.course.name,
+      toCourseName: transfer.toEnrollment?.course.name,
+      remainingSessions: transfer.remainingSessions,
+      creditAmount: transfer.creditAmount.toString(),
+      reason: transfer.reason,
+      createdByName: transfer.createdBy.name,
+      createdAt: transfer.createdAt.toISOString()
     })),
     photos: student.photos.map((photo) => ({
       id: photo.id,

@@ -159,6 +159,21 @@ export type StudentAssessmentProgressItem = {
   finalCreatedAt?: string
 }
 
+export type StudentEnrollmentTransferItem = {
+  id: string
+  fromEnrollmentId: string
+  toEnrollmentId?: string
+  fromClassName?: string
+  toClassName?: string
+  fromCourseName: string
+  toCourseName?: string
+  remainingSessions: number
+  creditAmount: string
+  reason: string
+  createdByName: string
+  createdAt: string
+}
+
 export type StudentDetail = StudentListItem & {
   birthDate?: string
   parentEmail?: string
@@ -170,6 +185,7 @@ export type StudentDetail = StudentListItem & {
   photos: StudentPhotoItem[]
   learningTimeline: StudentLearningTimelineItem[]
   assessmentProgress: StudentAssessmentProgressItem[]
+  enrollmentTransfers: StudentEnrollmentTransferItem[]
   contactLogs: StudentContactLogItem[]
   tasks: StudentTaskItem[]
   permissions: {
