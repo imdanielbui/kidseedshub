@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { createAuditLog } from "@/lib/backend/activity"
+import { calculateJoinSessionNumberForClass } from "@/lib/backend/enrollment-join-session"
 import type { EnrollmentCreateResult, EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -83,6 +84,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    let nextClassId = data.classId === undefined ? undefined : data.classId || null
+
     if (data.classId !== undefined) {
       const currentClassStudents = await tx.classStudent.findMany({
         where: {
@@ -118,16 +121,37 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
     }
 
+    if (nextClassId === undefined) {
+      const activeClassStudent = await tx.classStudent.findFirst({
+        where: {
+          studentId: existing.studentId,
+          isActive: true,
+          class: { courseId: existing.courseId }
+        }
+      })
+      nextClassId = activeClassStudent?.classId ?? null
+    }
+
+    const nextStartDate = data.startDate === undefined
+      ? existing.startDate
+      : data.startDate
+        ? new Date(data.startDate)
+        : null
+    const shouldRecalculateJoinSession = Boolean(nextClassId) && (data.classId !== undefined || data.startDate !== undefined)
+    const joinSessionNumber = shouldRecalculateJoinSession
+      ? await calculateJoinSessionNumberForClass(tx, { classId: nextClassId, startDate: nextStartDate })
+      : data.joinSessionNumber
+
     return tx.enrollment.update({
       where: { id },
       data: {
         sessionsBought: data.sessionsBought,
         sessionsUsed: data.sessionsUsed,
-        joinSessionNumber: data.joinSessionNumber,
+        joinSessionNumber,
         totalCourseSessionsAtJoin: data.totalCourseSessionsAtJoin,
         freeTrialSessions: data.freeTrialSessions,
         paidSessionsBeforeReceipt: data.paidSessionsBeforeReceipt,
-        startDate: data.startDate === undefined ? undefined : data.startDate ? new Date(data.startDate) : null,
+        startDate: data.startDate === undefined ? undefined : nextStartDate,
         endDate: data.endDate === undefined ? undefined : data.endDate ? new Date(data.endDate) : null,
         isActive: data.isActive
       },

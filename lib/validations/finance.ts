@@ -2,6 +2,7 @@ import { z } from "zod"
 
 export const paymentMethods = ["CASH", "BANK_TRANSFER"] as const
 export const expenseCategories = ["SALARY", "MATERIALS", "UTILITIES", "MARKETING", "OTHER"] as const
+export const receiptExtraLineTypes = ["TUTORING", "OTHER"] as const
 
 const receiptLineCreateSchema = z.object({
   enrollmentId: z.string().min(1),
@@ -11,6 +12,14 @@ const receiptLineCreateSchema = z.object({
   paidSessionsBeforeReceipt: z.number().int().min(0).max(200).default(0),
   discountInput: z.string().trim().max(64).optional(),
   extraDiscountInput: z.string().trim().max(64).optional()
+})
+
+const receiptExtraLineCreateSchema = z.object({
+  type: z.enum(receiptExtraLineTypes).default("TUTORING"),
+  description: z.string().trim().min(1).max(255),
+  quantity: z.number().positive().max(1000),
+  unitPrice: z.number().positive().max(1_000_000_000),
+  note: z.string().trim().max(1000).optional()
 })
 
 export const receiptCreateSchema = z.object({
@@ -28,6 +37,7 @@ export const receiptCreateSchema = z.object({
   discountInput: z.string().trim().max(64).optional(),
   extraDiscountInput: z.string().trim().max(64).optional(),
   lines: z.array(receiptLineCreateSchema).min(1).max(10).optional(),
+  extraLines: z.array(receiptExtraLineCreateSchema).max(10).optional(),
   method: z.enum(paymentMethods),
   note: z.string().max(1000).optional()
 }).refine((data) => Boolean(data.lines?.length) || Boolean(data.enrollmentId), {

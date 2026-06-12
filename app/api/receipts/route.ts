@@ -28,6 +28,9 @@ const receiptListInclude = Prisma.validator<Prisma.ReceiptInclude>()({
       }
     },
     orderBy: { createdAt: "asc" }
+  },
+  extraLines: {
+    orderBy: { createdAt: "asc" }
   }
 })
 
@@ -87,6 +90,15 @@ function toReceiptListItem(receipt: ReceiptListRecord): ReceiptListItem {
       freeTrialSessions: line.freeTrialSessions,
       paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
       remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt
+    })),
+    extraLines: receipt.extraLines.map((line) => ({
+      id: line.id,
+      type: line.type,
+      description: line.description,
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice.toString(),
+      amount: line.amount.toString(),
+      note: line.note ?? undefined
     }))
   }
 }
@@ -204,6 +216,7 @@ export async function POST(request: Request) {
 
   try {
     const receipt = await prisma.$transaction(async (tx) => {
+      const inputExtraLines = data.extraLines ?? []
       const inputLines = data.lines?.length
         ? data.lines
         : [{
@@ -270,9 +283,25 @@ export async function POST(request: Request) {
         }
       })
 
-      const totalGrossAmount = computedLines.reduce((total, line) => total.plus(line.grossAmount), new Prisma.Decimal(0))
+      const computedExtraLines = inputExtraLines.map((line) => {
+        const quantity = new Prisma.Decimal(line.quantity)
+        const unitPrice = new Prisma.Decimal(line.unitPrice)
+        const amount = quantity.mul(unitPrice)
+
+        return {
+          type: line.type,
+          description: line.description,
+          quantity,
+          unitPrice,
+          amount,
+          note: line.note
+        }
+      })
+      const totalExtraAmount = computedExtraLines.reduce((total, line) => total.plus(line.amount), new Prisma.Decimal(0))
+      const totalGrossAmount = computedLines.reduce((total, line) => total.plus(line.grossAmount), totalExtraAmount)
       const totalDiscountAmount = computedLines.reduce((total, line) => total.plus(line.discountAmount.plus(line.grossAmount.mul(line.discountPercent).div(100))), new Prisma.Decimal(0))
-      const totalAmountBeforeWalletCredit = data.amount !== undefined ? new Prisma.Decimal(data.amount) : computedLines.reduce((total, line) => total.plus(line.amount), new Prisma.Decimal(0))
+      const computedCourseAmount = computedLines.reduce((total, line) => total.plus(line.amount), new Prisma.Decimal(0))
+      const totalAmountBeforeWalletCredit = data.amount !== undefined ? new Prisma.Decimal(data.amount) : computedCourseAmount.plus(totalExtraAmount)
       const walletCreditAmount = new Prisma.Decimal(data.walletCreditAmount)
       const totalAmount = totalAmountBeforeWalletCredit.minus(walletCreditAmount)
       const totalSessions = computedLines.reduce((total, line) => total + line.billableSessions, 0)
@@ -280,7 +309,7 @@ export async function POST(request: Request) {
       const totalPaidBeforeReceipt = computedLines.reduce((total, line) => total + line.paidSessionsBeforeReceipt, 0)
       const totalRemainingAfterReceipt = computedLines.reduce((total, line) => total + line.remainingSessionsAfterReceipt, 0)
       const code = await nextReceiptCode(tx)
-      const hasManualAmount = data.amount !== undefined || inputLines.some((line) => line.amount !== undefined)
+      const hasManualAmount = data.amount !== undefined || inputLines.some((line) => line.amount !== undefined) || totalExtraAmount.greaterThan(0)
 
       if (totalSessions === 0 && !hasManualAmount) {
         throw new Error("NO_PAYABLE_SESSIONS")
@@ -331,6 +360,16 @@ export async function POST(request: Request) {
               discountPercent: line.discountPercent,
               amount: line.amount,
               remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt
+            }))
+          },
+          extraLines: {
+            create: computedExtraLines.map((line) => ({
+              type: line.type,
+              description: line.description,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+              amount: line.amount,
+              note: line.note
             }))
           }
         },
@@ -385,6 +424,8 @@ export async function POST(request: Request) {
           discountAmount: created.discountAmount.toString(),
           walletCreditAmount: created.walletCreditAmount.toString(),
           lineCount: created.lines.length,
+          extraLineCount: created.extraLines.length,
+          extraAmount: totalExtraAmount.toString(),
           enrollmentIds
         }
       })

@@ -11,7 +11,7 @@ import { contactResultLabels, type ContactResultKey, taskStatusLabels } from "@/
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
 import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
-import { paymentMethodLabels, type PaymentMethodKey, type ReceiptListItem } from "@/lib/contracts/finance"
+import { paymentMethodLabels, receiptExtraLineTypeLabels, type PaymentMethodKey, type ReceiptListItem } from "@/lib/contracts/finance"
 import { makeupEntitlementStatusLabels, type MakeupEntitlementItem } from "@/lib/contracts/makeup-entitlements"
 import { studentStatusLabels, type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
 import { studentWalletEntryTypeLabels, type StudentWalletSummary } from "@/lib/contracts/student-wallet"
@@ -28,6 +28,14 @@ type ReceiptDraftLine = {
   discountInput: string
   extraDiscountInput: string
   isExtraDiscountVisible: boolean
+}
+type ReceiptExtraDraftLine = {
+  id: string
+  type: "TUTORING" | "OTHER"
+  description: string
+  quantity: string
+  unitPrice: string
+  note: string
 }
 type EnrollmentEditDraft = {
   enrollmentId: string
@@ -180,6 +188,48 @@ function moneySuggestions(value: string) {
   return [base * 10000, base * 100000]
 }
 
+function startOfLocalDay(value: Date) {
+  const result = new Date(value)
+  result.setHours(0, 0, 0, 0)
+  return result
+}
+
+function calculateClassJoinPreview(klass: ClassListItem | undefined, startDate: string, totalSessions: number) {
+  if (!totalSessions) {
+    return { joinSessionNumber: 1, sessionsFromJoin: 0, warning: "Chưa chọn khóa học." }
+  }
+
+  if (!klass) {
+    return {
+      joinSessionNumber: 1,
+      sessionsFromJoin: totalSessions,
+      warning: "Chưa xếp lớp nên hệ thống tạm tính từ buổi 1."
+    }
+  }
+
+  const activeSessions = klass.sessionDates
+    .filter((session) => session.status !== "CANCELED")
+    .sort((first, second) => new Date(first.date).getTime() - new Date(second.date).getTime())
+
+  if (!activeSessions.length || !startDate) {
+    return {
+      joinSessionNumber: 1,
+      sessionsFromJoin: totalSessions,
+      warning: "Lớp chưa có lịch học đã sinh, hệ thống sẽ fallback từ buổi 1."
+    }
+  }
+
+  const start = startOfLocalDay(new Date(`${startDate}T00:00:00`)).getTime()
+  const index = activeSessions.findIndex((session) => startOfLocalDay(new Date(session.date)).getTime() >= start)
+  const joinSessionNumber = index === -1 ? activeSessions.length + 1 : index + 1
+
+  return {
+    joinSessionNumber,
+    sessionsFromJoin: Math.max(0, totalSessions - joinSessionNumber + 1),
+    warning: undefined
+  }
+}
+
 function toReceiptDraftLine(course: StudentDetail["courses"][number]): ReceiptDraftLine {
   return {
     enrollmentId: course.enrollmentId,
@@ -262,17 +312,18 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [enrollmentCourseId, setEnrollmentCourseId] = useState("")
   const [enrollmentClassId, setEnrollmentClassId] = useState("")
   const [enrollmentSessions, setEnrollmentSessions] = useState("0")
-  const [enrollmentJoinSessionNumber, setEnrollmentJoinSessionNumber] = useState("1")
   const [enrollmentFreeTrialSessions, setEnrollmentFreeTrialSessions] = useState("0")
   const [enrollmentPaidSessionsBeforeReceipt, setEnrollmentPaidSessionsBeforeReceipt] = useState("0")
   const [enrollmentStartDate, setEnrollmentStartDate] = useState(new Date().toISOString().slice(0, 10))
   const [receiptAmount, setReceiptAmount] = useState("")
   const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([])
+  const [receiptExtraLines, setReceiptExtraLines] = useState<ReceiptExtraDraftLine[]>([])
   const [receiptMethod, setReceiptMethod] = useState<PaymentMethodKey>("BANK_TRANSFER")
   const [receiptNote, setReceiptNote] = useState("")
   const [isReceiptAmountOverride, setIsReceiptAmountOverride] = useState(false)
   const [pendingBillableEnrollmentId, setPendingBillableEnrollmentId] = useState<string | null>(null)
   const [isConfirmingReceiptAmount, setIsConfirmingReceiptAmount] = useState(false)
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false)
   const [editingEnrollment, setEditingEnrollment] = useState<EnrollmentEditDraft | null>(null)
   const [transferDraft, setTransferDraft] = useState<EnrollmentTransferDraft | null>(null)
   const [selectedLearningDetail, setSelectedLearningDetail] = useState<LearningDetailTarget | null>(null)
@@ -338,11 +389,26 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     () => activeCourseOptions.find((course) => course.id === enrollmentCourseId),
     [activeCourseOptions, enrollmentCourseId]
   )
+  const selectedEnrollmentClass = useMemo(
+    () => classOptions.find((klass) => klass.id === enrollmentClassId),
+    [classOptions, enrollmentClassId]
+  )
+  const editingSelectedClass = useMemo(
+    () => editingClassOptions.find((klass) => klass.id === editingEnrollment?.classId),
+    [editingClassOptions, editingEnrollment?.classId]
+  )
   const selectedEnrollmentPrice = selectedEnrollmentCourse ? Number(selectedEnrollmentCourse.price) : 0
   const selectedEnrollmentUnitPrice = selectedEnrollmentCourse?.totalSessions ? selectedEnrollmentPrice / selectedEnrollmentCourse.totalSessions : 0
-  const enrollmentJoinNumber = Math.max(1, toNumber(enrollmentJoinSessionNumber) || 1)
   const enrollmentTotalSessions = selectedEnrollmentCourse?.totalSessions ?? 0
-  const enrollmentSessionsFromJoin = Math.max(0, enrollmentTotalSessions - enrollmentJoinNumber + 1)
+  const enrollmentJoinPreview = useMemo(
+    () => calculateClassJoinPreview(selectedEnrollmentClass, enrollmentStartDate, enrollmentTotalSessions),
+    [enrollmentStartDate, enrollmentTotalSessions, selectedEnrollmentClass]
+  )
+  const editingJoinPreview = useMemo(
+    () => calculateClassJoinPreview(editingSelectedClass, editingEnrollment?.startDate ?? "", editingCourse?.courseTotalSessions ?? 0),
+    [editingCourse?.courseTotalSessions, editingEnrollment?.startDate, editingSelectedClass]
+  )
+  const enrollmentSessionsFromJoin = enrollmentJoinPreview.sessionsFromJoin
   const receiptLineSummaries = useMemo(() => receiptLines.map((line) => {
     const course = student?.courses.find((item) => item.enrollmentId === line.enrollmentId)
     const coursePrice = Number(course?.coursePrice ?? 0)
@@ -374,7 +440,20 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       remainingAfterReceipt: Math.max(0, nextSessionsBought - nextSessionsUsed)
     }
   }), [receiptLines, student?.courses])
-  const payableAmount = receiptLineSummaries.reduce((total, line) => total + line.amount, 0)
+  const coursePayableAmount = receiptLineSummaries.reduce((total, line) => total + line.amount, 0)
+  const receiptExtraLineSummaries = useMemo(() => receiptExtraLines.map((line) => {
+    const quantity = toNonNegativeNumber(line.quantity)
+    const unitPrice = parseMoneyInput(line.unitPrice)
+
+    return {
+      line,
+      quantity,
+      unitPrice,
+      amount: quantity * unitPrice
+    }
+  }), [receiptExtraLines])
+  const extraPayableAmount = receiptExtraLineSummaries.reduce((total, line) => total + line.amount, 0)
+  const payableAmount = coursePayableAmount + extraPayableAmount
   const hasManualReceiptAmount = isReceiptAmountOverride && receiptAmount !== ""
   const actualReceiptAmount = hasManualReceiptAmount ? parseMoneyInput(receiptAmount) : payableAmount
   const receiptAmountSuggestions = moneySuggestions(receiptAmount)
@@ -400,15 +479,21 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       if (summary.paidSessionsBeforeReceipt > summary.billableSessions) errors.push(`${summary.course?.courseName ?? "Khóa đã đăng ký"}: đã học trước không được lớn hơn số buổi tính phí.`)
     })
 
+    receiptExtraLineSummaries.forEach((summary) => {
+      if (!summary.line.description.trim()) errors.push("Dòng cần thu riêng cần có mô tả.")
+      if (hasNegativeSign(summary.line.quantity) || summary.quantity <= 0) errors.push(`${summary.line.description || "Cần thu riêng"}: số giờ/số lượng phải lớn hơn 0.`)
+      if (summary.unitPrice <= 0) errors.push(`${summary.line.description || "Cần thu riêng"}: đơn giá phải lớn hơn 0.`)
+    })
+
     if (actualReceiptAmount < 0) errors.push("Phụ huynh cần thanh toán không được âm.")
     if (walletCreditAmount > walletBalance) errors.push("Credit áp dụng không được vượt quá số dư ví.")
     if (walletCreditAmount > actualReceiptAmount) errors.push("Credit áp dụng không được vượt quá số tiền phiếu thu.")
-    if (receiptLines.length && !receiptLineSummaries.some((summary) => summary.billableSessions > 0) && !hasManualReceiptAmount) {
+    if (receiptLines.length && !receiptLineSummaries.some((summary) => summary.billableSessions > 0) && !receiptExtraLineSummaries.length && !hasManualReceiptAmount) {
       errors.push("Không có buổi tính phí sau học thử. Hãy kiểm tra lại số buổi học thử hoặc nhập số tiền cần thu nếu đây là ngoại lệ.")
     }
 
     return errors
-  }, [actualReceiptAmount, hasManualReceiptAmount, receiptLineSummaries, receiptLines, student?.courses, walletBalance, walletCreditAmount])
+  }, [actualReceiptAmount, hasManualReceiptAmount, receiptExtraLineSummaries, receiptLineSummaries, receiptLines, student?.courses, walletBalance, walletCreditAmount])
   const photoCourseOptions = useMemo(() => {
     const names = new Set((student?.photos ?? []).map((photo) => photo.courseName).filter(Boolean))
     return Array.from(names).sort() as string[]
@@ -749,7 +834,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           courseId: enrollmentCourseId,
           classId: enrollmentClassId || undefined,
           sessionsBought: toNonNegativeNumber(enrollmentSessions),
-          joinSessionNumber: enrollmentJoinNumber,
           totalCourseSessionsAtJoin: selectedEnrollmentCourse?.totalSessions,
           freeTrialSessions: toNonNegativeNumber(enrollmentFreeTrialSessions),
           paidSessionsBeforeReceipt: toNonNegativeNumber(enrollmentPaidSessionsBeforeReceipt),
@@ -765,7 +849,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 
       setEnrollmentClassId("")
       setEnrollmentSessions("0")
-      setEnrollmentJoinSessionNumber("1")
       setEnrollmentFreeTrialSessions("0")
       setEnrollmentPaidSessionsBeforeReceipt("0")
       await loadStudent()
@@ -799,7 +882,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           classId: editingEnrollment.classId || null,
           sessionsBought,
           sessionsUsed,
-          joinSessionNumber: Math.max(1, toNonNegativeNumber(editingEnrollment.joinSessionNumber) || 1),
           freeTrialSessions: toNonNegativeNumber(editingEnrollment.freeTrialSessions),
           paidSessionsBeforeReceipt: toNonNegativeNumber(editingEnrollment.paidSessionsBeforeReceipt),
           startDate: editingEnrollment.startDate ? new Date(`${editingEnrollment.startDate}T00:00:00`).toISOString() : null,
@@ -921,6 +1003,11 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       return
     }
 
+    setError(null)
+    setIsConfirmingPayment(true)
+  }
+
+  async function confirmReceiptPayment() {
     setIsSubmittingReceipt(true)
     setError(null)
 
@@ -939,6 +1026,13 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             discountInput: summary.line.discountInput.trim() || undefined,
             extraDiscountInput: summary.line.extraDiscountInput.trim() || undefined
           })),
+          extraLines: receiptExtraLineSummaries.map((summary) => ({
+            type: summary.line.type,
+            description: summary.line.description.trim(),
+            quantity: summary.quantity,
+            unitPrice: summary.unitPrice,
+            note: summary.line.note.trim() || undefined
+          })),
           walletCreditAmount: walletCreditAmount > 0 ? walletCreditAmount : undefined,
           method: receiptMethod,
           note: receiptNote.trim() || undefined
@@ -956,6 +1050,8 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       setIsWalletCreditManual(false)
       setIsReceiptAmountOverride(false)
       setReceiptNote("")
+      setReceiptExtraLines([])
+      setIsConfirmingPayment(false)
       setLastReceipt(payload.data)
       await loadStudent()
       await loadReceipts()
@@ -1008,6 +1104,37 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 
   function updateReceiptLine(enrollmentId: string, patch: Partial<ReceiptDraftLine>) {
     setReceiptLines((current) => current.map((line) => line.enrollmentId === enrollmentId ? { ...line, ...patch } : line))
+    setReceiptAmount("")
+    setIsReceiptAmountOverride(false)
+    setIsWalletCreditManual(false)
+  }
+
+  function addReceiptExtraLine() {
+    setReceiptExtraLines((current) => [
+      ...current,
+      {
+        id: `extra-${Date.now()}`,
+        type: "TUTORING",
+        description: "Phụ đạo theo giờ",
+        quantity: "1",
+        unitPrice: "",
+        note: ""
+      }
+    ])
+    setReceiptAmount("")
+    setIsReceiptAmountOverride(false)
+    setIsWalletCreditManual(false)
+  }
+
+  function updateReceiptExtraLine(id: string, patch: Partial<ReceiptExtraDraftLine>) {
+    setReceiptExtraLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line))
+    setReceiptAmount("")
+    setIsReceiptAmountOverride(false)
+    setIsWalletCreditManual(false)
+  }
+
+  function removeReceiptExtraLine(id: string) {
+    setReceiptExtraLines((current) => current.filter((line) => line.id !== id))
     setReceiptAmount("")
     setIsReceiptAmountOverride(false)
     setIsWalletCreditManual(false)
@@ -1307,7 +1434,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           <ReceiptHistoryCard receipts={studentReceipts} />
           <div className="grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
           <form className="neu-card rounded-3xl" onSubmit={submitEnrollment}>
-            <SectionHeader icon={<BookOpenCheck className="h-5 w-5 text-brand-red" />} title="1. Ghi danh khóa/lớp" description="Xác định bé vào từ buổi số mấy trước khi thu học phí." />
+            <SectionHeader icon={<BookOpenCheck className="h-5 w-5 text-brand-red" />} title="1. Ghi danh khóa/lớp" description="Chọn lớp và ngày bắt đầu, hệ thống tự tính buổi bé vào lớp." />
             <div className="content-border grid gap-3 p-5 md:grid-cols-2">
               <label className="block text-sm font-semibold text-stone-700 md:col-span-2">
                 Khóa học
@@ -1320,11 +1447,10 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 Xếp lớp
                 <select className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={enrollmentClassId} onChange={(event) => setEnrollmentClassId(event.target.value)}>
                   <option value="">Chưa xếp lớp</option>
-                  {classOptions.map((klass) => <option key={klass.id} value={klass.id}>{klass.name} · {klass.startTime}</option>)}
+                  {classOptions.map((klass) => <option key={klass.id} value={klass.id}>{klass.code ? `${klass.code} · ` : ""}{klass.name} · {klass.startTime}</option>)}
                 </select>
               </label>
               <DetailInput label="Ngày bắt đầu" type="date" value={enrollmentStartDate} onChange={setEnrollmentStartDate} required />
-              <DetailInput label="Bé bắt đầu từ buổi số" type="number" min={1} value={enrollmentJoinSessionNumber} onChange={(value) => setEnrollmentJoinSessionNumber(toNonNegativeIntegerInput(value))} required />
               <DetailInput label="Học thử miễn phí dự kiến" type="number" min={0} value={enrollmentFreeTrialSessions} onChange={(value) => setEnrollmentFreeTrialSessions(toNonNegativeIntegerInput(value))} />
               <DetailInput
                 label="Buổi đã học chưa thu tiền"
@@ -1343,12 +1469,16 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 hint="Thường để 0. Chỉ nhập khi chuyển dữ liệu cũ hoặc muốn cấp buổi trước khi tạo phiếu thu."
                 required
               />
-              <div className="md:col-span-2 grid gap-3 md:grid-cols-4">
+              <div className="md:col-span-2 grid gap-3 md:grid-cols-5">
                 <InfoPill label="Giá nguyên khóa" value={selectedEnrollmentCourse ? formatCurrency(selectedEnrollmentPrice) : "Chưa chọn"} />
                 <InfoPill label="Tổng buổi khóa" value={selectedEnrollmentCourse ? `${selectedEnrollmentCourse.totalSessions} buổi` : "Chưa chọn"} />
                 <InfoPill label="Đơn giá/buổi" value={selectedEnrollmentCourse ? formatCurrency(selectedEnrollmentUnitPrice) : "Chưa chọn"} />
-                <InfoPill label="Còn từ lúc bé vào" value={selectedEnrollmentCourse ? `${enrollmentSessionsFromJoin} buổi` : "Chưa chọn"} />
+                <InfoPill label="Bé sẽ bắt đầu từ buổi" value={selectedEnrollmentCourse ? `${enrollmentJoinPreview.joinSessionNumber}/${selectedEnrollmentCourse.totalSessions}` : "Chưa chọn"} />
+                <InfoPill label="Số buổi tính phí còn lại" value={selectedEnrollmentCourse ? `${enrollmentSessionsFromJoin} buổi` : "Chưa chọn"} />
               </div>
+              {enrollmentJoinPreview.warning ? (
+                <p className="md:col-span-2 rounded-2xl border border-brand-red/10 bg-white/45 px-3 py-2 text-xs font-semibold text-stone-500">{enrollmentJoinPreview.warning}</p>
+              ) : null}
             </div>
             <FormFooter loading={isSubmittingEnrollment} label="Ghi danh" loadingLabel="Đang ghi danh" disabled={!enrollmentCourseId} />
           </form>
@@ -1460,6 +1590,60 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 </div>
               ) : null}
 
+              <div className="rounded-2xl border border-brand-red/10 bg-white/35 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-stone-700">Cần thu riêng</p>
+                    <p className="mt-1 text-xs text-stone-500">Phụ đạo theo giờ hoặc khoản linh động, không cộng vào quỹ buổi khóa.</p>
+                  </div>
+                  <button type="button" onClick={addReceiptExtraLine} className="glass-button-secondary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold">
+                    <Plus className="h-3.5 w-3.5" />
+                    Thêm phụ đạo
+                  </button>
+                </div>
+                {receiptExtraLineSummaries.length ? (
+                  <div className="mt-4 space-y-3">
+                    {receiptExtraLineSummaries.map((summary) => (
+                      <article key={summary.line.id} className="rounded-2xl border border-brand-red/10 bg-white/45 p-3">
+                        <div className="grid gap-3 md:grid-cols-[0.8fr_1.2fr_0.7fr_1fr_auto]">
+                          <label className="block text-sm font-semibold text-stone-700">
+                            Loại
+                            <select
+                              className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-3 py-3 text-sm text-brand-ink outline-none"
+                              value={summary.line.type}
+                              onChange={(event) => updateReceiptExtraLine(summary.line.id, { type: event.target.value as ReceiptExtraDraftLine["type"] })}
+                            >
+                              <option value="TUTORING">Phụ đạo</option>
+                              <option value="OTHER">Thu riêng</option>
+                            </select>
+                          </label>
+                          <DetailInput label="Mô tả" value={summary.line.description} onChange={(value) => updateReceiptExtraLine(summary.line.id, { description: value })} />
+                          <DetailInput label="Số giờ/sl" type="number" min={0} value={summary.line.quantity} onChange={(value) => updateReceiptExtraLine(summary.line.id, { quantity: value })} />
+                          <label className="block text-sm font-semibold text-stone-700">
+                            Đơn giá
+                            <input
+                              className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-3 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
+                              value={summary.line.unitPrice}
+                              onChange={(event) => updateReceiptExtraLine(summary.line.id, { unitPrice: formatMoneyInput(event.target.value) })}
+                              placeholder="Ví dụ: 200000"
+                            />
+                          </label>
+                          <button type="button" onClick={() => removeReceiptExtraLine(summary.line.id)} className="mt-7 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-brand-red/15 text-brand-red">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
+                          <DetailInput label="Ghi chú" value={summary.line.note} onChange={(value) => updateReceiptExtraLine(summary.line.id, { note: value })} />
+                          <InfoPill label="Thành tiền" value={formatCurrency(summary.amount)} />
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-2xl border border-brand-red/10 px-3 py-3 text-xs font-semibold text-stone-500">Chưa có khoản thu riêng.</p>
+                )}
+              </div>
+
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block text-sm font-semibold text-stone-700">
                   Tổng phiếu trước credit
@@ -1480,7 +1664,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                     {isReceiptAmountOverride ? (
                       <span className="font-semibold text-brand-red">{receiptAmount ? "Đã chỉnh tay" : "Để trống sẽ dùng số tự tính"}</span>
                     ) : (
-                      <span className="text-stone-500">Tự tính từ các dòng khóa</span>
+                      <span className="text-stone-500">Tự tính từ học phí khóa và khoản thu riêng</span>
                     )}
                     {isReceiptAmountOverride ? (
                       <button
@@ -1523,11 +1707,12 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 </label>
                 <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm md:col-span-2">
                   <div className="grid gap-3 md:grid-cols-4">
-                    <InfoPill label="Học phí khóa mới" value={formatCurrency(actualReceiptAmount)} />
-                    <InfoPill label="Credit chuyển lớp" value={formatCurrency(walletCreditAmount)} />
+                    <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
+                    <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
                     <InfoPill label="Mẹ cần bù" value={formatCurrency(actualReceiptPaymentAmount)} />
                     <InfoPill label="Credit còn lại" value={formatCurrency(Math.max(0, walletBalance - walletCreditAmount))} />
                   </div>
+                  <p className="mt-3 text-xs font-semibold text-stone-500">Credit dùng: {formatCurrency(walletCreditAmount)} · Tổng trước credit: {formatCurrency(actualReceiptAmount)}</p>
                 </div>
                 <label className="block text-sm font-semibold text-stone-700">
                   Phương thức
@@ -1552,7 +1737,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 </div>
               ) : null}
             </div>
-            <FormFooter loading={isSubmittingReceipt} label="Tạo phiếu thu" loadingLabel="Đang thu" disabled={!receiptLineSummaries.length || actualReceiptAmount < 0 || receiptValidationErrors.length > 0} />
+            <FormFooter loading={isSubmittingReceipt} label="Xác nhận đóng tiền" loadingLabel="Đang thu" disabled={!receiptLineSummaries.length || actualReceiptAmount < 0 || receiptValidationErrors.length > 0} />
           </form>
           </div>
         </section>
@@ -1775,6 +1960,73 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
         onConfirm={confirmReceiptAmountOverride}
       />
 
+      {isConfirmingPayment ? (
+        <DialogShell
+          eyebrow="Preview phiếu thu"
+          title="Xác nhận đóng tiền"
+          description="Kiểm tra học phí khóa, khoản thu riêng, credit và thực thu trước khi lưu phiếu."
+          onClose={() => setIsConfirmingPayment(false)}
+          closeLabel="Đóng xác nhận đóng tiền"
+          size="lg"
+          bodyClassName="p-0"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setIsConfirmingPayment(false)} className="glass-button-secondary px-4 py-3 text-sm font-semibold">Hủy</button>
+              <button
+                type="button"
+                disabled={isSubmittingReceipt || receiptValidationErrors.length > 0}
+                onClick={() => void confirmReceiptPayment()}
+                className="glass-button-primary inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CreditCard className="h-4 w-4" />
+                {isSubmittingReceipt ? "Đang lưu phiếu" : "Lưu phiếu thu"}
+              </button>
+            </div>
+          }
+        >
+          <div className="content-border space-y-4 p-5">
+            <div className="grid gap-3 md:grid-cols-4">
+              <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
+              <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
+              <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
+              <InfoPill label="Thực thu" value={formatCurrency(actualReceiptPaymentAmount)} />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
+                <p className="text-sm font-semibold text-brand-ink">Học phí khóa</p>
+                <div className="mt-3 space-y-2 text-sm text-stone-600">
+                  {receiptLineSummaries.map((summary) => (
+                    <div key={summary.line.enrollmentId} className="flex justify-between gap-3">
+                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi</span>
+                      <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
+                <p className="text-sm font-semibold text-brand-ink">Cần thu riêng</p>
+                <div className="mt-3 space-y-2 text-sm text-stone-600">
+                  {receiptExtraLineSummaries.length ? receiptExtraLineSummaries.map((summary) => (
+                    <div key={summary.line.id} className="flex justify-between gap-3">
+                      <span>{summary.line.description} · {summary.quantity} x {formatCurrency(summary.unitPrice)}</span>
+                      <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
+                    </div>
+                  )) : <p className="text-xs font-semibold text-stone-500">Không có khoản thu riêng.</p>}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-600">
+              <div className="grid gap-2 md:grid-cols-2">
+                <p>Phương thức: <strong className="text-brand-ink">{paymentMethodLabels[receiptMethod]}</strong></p>
+                <p>Tổng trước credit: <strong className="text-brand-ink">{formatCurrency(actualReceiptAmount)}</strong></p>
+                <p>Credit còn lại sau phiếu: <strong className="text-brand-ink">{formatCurrency(Math.max(0, walletBalance - walletCreditAmount))}</strong></p>
+                <p>Ghi chú: <strong className="text-brand-ink">{receiptNote.trim() || "Không có"}</strong></p>
+              </div>
+            </div>
+          </div>
+        </DialogShell>
+      ) : null}
+
       <ConfirmDialog
         open={isConfirmingEnrollmentDelete}
         title="Xóa hoặc hủy ghi danh?"
@@ -1903,11 +2155,10 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 Xếp lớp
                 <select className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={editingEnrollment.classId} onChange={(event) => setEditingEnrollment({ ...editingEnrollment, classId: event.target.value })}>
                   <option value="">Chưa xếp lớp</option>
-                  {editingClassOptions.map((klass) => <option key={klass.id} value={klass.id}>{klass.name} · {klass.startTime}</option>)}
+                  {editingClassOptions.map((klass) => <option key={klass.id} value={klass.id}>{klass.code ? `${klass.code} · ` : ""}{klass.name} · {klass.startTime}</option>)}
                 </select>
               </label>
               <DetailInput label="Ngày bắt đầu" type="date" value={editingEnrollment.startDate} onChange={(value) => setEditingEnrollment({ ...editingEnrollment, startDate: value })} />
-              <DetailInput label="Bé bắt đầu từ buổi số" type="number" min={1} value={editingEnrollment.joinSessionNumber} onChange={(value) => setEditingEnrollment({ ...editingEnrollment, joinSessionNumber: toNonNegativeIntegerInput(value) })} />
               <DetailInput label="Học thử miễn phí dự kiến" type="number" min={0} value={editingEnrollment.freeTrialSessions} onChange={(value) => setEditingEnrollment({ ...editingEnrollment, freeTrialSessions: toNonNegativeIntegerInput(value) })} />
               <DetailInput
                 label="Buổi đã học chưa thu tiền"
@@ -1926,6 +2177,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 hint="Tổng số buổi đang được cấp cho khóa này, gồm dữ liệu cũ và các phiếu thu đã tạo."
               />
               <DetailInput label="Số buổi đã học" type="number" min={0} value={editingEnrollment.sessionsUsed} onChange={(value) => setEditingEnrollment({ ...editingEnrollment, sessionsUsed: toNonNegativeIntegerInput(value) })} />
+              <div className="grid gap-3 md:col-span-2 md:grid-cols-3">
+                <InfoPill label="Buổi hiện tại" value={`${editingEnrollment.joinSessionNumber || 1}`} />
+                <InfoPill label="Hệ thống sẽ tính" value={`${editingJoinPreview.joinSessionNumber}/${editingCourse?.courseTotalSessions ?? 0}`} />
+                <InfoPill label="Còn từ ngày bắt đầu" value={`${editingJoinPreview.sessionsFromJoin} buổi`} />
+              </div>
+              {editingJoinPreview.warning ? (
+                <p className="md:col-span-2 rounded-2xl border border-brand-red/10 bg-white/45 px-3 py-2 text-xs font-semibold text-stone-500">{editingJoinPreview.warning}</p>
+              ) : null}
               <label className="flex items-center gap-2 rounded-2xl border border-brand-red/10 px-3 py-3 text-sm font-semibold text-stone-600 md:col-span-2">
                 <input type="checkbox" checked={editingEnrollment.isActive} onChange={(event) => setEditingEnrollment({ ...editingEnrollment, isActive: event.target.checked })} />
                 Khóa đang hoạt động
@@ -2243,6 +2502,11 @@ function ReceiptHistoryCard({ receipts }: { receipts: ReceiptListItem[] }) {
                   )) : (
                     <span className="rounded-full border border-brand-red/10 px-2 py-1">{receipt.billableSessions} buổi tính phí</span>
                   )}
+                  {receipt.extraLines.map((line) => (
+                    <span key={line.id} className="rounded-full border border-brand-red/10 px-2 py-1">
+                      {receiptExtraLineTypeLabels[line.type]}: {line.description} · {formatCurrency(Number(line.amount))}
+                    </span>
+                  ))}
                   {Number(receipt.walletCreditAmount) > 0 ? (
                     <span className="rounded-full border border-brand-red/10 px-2 py-1">
                       Dùng credit {formatCurrency(Number(receipt.walletCreditAmount))}

@@ -11,8 +11,14 @@ export const expenseCategoryLabels = {
   OTHER: "Khác"
 } as const
 
+export const receiptExtraLineTypeLabels = {
+  TUTORING: "Phụ đạo",
+  OTHER: "Thu riêng"
+} as const
+
 export type PaymentMethodKey = keyof typeof paymentMethodLabels
 export type ExpenseCategoryKey = keyof typeof expenseCategoryLabels
+export type ReceiptExtraLineTypeKey = keyof typeof receiptExtraLineTypeLabels
 
 export type ReceiptLineItem = {
   id: string
@@ -29,6 +35,16 @@ export type ReceiptLineItem = {
   freeTrialSessions: number
   paidSessionsBeforeReceipt: number
   remainingSessionsAfterReceipt: number
+}
+
+export type ReceiptExtraLineItem = {
+  id: string
+  type: ReceiptExtraLineTypeKey
+  description: string
+  quantity: string
+  unitPrice: string
+  amount: string
+  note?: string
 }
 
 export type ReceiptListItem = {
@@ -59,6 +75,7 @@ export type ReceiptListItem = {
   createdByName: string
   createdAt: string
   lines: ReceiptLineItem[]
+  extraLines: ReceiptExtraLineItem[]
 }
 
 export type ReceiptPrintDetail = ReceiptListItem & {

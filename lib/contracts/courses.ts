@@ -27,8 +27,14 @@ export type ClassListItem = {
   plannedSessions?: number
   isActive: boolean
   scheduleSlots: ClassScheduleSlotItem[]
+  sessionDates: ClassSessionDateItem[]
   students: ClassStudentItem[]
   generatedSessionCount: number
+}
+
+export type ClassSessionDateItem = {
+  date: string
+  status: ClassSessionStatusKey
 }
 
 export type ClassStudentItem = {

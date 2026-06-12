@@ -27,6 +27,9 @@ const receiptDetailInclude = Prisma.validator<Prisma.ReceiptInclude>()({
       }
     },
     orderBy: { createdAt: "asc" }
+  },
+  extraLines: {
+    orderBy: { createdAt: "asc" }
   }
 })
 
@@ -101,6 +104,15 @@ function toReceiptDetail(receipt: ReceiptDetailRecord): ReceiptPrintDetail {
       freeTrialSessions: line.freeTrialSessions,
       paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
       remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt
+    })),
+    extraLines: receipt.extraLines.map((line) => ({
+      id: line.id,
+      type: line.type,
+      description: line.description,
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice.toString(),
+      amount: line.amount.toString(),
+      note: line.note ?? undefined
     }))
   }
 }

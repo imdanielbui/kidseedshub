@@ -14,6 +14,10 @@ type RouteContext = {
 const classListInclude = Prisma.validator<Prisma.ClassInclude>()({
   course: true,
   teacher: true,
+  sessions: {
+    select: { date: true, status: true },
+    orderBy: { date: "asc" }
+  },
   scheduleSlots: { orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
   students: { include: { student: { include: { parent: { include: { user: true } } } } } },
   _count: { select: { sessions: true } }
@@ -45,6 +49,10 @@ function toClassListItem(klass: ClassListRecord): ClassListItem {
       endTime: slot.endTime,
       room: slot.room ?? undefined,
       isActive: slot.isActive
+    })),
+    sessionDates: klass.sessions.map((session) => ({
+      date: session.date.toISOString(),
+      status: session.status
     })),
     students: klass.students.map((classStudent) => ({
       id: classStudent.id,

@@ -4,7 +4,7 @@ import { Printer } from "lucide-react"
 import { useEffect, useState } from "react"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import type { ApiResponse } from "@/lib/api-response"
-import { paymentMethodLabels, type ReceiptPrintDetail } from "@/lib/contracts/finance"
+import { paymentMethodLabels, receiptExtraLineTypeLabels, type ReceiptPrintDetail } from "@/lib/contracts/finance"
 
 function formatCurrency(value: string | number) {
   return new Intl.NumberFormat("vi-VN", {
@@ -164,6 +164,32 @@ export function ReceiptPrintClient({ receiptId }: { receiptId: string }) {
             })}
           </div>
         </section>
+
+        {receipt.extraLines.length ? (
+          <section className="receipt-section">
+            <h2>Cần thu riêng</h2>
+            <div className="receipt-line-table">
+              <div className="receipt-line-table-head">
+                <span>Loại</span>
+                <span>Nội dung</span>
+                <span>Số giờ/sl</span>
+                <span>Đơn giá</span>
+                <span>Ghi chú</span>
+                <span>Thành tiền</span>
+              </div>
+              {receipt.extraLines.map((line) => (
+                <div key={line.id} className="receipt-line-table-row">
+                  <span>{receiptExtraLineTypeLabels[line.type]}</span>
+                  <span><strong>{line.description}</strong></span>
+                  <span>{Number(line.quantity).toLocaleString("vi-VN")}</span>
+                  <span>{formatCurrency(line.unitPrice)}</span>
+                  <span>{line.note ?? "-"}</span>
+                  <span><strong>{formatCurrency(line.amount)}</strong></span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="receipt-section">
           <h2>Thanh toán</h2>

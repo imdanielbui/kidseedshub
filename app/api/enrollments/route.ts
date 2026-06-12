@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
+import { calculateJoinSessionNumberForClass } from "@/lib/backend/enrollment-join-session"
 import type { EnrollmentCreateResult } from "@/lib/contracts/enrollments"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -97,16 +98,21 @@ export async function POST(request: Request) {
   }
 
   const enrollment = await prisma.$transaction(async (tx) => {
+    const startDate = data.startDate ? new Date(data.startDate) : undefined
+    const joinSessionNumber = data.classId
+      ? await calculateJoinSessionNumberForClass(tx, { classId: data.classId, startDate })
+      : data.joinSessionNumber
+
     const created = await tx.enrollment.create({
       data: {
         studentId: data.studentId,
         courseId: data.courseId,
         sessionsBought: data.sessionsBought,
-        joinSessionNumber: data.joinSessionNumber,
+        joinSessionNumber,
         totalCourseSessionsAtJoin: data.totalCourseSessionsAtJoin ?? course.totalSessions,
         freeTrialSessions: data.freeTrialSessions,
         paidSessionsBeforeReceipt: data.paidSessionsBeforeReceipt,
-        startDate: data.startDate ? new Date(data.startDate) : undefined,
+        startDate,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
         isActive: true
       },
