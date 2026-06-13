@@ -192,8 +192,40 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 }
 
+function normalizeMonth(value: string) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : getCurrentMonth()
+}
+
+const billingMonthChoices = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, "0")
+
+  return { value, label: `Tháng ${value}` }
+})
+
+function getMonthPart(value: string) {
+  const monthPart = value.split("-")[1] ?? "01"
+
+  return billingMonthChoices.some((choice) => choice.value === monthPart) ? monthPart : "01"
+}
+
+function getYearPart(value: string) {
+  const yearPart = value.split("-")[0] ?? ""
+
+  return /^\d{4}$/.test(yearPart) ? yearPart : String(new Date().getFullYear())
+}
+
+function buildYearOptions(selectedYear: string) {
+  const currentYear = new Date().getFullYear()
+  const selectedYearNumber = Number(selectedYear)
+  const firstYear = Math.min(2020, selectedYearNumber)
+  const lastYear = Math.max(currentYear + 20, selectedYearNumber)
+
+  return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => String(lastYear - index))
+}
+
 function getBillingPeriodForMonth(month: string) {
-  const [year, value] = month.split("-").map(Number)
+  const normalizedMonth = normalizeMonth(month)
+  const [year, value] = normalizedMonth.split("-").map(Number)
   const start = new Date(Date.UTC(year, value - 1, 1))
   const end = new Date(Date.UTC(year, value, 1))
 
@@ -500,13 +532,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const hasManualReceiptAmount = isReceiptAmountOverride && receiptAmount !== ""
   const actualReceiptAmount = hasManualReceiptAmount ? parseMoneyInput(receiptAmount) : payableAmount
   const receiptAmountSuggestions = moneySuggestions(receiptAmount)
-  const latestReceipt = lastReceipt ?? studentReceipts[0]
-  const totalReceiptAmount = studentReceipts.reduce((total, receipt) => total + Number(receipt.amount), 0)
-  const walletBalance = Number(studentWallet?.balance ?? 0)
-  const suggestedWalletCreditAmount = Math.min(walletBalance, actualReceiptAmount)
-  const walletCreditAmount = isWalletCreditManual ? parseMoneyInput(walletCreditInput) : suggestedWalletCreditAmount
-  const actualReceiptPaymentAmount = Math.max(0, actualReceiptAmount - walletCreditAmount)
-  const receiptValidationErrors = useMemo(() => {
+	  const latestReceipt = lastReceipt ?? studentReceipts[0]
+	  const totalReceiptAmount = studentReceipts.reduce((total, receipt) => total + Number(receipt.amount), 0)
+	  const walletBalance = Number(studentWallet?.balance ?? 0)
+	  const suggestedWalletCreditAmount = Math.min(walletBalance, actualReceiptAmount)
+	  const walletCreditAmount = isWalletCreditManual ? parseMoneyInput(walletCreditInput) : suggestedWalletCreditAmount
+	  const actualReceiptPaymentAmount = Math.max(0, actualReceiptAmount - walletCreditAmount)
+	  const receiptBillingYearOptions = useMemo(() => buildYearOptions(getYearPart(receiptBillingMonth)), [receiptBillingMonth])
+	  const receiptValidationErrors = useMemo(() => {
     const errors: string[] = []
 
     receiptLines.forEach((line) => {
@@ -1519,16 +1552,36 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	          <form className="neu-card rounded-3xl" onSubmit={submitReceipt}>
 	            <SectionHeader icon={<CreditCard className="h-5 w-5 text-brand-red" />} title="2. Tạo phiếu thu" description="Chọn một hoặc nhiều khóa đã đăng ký, hệ thống tự tính buổi và tổng cần thanh toán." />
 	            <div className="content-border space-y-4 p-5">
-	              <label className="block text-sm font-semibold text-stone-700">
-	                Kỳ thu học phí
-	                <input
-	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-	                  type="month"
-	                  value={receiptBillingMonth}
-	                  onChange={(event) => setReceiptBillingMonth(event.target.value || getCurrentMonth())}
-	                />
+	              <div>
+	                <p className="text-sm font-semibold text-stone-700">Kỳ thu học phí</p>
+	                <div className="mt-2 grid gap-3 md:grid-cols-2">
+	                  <label>
+	                    <span className="text-xs font-semibold text-stone-500">Tháng</span>
+	                    <select
+	                      className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+	                      value={getMonthPart(receiptBillingMonth)}
+	                      onChange={(event) => setReceiptBillingMonth(`${getYearPart(receiptBillingMonth)}-${event.target.value}`)}
+	                    >
+	                      {billingMonthChoices.map((choice) => (
+	                        <option key={choice.value} value={choice.value}>{choice.label}</option>
+	                      ))}
+	                    </select>
+	                  </label>
+	                  <label>
+	                    <span className="text-xs font-semibold text-stone-500">Năm</span>
+	                    <select
+	                      className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+	                      value={getYearPart(receiptBillingMonth)}
+	                      onChange={(event) => setReceiptBillingMonth(`${event.target.value}-${getMonthPart(receiptBillingMonth)}`)}
+	                    >
+	                      {receiptBillingYearOptions.map((year) => (
+	                        <option key={year} value={year}>{year}</option>
+	                      ))}
+	                    </select>
+	                  </label>
+	                </div>
 	                <span className="mt-1 block text-xs text-stone-500">Hệ thống đếm các buổi trong tháng này từ lịch lớp, bỏ qua buổi nghỉ/hủy.</span>
-	              </label>
+	              </div>
 	              <div>
 	                <p className="text-sm font-semibold text-stone-700">Khóa cần thu</p>
                 <div className="mt-2 grid gap-2">

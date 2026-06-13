@@ -72,6 +72,10 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 }
 
+function normalizeMonth(value: string) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : getCurrentMonth()
+}
+
 const financeMonthChoices = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, "0")
 
@@ -123,7 +127,8 @@ function getReceiptTotal(receipts: ReceiptListItem[]) {
 }
 
 function getBillingPeriodForMonth(month: string) {
-  const [year, value] = month.split("-").map(Number)
+  const normalizedMonth = normalizeMonth(month)
+  const [year, value] = normalizedMonth.split("-").map(Number)
   const start = new Date(Date.UTC(year, value - 1, 1))
   const end = new Date(Date.UTC(year, value, 1))
 
@@ -810,20 +815,46 @@ export default function FinancePage() {
                 ))}
               </select>
             </label>
-	            <FinanceInput
-	              label="Kỳ thu học phí"
-	              type="month"
-	              value={receiptForm.billingMonth}
-	              onChange={(value) => {
-	                const billingMonth = value || getCurrentMonth()
-	                setReceiptForm((current) => ({
-	                  ...current,
-	                  billingMonth,
-	                  billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth)
-	                }))
-	              }}
-	              required
-	            />
+	            <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+	              <label>
+	                <span className="text-sm font-medium text-stone-600">Tháng kỳ thu</span>
+	                <select
+	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+	                  value={getMonthPart(receiptForm.billingMonth)}
+	                  onChange={(event) => {
+	                    const billingMonth = `${getYearPart(receiptForm.billingMonth)}-${event.target.value}`
+	                    setReceiptForm((current) => ({
+	                      ...current,
+	                      billingMonth,
+	                      billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth)
+	                    }))
+	                  }}
+	                >
+	                  {financeMonthChoices.map((choice) => (
+	                    <option key={choice.value} value={choice.value}>{choice.label}</option>
+	                  ))}
+	                </select>
+	              </label>
+	              <label>
+	                <span className="text-sm font-medium text-stone-600">Năm kỳ thu</span>
+	                <select
+	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+	                  value={getYearPart(receiptForm.billingMonth)}
+	                  onChange={(event) => {
+	                    const billingMonth = `${event.target.value}-${getMonthPart(receiptForm.billingMonth)}`
+	                    setReceiptForm((current) => ({
+	                      ...current,
+	                      billingMonth,
+	                      billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth)
+	                    }))
+	                  }}
+	                >
+	                  {buildYearOptions(getYearPart(receiptForm.billingMonth)).map((year) => (
+	                    <option key={year} value={year}>{year}</option>
+	                  ))}
+	                </select>
+	              </label>
+	            </div>
 	            <FinanceInput
 	              label="Số buổi tính phí"
 	              type="number"
