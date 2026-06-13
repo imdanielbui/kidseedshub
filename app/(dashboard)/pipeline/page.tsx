@@ -958,14 +958,14 @@ export default function PipelinePage() {
           </div>
         </section>
       ) : (
-        <section className="flex w-full gap-3 overflow-x-auto pb-2">
+        <section className="flex w-full items-start gap-3 overflow-x-auto pb-2">
           {visibleKanbanStages.length ? visibleKanbanStages.map((stage) => {
             const stageCards = cardsByStage[stage.key]
 
             return (
               <div
                 key={stage.key}
-                className={`neu-card min-w-[260px] flex-1 rounded-3xl transition-colors ${dropStage === stage.key ? "bg-white/45" : ""}`}
+                className={`neu-card min-w-[260px] flex-1 self-start rounded-3xl transition-colors ${dropStage === stage.key ? "bg-white/45" : ""}`}
                 onDragOver={(event) => {
                   event.preventDefault()
                   setDropStage(stage.key)
@@ -998,15 +998,31 @@ export default function PipelinePage() {
                           setDropStage(null)
                         }}
                         onClick={() => void openStudentDialog(card.id)}
-                        className={`neu-list-item cursor-grab rounded-2xl p-4 active:cursor-grabbing ${draggingCardId === card.id ? "opacity-60" : ""}`}
+                        className={`neu-list-item min-h-0 cursor-grab rounded-2xl p-3 active:cursor-grabbing ${draggingCardId === card.id ? "opacity-60" : ""}`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
+                          <div className="min-w-0 space-y-1">
                             <p className="text-xs font-semibold text-brand-red">{card.code}</p>
-                            <p className="truncate text-sm font-semibold text-brand-ink">{card.parentName}</p>
-                            <p className="truncate text-xs text-stone-500">{card.studentName}</p>
+                            <p className="break-words text-sm font-semibold leading-snug text-brand-ink">{card.studentName}</p>
+                            <p className="break-words text-xs leading-snug text-stone-600">PH: {card.parentName}</p>
                           </div>
-                          <span className={`text-xs font-semibold ${card.isStale ? "text-brand-red" : "text-stone-500"}`}>{card.daysInStage}d</span>
+                          <span className={`shrink-0 text-xs font-semibold ${card.isStale ? "text-brand-red" : "text-stone-500"}`}>{card.daysInStage}d</span>
+                        </div>
+                        <div className="mt-3 grid gap-1.5 text-xs leading-snug text-stone-600">
+                          <p className="break-words">
+                            <span className="font-semibold text-stone-500">SĐT:</span> {card.phone}
+                          </p>
+                          {card.address ? (
+                            <p className="break-words">
+                              <span className="font-semibold text-stone-500">Địa chỉ:</span> {card.address}
+                            </p>
+                          ) : null}
+                          {card.leadSource || card.saleOwnerName ? (
+                            <div className="flex flex-wrap gap-1">
+                              {card.leadSource ? <span className="rounded-full border border-brand-red/10 bg-white/45 px-2 py-1 text-[11px] font-semibold text-stone-600">{card.leadSource}</span> : null}
+                              {card.saleOwnerName ? <span className="rounded-full border border-brand-red/10 bg-white/45 px-2 py-1 text-[11px] font-semibold text-stone-600">{card.saleOwnerName}</span> : null}
+                            </div>
+                          ) : null}
                         </div>
                         {card.classProgress.length ? (
                           <div className="mt-3 flex flex-wrap gap-1">
