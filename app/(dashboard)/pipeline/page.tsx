@@ -118,12 +118,6 @@ const emptyContactForm: ContactForm = {
   content: ""
 }
 
-const emptyTaskForm: TaskForm = {
-  title: "",
-  dueDate: "",
-  note: ""
-}
-
 const emptyStudentEditForm: StudentEditForm = {
   studentName: "",
   parentName: "",
@@ -159,8 +153,26 @@ function formatDateTime(value: string) {
   }).format(new Date(value))
 }
 
+function toLocalDateInputValue(date = new Date()) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return localDate.toISOString().slice(0, 10)
+}
+
+function createEmptyTaskForm(): TaskForm {
+  return {
+    title: "",
+    dueDate: toLocalDateInputValue(),
+    note: ""
+  }
+}
+
 function toIsoFromLocalInput(value: string) {
-  return value ? new Date(value).toISOString() : ""
+  if (!value) return ""
+
+  const normalizedValue = value.includes("T") ? value : `${value}T17:00`
+  const date = new Date(normalizedValue)
+
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString()
 }
 
 function toStudentEditForm(student: StudentDetail, saleOwnerId = ""): StudentEditForm {
@@ -213,7 +225,7 @@ export default function PipelinePage() {
   const [studentEditForm, setStudentEditForm] = useState<StudentEditForm>(emptyStudentEditForm)
   const [isSavingStudent, setIsSavingStudent] = useState(false)
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm)
-  const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm)
+  const [taskForm, setTaskForm] = useState<TaskForm>(() => createEmptyTaskForm())
   const [isSavingActivity, setIsSavingActivity] = useState(false)
   const [copiedStudentCode, setCopiedStudentCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -354,7 +366,7 @@ export default function PipelinePage() {
       setSelectedStudent(payload.data)
       setStudentEditForm(toStudentEditForm(payload.data, getPipelineSaleOwnerId(studentId)))
       setContactForm(emptyContactForm)
-      setTaskForm(emptyTaskForm)
+      setTaskForm(createEmptyTaskForm())
     } catch {
       setError("Không tải được hồ sơ lead.")
     } finally {
@@ -481,7 +493,19 @@ export default function PipelinePage() {
   }
 
   async function createTask() {
-    if (!selectedStudent || !taskForm.title.trim() || !taskForm.dueDate) return
+    if (!selectedStudent) return
+
+    const dueDate = toIsoFromLocalInput(taskForm.dueDate)
+
+    if (!taskForm.title.trim()) {
+      setError("Cần nhập tiêu đề task.")
+      return
+    }
+
+    if (!dueDate) {
+      setError("Cần chọn ngày hạn task.")
+      return
+    }
 
     setIsSavingActivity(true)
     setError(null)
@@ -493,7 +517,7 @@ export default function PipelinePage() {
         body: JSON.stringify({
           title: taskForm.title.trim(),
           note: taskForm.note.trim() || undefined,
-          dueDate: toIsoFromLocalInput(taskForm.dueDate),
+          dueDate,
           studentId: selectedStudent.id
         })
       })
@@ -504,7 +528,7 @@ export default function PipelinePage() {
         return
       }
 
-      setTaskForm(emptyTaskForm)
+      setTaskForm(createEmptyTaskForm())
       await refreshSelectedStudent()
     } catch {
       setError("Không tạo được task tiếp theo.")
@@ -1201,8 +1225,8 @@ export default function PipelinePage() {
                     </div>
                     <div className="mb-3 grid gap-2 md:grid-cols-[1fr_180px_auto]">
                       <input className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" placeholder="Việc cần làm..." value={taskForm.title} onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))} />
-                      <input className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" type="datetime-local" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} />
-                      <button className="glass-button-primary px-4 py-2 text-sm font-semibold" disabled={isSavingActivity} onClick={() => void createTask()}>Tạo</button>
+                      <input className="rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" type="date" value={taskForm.dueDate} onChange={(event) => setTaskForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                      <button type="button" className="glass-button-primary px-4 py-2 text-sm font-semibold" disabled={isSavingActivity} onClick={() => void createTask()}>Tạo</button>
                     </div>
                     <input className="mb-3 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm outline-none" placeholder="Ghi chú task..." value={taskForm.note} onChange={(event) => setTaskForm((current) => ({ ...current, note: event.target.value }))} />
                     <div className="space-y-2">
