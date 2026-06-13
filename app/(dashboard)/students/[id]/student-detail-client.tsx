@@ -1424,8 +1424,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             <StudentWalletCard summary={studentWallet} />
             <MakeupEntitlementCard entitlements={makeupEntitlements} />
           </div>
-          <EnrollmentTransferHistory transfers={student.enrollmentTransfers} />
-          <ReceiptHistoryCard receipts={studentReceipts} />
           <div className="grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
           <form className="neu-card rounded-3xl" onSubmit={submitEnrollment}>
             <SectionHeader icon={<BookOpenCheck className="h-5 w-5 text-brand-red" />} title="1. Ghi danh khóa/lớp" description="Chọn lớp và ngày bắt đầu, hệ thống tự tính buổi bé vào lớp." />
@@ -1726,6 +1724,8 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             <FormFooter loading={isSubmittingReceipt} label="Xác nhận đóng tiền" loadingLabel="Đang thu" disabled={!receiptLineSummaries.length || actualReceiptAmount < 0 || receiptValidationErrors.length > 0} />
           </form>
           </div>
+          <EnrollmentTransferHistory transfers={student.enrollmentTransfers} />
+          <ReceiptHistoryCard receipts={studentReceipts} />
         </section>
       ) : null}
 
