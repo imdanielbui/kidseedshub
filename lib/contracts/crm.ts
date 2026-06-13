@@ -41,6 +41,7 @@ export type PipelineCard = {
   stage: PipelineStageKey
   parentName: string
   parentEmail?: string
+  address?: string
   studentName: string
   phone: string
   gender: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN"

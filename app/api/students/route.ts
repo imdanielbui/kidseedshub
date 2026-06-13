@@ -114,6 +114,7 @@ export async function GET(request: Request) {
           OR: [
             { code: { contains: q, mode: "insensitive" as const } },
             { name: { contains: q, mode: "insensitive" as const } },
+            { address: { contains: q, mode: "insensitive" as const } },
             { parent: { user: { name: { contains: q, mode: "insensitive" as const } } } },
             { parent: { user: { phone: { contains: q } } } }
           ]

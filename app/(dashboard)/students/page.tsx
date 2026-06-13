@@ -312,7 +312,7 @@ export default function StudentsPage() {
               <Search className="h-4 w-4" />
               <input
                 className="w-full bg-transparent outline-none"
-                placeholder="Tìm mã HS, học viên, phụ huynh, SĐT..."
+                placeholder="Tìm mã HS, học viên, phụ huynh, SĐT, địa chỉ..."
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value)

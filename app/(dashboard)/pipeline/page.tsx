@@ -29,6 +29,7 @@ type ColumnKey =
   | "parentName"
   | "studentName"
   | "phone"
+  | "address"
   | "gender"
   | "stage"
   | "classNames"
@@ -45,6 +46,7 @@ const columnLabels: Record<ColumnKey, string> = {
   parentName: "Phụ huynh",
   studentName: "Học viên",
   phone: "SĐT",
+  address: "Địa chỉ",
   gender: "Giới tính",
   stage: "Trạng thái",
   classNames: "Lớp học",
@@ -62,6 +64,7 @@ const defaultColumnOrder: ColumnKey[] = [
   "parentName",
   "studentName",
   "phone",
+  "address",
   "stage",
   "daysInStage",
   "classNames",
@@ -81,6 +84,7 @@ const pinnedColumnWidths: Partial<Record<ColumnKey, number>> = {
   studentName: 220,
   parentName: 220,
   phone: 160,
+  address: 220,
   stage: 160,
   daysInStage: 170
 }
@@ -95,6 +99,7 @@ type StudentEditForm = {
   parentName: string
   parentPhone: string
   parentEmail: string
+  address: string
   gender: StudentGenderKey
   leadSource: string
   saleOwnerId: string
@@ -124,6 +129,7 @@ const emptyStudentEditForm: StudentEditForm = {
   parentName: "",
   parentPhone: "",
   parentEmail: "",
+  address: "",
   gender: "UNKNOWN",
   leadSource: "",
   saleOwnerId: "",
@@ -163,6 +169,7 @@ function toStudentEditForm(student: StudentDetail, saleOwnerId = ""): StudentEdi
     parentName: student.parentName,
     parentPhone: student.parentPhone,
     parentEmail: student.parentEmail ?? "",
+    address: student.address ?? "",
     gender: student.gender,
     leadSource: student.leadSource ?? "",
     saleOwnerId,
@@ -384,6 +391,7 @@ export default function PipelinePage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: studentEditForm.studentName.trim(),
+          address: nullableTrim(studentEditForm.address),
           gender: studentEditForm.gender,
           leadSource: nullableTrim(studentEditForm.leadSource),
           leadNote: nullableTrim(studentEditForm.leadNote),
@@ -522,6 +530,7 @@ export default function PipelinePage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: form.studentName.trim(),
+          address: form.address.trim() || undefined,
           birthDate: form.birthDate ? new Date(`${form.birthDate}T00:00:00`).toISOString() : undefined,
           status: "LEAD",
           gender: form.gender,
@@ -705,7 +714,7 @@ export default function PipelinePage() {
             <Search className="h-4 w-4" />
             <input
               className="w-full bg-transparent outline-none"
-              placeholder="Tìm mã HS, phụ huynh, SĐT..."
+              placeholder="Tìm mã HS, phụ huynh, SĐT, địa chỉ..."
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -1060,6 +1069,7 @@ export default function PipelinePage() {
                         <p className="font-semibold text-brand-ink">{selectedStudent.parentName}</p>
                         <p className="text-sm text-stone-600">{selectedStudent.parentPhone}</p>
                         <p className="text-sm text-stone-600">{selectedStudent.parentEmail || "Chưa có email"}</p>
+                        <p className="text-sm text-stone-600">{selectedStudent.address || "Chưa có địa chỉ"}</p>
                       </div>
                       {selectedPipelineCard ? (
                         <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
@@ -1111,6 +1121,10 @@ export default function PipelinePage() {
                       <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
                         Email phụ huynh
                         <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="email" value={studentEditForm.parentEmail} onChange={(event) => setStudentEditForm((current) => ({ ...current, parentEmail: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Địa chỉ
+                        <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={studentEditForm.address} onChange={(event) => setStudentEditForm((current) => ({ ...current, address: event.target.value }))} />
                       </label>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
                         Nguồn lead

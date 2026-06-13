@@ -92,6 +92,7 @@ export async function GET(request: Request) {
           OR: [
             { code: { contains: q, mode: "insensitive" } },
             { name: { contains: q, mode: "insensitive" } },
+            { address: { contains: q, mode: "insensitive" } },
             { parent: { user: { name: { contains: q, mode: "insensitive" } } } },
             { parent: { user: { phone: { contains: q } } } },
             { leadSource: { contains: q, mode: "insensitive" } }
@@ -179,6 +180,7 @@ export async function GET(request: Request) {
       stage: status,
       parentName: student.parent.user.name,
       parentEmail: student.parent.user.email ?? undefined,
+      address: student.address ?? undefined,
       studentName: student.name,
       phone: student.parent.user.phone,
       gender: student.gender,
