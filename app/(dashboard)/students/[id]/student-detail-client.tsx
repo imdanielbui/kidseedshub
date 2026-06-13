@@ -43,7 +43,6 @@ type EnrollmentEditDraft = {
   startDate: string
   joinSessionNumber: string
   freeTrialSessions: string
-  paidSessionsBeforeReceipt: string
   sessionsBought: string
   sessionsUsed: string
   isActive: boolean
@@ -250,7 +249,6 @@ function toEnrollmentEditDraft(course: StudentDetail["courses"][number]): Enroll
     startDate: course.startDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     joinSessionNumber: String(course.joinSessionNumber ?? 1),
     freeTrialSessions: String(course.freeTrialSessions),
-    paidSessionsBeforeReceipt: String(course.paidSessionsBeforeReceipt),
     sessionsBought: String(course.sessionsBought),
     sessionsUsed: String(course.sessionsUsed),
     isActive: course.isActive
@@ -313,7 +311,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [enrollmentClassId, setEnrollmentClassId] = useState("")
   const [enrollmentSessions, setEnrollmentSessions] = useState("0")
   const [enrollmentFreeTrialSessions, setEnrollmentFreeTrialSessions] = useState("0")
-  const [enrollmentPaidSessionsBeforeReceipt, setEnrollmentPaidSessionsBeforeReceipt] = useState("0")
   const [enrollmentStartDate, setEnrollmentStartDate] = useState(new Date().toISOString().slice(0, 10))
   const [receiptAmount, setReceiptAmount] = useState("")
   const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([])
@@ -836,7 +833,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           sessionsBought: toNonNegativeNumber(enrollmentSessions),
           totalCourseSessionsAtJoin: selectedEnrollmentCourse?.totalSessions,
           freeTrialSessions: toNonNegativeNumber(enrollmentFreeTrialSessions),
-          paidSessionsBeforeReceipt: toNonNegativeNumber(enrollmentPaidSessionsBeforeReceipt),
           startDate: new Date(`${enrollmentStartDate}T00:00:00`).toISOString()
         })
       })
@@ -850,7 +846,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       setEnrollmentClassId("")
       setEnrollmentSessions("0")
       setEnrollmentFreeTrialSessions("0")
-      setEnrollmentPaidSessionsBeforeReceipt("0")
       await loadStudent()
     } catch {
       setError("Không ghi danh được khóa học.")
@@ -883,7 +878,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           sessionsBought,
           sessionsUsed,
           freeTrialSessions: toNonNegativeNumber(editingEnrollment.freeTrialSessions),
-          paidSessionsBeforeReceipt: toNonNegativeNumber(editingEnrollment.paidSessionsBeforeReceipt),
           startDate: editingEnrollment.startDate ? new Date(`${editingEnrollment.startDate}T00:00:00`).toISOString() : null,
           isActive: editingEnrollment.isActive
         })
@@ -1452,14 +1446,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
               </label>
               <DetailInput label="Ngày bắt đầu" type="date" value={enrollmentStartDate} onChange={setEnrollmentStartDate} required />
               <DetailInput label="Học thử miễn phí dự kiến" type="number" min={0} value={enrollmentFreeTrialSessions} onChange={(value) => setEnrollmentFreeTrialSessions(toNonNegativeIntegerInput(value))} />
-              <DetailInput
-                label="Buổi đã học chưa thu tiền"
-                type="number"
-                min={0}
-                value={enrollmentPaidSessionsBeforeReceipt}
-                onChange={(value) => setEnrollmentPaidSessionsBeforeReceipt(toNonNegativeIntegerInput(value))}
-                hint="Số buổi bé đã học có tính phí trước khi phụ huynh đóng tiền. Khi thu, hệ thống trừ ngay số buổi này khỏi quỹ còn lại."
-              />
               <DetailInput
                 label="Quỹ buổi ban đầu"
                 type="number"
@@ -2160,14 +2146,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
               </label>
               <DetailInput label="Ngày bắt đầu" type="date" value={editingEnrollment.startDate} onChange={(value) => setEditingEnrollment({ ...editingEnrollment, startDate: value })} />
               <DetailInput label="Học thử miễn phí dự kiến" type="number" min={0} value={editingEnrollment.freeTrialSessions} onChange={(value) => setEditingEnrollment({ ...editingEnrollment, freeTrialSessions: toNonNegativeIntegerInput(value) })} />
-              <DetailInput
-                label="Buổi đã học chưa thu tiền"
-                type="number"
-                min={0}
-                value={editingEnrollment.paidSessionsBeforeReceipt}
-                onChange={(value) => setEditingEnrollment({ ...editingEnrollment, paidSessionsBeforeReceipt: toNonNegativeIntegerInput(value) })}
-                hint="Số buổi bé đã học có tính phí trước khi phụ huynh đóng tiền."
-              />
               <DetailInput
                 label="Quỹ buổi hiện có"
                 type="number"
