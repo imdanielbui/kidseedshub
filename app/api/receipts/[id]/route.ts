@@ -98,13 +98,16 @@ function toReceiptDetail(receipt: ReceiptDetailRecord): ReceiptPrintDetail {
       unitPrice: line.unitPrice.toString(),
       grossAmount: line.grossAmount.toString(),
       discountAmount: line.discountAmount.toString(),
-      discountPercent: line.discountPercent.toString(),
-      amount: line.amount.toString(),
-      billableSessions: line.billableSessions,
-      freeTrialSessions: line.freeTrialSessions,
-      paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
-      remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt
-    })),
+	      discountPercent: line.discountPercent.toString(),
+	      amount: line.amount.toString(),
+	      billableSessions: line.billableSessions,
+	      freeTrialSessions: line.freeTrialSessions,
+	      paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
+	      remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt,
+	      billingPeriodStart: line.billingPeriodStart?.toISOString(),
+	      billingPeriodEnd: line.billingPeriodEnd?.toISOString(),
+	      billingLabel: line.billingLabel ?? undefined
+	    })),
     extraLines: receipt.extraLines.map((line) => ({
       id: line.id,
       type: line.type,

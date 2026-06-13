@@ -1,6 +1,8 @@
+import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import type { QueuedTuitionReminder, TuitionReminderItem } from "@/lib/contracts/reminders"
+import { billingMonthLabel, billingMonthRange, countBillingPeriodSessions } from "@/lib/backend/receipt-billing"
 import { renderZaloTemplate, zaloTemplates } from "@/lib/message-templates"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -10,12 +12,24 @@ function getTemplate(templateId: string) {
   return zaloTemplates.find((template) => template.id === templateId) ?? zaloTemplates[0]
 }
 
-function toReminderItem(enrollment: {
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+    style: "currency",
+    currency: "VND"
+  }).format(Number.isFinite(value) ? value : 0)
+}
+
+async function toReminderItem(enrollment: {
   id: string
+  studentId: string
+  courseId: string
+  startDate: Date | null
   sessionsBought: number
   sessionsUsed: number
+  receiptLines: Array<{ billableSessions: number; billingPeriodStart: Date | null }>
   receipts: Array<{ createdAt: Date }>
-  course: { name: string }
+  course: { name: string; price: Prisma.Decimal; totalSessions: number }
   student: {
     id: string
     name: string
@@ -26,15 +40,31 @@ function toReminderItem(enrollment: {
       }
     }
   }
-}, templateId: TuitionReminderItem["templateId"]): TuitionReminderItem {
+}, templateId: TuitionReminderItem["templateId"], billingMonth?: string): Promise<TuitionReminderItem> {
   const sessionsRemaining = Math.max(0, enrollment.sessionsBought - enrollment.sessionsUsed)
   const template = getTemplate(templateId)
-  const message = renderZaloTemplate(template, {
+  const baseMessage = renderZaloTemplate(template, {
     parentName: enrollment.student.parent.user.name,
     studentName: enrollment.student.name,
     courseName: enrollment.course.name,
     sessionsRemaining
   })
+  const billingRange = billingMonth ? billingMonthRange(billingMonth) : undefined
+  const billingSessions = billingRange
+    ? await countBillingPeriodSessions(prisma, enrollment, billingRange)
+    : undefined
+  const billedSessionsInMonth = billingRange
+    ? enrollment.receiptLines
+        .filter((line) => line.billingPeriodStart && line.billingPeriodStart >= billingRange.start && line.billingPeriodStart < billingRange.end)
+        .reduce((total, line) => total + line.billableSessions, 0)
+    : undefined
+  const billableSessionsDue = billingSessions === undefined ? undefined : Math.max(0, billingSessions - (billedSessionsInMonth ?? 0))
+  const unitPrice = enrollment.course.totalSessions > 0 ? Number(enrollment.course.price) / enrollment.course.totalSessions : 0
+  const expectedAmount = billableSessionsDue === undefined ? undefined : unitPrice * billableSessionsDue
+  const billingLabel = billingMonth ? billingMonthLabel(billingMonth) : undefined
+  const monthlyNote = billingLabel && billableSessionsDue !== undefined
+    ? `\nKỳ thu: ${billingLabel}. Cần thu ${billableSessionsDue} buổi, dự kiến ${formatMoney(expectedAmount ?? 0)}.`
+    : ""
 
   return {
     enrollmentId: enrollment.id,
@@ -46,13 +76,18 @@ function toReminderItem(enrollment: {
     sessionsBought: enrollment.sessionsBought,
     sessionsUsed: enrollment.sessionsUsed,
     sessionsRemaining,
+    billingMonth,
+    billingLabel,
+    billableSessionsDue,
+    billedSessionsInMonth,
+    expectedAmount: expectedAmount === undefined ? undefined : String(Math.round(expectedAmount)),
     lastReceiptAt: enrollment.receipts[0]?.createdAt.toISOString(),
     templateId,
-    message
+    message: `${baseMessage}${monthlyNote}`
   }
 }
 
-async function getReminderItems(threshold: number, templateId: TuitionReminderItem["templateId"]) {
+async function getReminderItems(threshold: number, templateId: TuitionReminderItem["templateId"], billingMonth?: string) {
   const enrollments = await prisma.enrollment.findMany({
     where: { isActive: true },
     include: {
@@ -65,15 +100,17 @@ async function getReminderItems(threshold: number, templateId: TuitionReminderIt
       receipts: {
         orderBy: { createdAt: "desc" },
         take: 1
-      }
+      },
+      receiptLines: true
     },
     orderBy: { updatedAt: "desc" }
   })
 
-  return enrollments
-    .filter((enrollment) => enrollment.sessionsBought - enrollment.sessionsUsed <= threshold)
-    .map((enrollment) => toReminderItem(enrollment, templateId))
-    .sort((first, second) => first.sessionsRemaining - second.sessionsRemaining)
+  const items = await Promise.all(enrollments.map((enrollment) => toReminderItem(enrollment, templateId, billingMonth)))
+
+  return items
+    .filter((item) => billingMonth ? (item.billableSessionsDue ?? 0) > 0 : item.sessionsBought - item.sessionsUsed <= threshold)
+    .sort((first, second) => billingMonth ? (second.billableSessionsDue ?? 0) - (first.billableSessionsDue ?? 0) : first.sessionsRemaining - second.sessionsRemaining)
 }
 
 export async function GET(request: Request) {
@@ -94,7 +131,7 @@ export async function GET(request: Request) {
     return fail({ code: "INVALID_QUERY", message: "Bộ lọc nhắc học phí không hợp lệ." }, { status: 400 })
   }
 
-  return ok(await getReminderItems(parsed.data.threshold, parsed.data.templateId))
+  return ok(await getReminderItems(parsed.data.threshold, parsed.data.templateId, parsed.data.billingMonth))
 }
 
 export async function POST(request: Request) {
@@ -127,7 +164,8 @@ export async function POST(request: Request) {
       receipts: {
         orderBy: { createdAt: "desc" },
         take: 1
-      }
+      },
+      receiptLines: true
     }
   })
 
@@ -135,13 +173,13 @@ export async function POST(request: Request) {
     return fail({ code: "ENROLLMENT_NOT_FOUND", message: "Không tìm thấy enrollment cần nhắc học phí." }, { status: 404 })
   }
 
-  const reminder = toReminderItem(enrollment, parsed.data.templateId)
+  const reminder = await toReminderItem(enrollment, parsed.data.templateId, parsed.data.billingMonth)
   const dueDate = new Date()
   dueDate.setHours(18, 0, 0, 0)
 
   const task = await prisma.task.create({
     data: {
-      title: `Nhắc học phí: ${reminder.studentName}`,
+      title: parsed.data.billingMonth ? `Nhắc học phí ${parsed.data.billingMonth}: ${reminder.studentName}` : `Nhắc học phí: ${reminder.studentName}`,
       note: reminder.message,
       dueDate,
       studentId: reminder.studentId,

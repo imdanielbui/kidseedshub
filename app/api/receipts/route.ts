@@ -5,6 +5,7 @@ import { createAuditLog, getActiveStaffRecipientIds, notifyUsers } from "@/lib/b
 import { nextReceiptCode } from "@/lib/backend/codes"
 import { parseMonth } from "@/lib/backend/date"
 import { getStudentWalletBalance } from "@/lib/backend/makeup-entitlement"
+import { billingPeriodWhere, countBillingPeriodSessions, parseBillingPeriod } from "@/lib/backend/receipt-billing"
 import type { ReceiptListItem } from "@/lib/contracts/finance"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -84,13 +85,16 @@ function toReceiptListItem(receipt: ReceiptListRecord): ReceiptListItem {
       unitPrice: line.unitPrice.toString(),
       grossAmount: line.grossAmount.toString(),
       discountAmount: line.discountAmount.toString(),
-      discountPercent: line.discountPercent.toString(),
-      amount: line.amount.toString(),
-      billableSessions: line.billableSessions,
-      freeTrialSessions: line.freeTrialSessions,
-      paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
-      remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt
-    })),
+	      discountPercent: line.discountPercent.toString(),
+	      amount: line.amount.toString(),
+	      billableSessions: line.billableSessions,
+	      freeTrialSessions: line.freeTrialSessions,
+	      paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
+	      remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt,
+	      billingPeriodStart: line.billingPeriodStart?.toISOString(),
+	      billingPeriodEnd: line.billingPeriodEnd?.toISOString(),
+	      billingLabel: line.billingLabel ?? undefined
+	    })),
     extraLines: receipt.extraLines.map((line) => ({
       id: line.id,
       type: line.type,
@@ -169,11 +173,13 @@ export async function GET(request: Request) {
     return fail({ code: "INVALID_QUERY", message: "Bộ lọc phiếu thu không hợp lệ." }, { status: 400 })
   }
 
-  const range = parsed.data.month ? parseMonth(parsed.data.month) : null
-  const receipts = await prisma.receipt.findMany({
-    where: {
-      ...(range ? { createdAt: { gte: range.start, lt: range.end } } : {}),
-      ...(parsed.data.studentId
+	  const range = parsed.data.month ? parseMonth(parsed.data.month) : null
+	  const billingWhere = billingPeriodWhere(parsed.data.billingMonth)
+	  const receipts = await prisma.receipt.findMany({
+	    where: {
+	      ...(range ? { createdAt: { gte: range.start, lt: range.end } } : {}),
+	      ...(billingWhere ? { lines: { some: billingWhere } } : {}),
+	      ...(parsed.data.studentId
         ? {
             OR: [
               { enrollment: { studentId: parsed.data.studentId } },
@@ -250,15 +256,22 @@ export async function POST(request: Request) {
         throw new Error("MULTI_STUDENT_RECEIPT")
       }
 
-      const computedLines = inputLines.map((line) => {
-        const enrollment = enrollmentById.get(line.enrollmentId)
-        if (!enrollment) throw new Error("ENROLLMENT_NOT_FOUND")
+	      const computedLines = await Promise.all(inputLines.map(async (line) => {
+	        const enrollment = enrollmentById.get(line.enrollmentId)
+	        if (!enrollment) throw new Error("ENROLLMENT_NOT_FOUND")
 
-        const freeTrialSessions = line.freeTrialSessions ?? 0
-        const joinSessionNumber = enrollment.joinSessionNumber ?? 1
-        const sessionsFromJoin = Math.max(0, enrollment.course.totalSessions - joinSessionNumber + 1)
-        const billableSessions = line.billableSessions ?? Math.max(0, sessionsFromJoin - freeTrialSessions)
-        const unitPrice = enrollment.course.totalSessions > 0 ? enrollment.course.price.div(enrollment.course.totalSessions) : new Prisma.Decimal(0)
+	        const freeTrialSessions = line.freeTrialSessions ?? 0
+	        const billingPeriod = parseBillingPeriod({
+	          start: line.billingPeriodStart,
+	          end: line.billingPeriodEnd,
+	          label: line.billingLabel
+	        })
+	        const joinSessionNumber = enrollment.joinSessionNumber ?? 1
+	        const sessionsFromJoin = Math.max(0, enrollment.course.totalSessions - joinSessionNumber + 1)
+	        const billingPeriodSessions = await countBillingPeriodSessions(tx, enrollment, billingPeriod)
+	        const defaultBillableSessions = billingPeriodSessions ?? Math.max(0, sessionsFromJoin - freeTrialSessions)
+	        const billableSessions = line.billableSessions ?? Math.max(0, defaultBillableSessions - (billingPeriodSessions === undefined ? 0 : freeTrialSessions))
+	        const unitPrice = enrollment.course.totalSessions > 0 ? enrollment.course.price.div(enrollment.course.totalSessions) : new Prisma.Decimal(0)
         const grossAmount = unitPrice.mul(billableSessions)
         const { discountAmount, discountPercent } = combineDiscountInputs([line.discountInput, line.extraDiscountInput])
         const percentDiscount = grossAmount.mul(discountPercent).div(100)
@@ -277,11 +290,12 @@ export async function POST(request: Request) {
           paidSessionsBeforeReceipt,
           grossAmount,
           discountAmount,
-          discountPercent,
-          amount,
-          remainingSessionsAfterReceipt: Math.max(0, nextSessionsBought - nextSessionsUsed)
-        }
-      })
+	          discountPercent,
+	          amount,
+	          remainingSessionsAfterReceipt: Math.max(0, nextSessionsBought - nextSessionsUsed),
+	          billingPeriod
+	        }
+	      }))
 
       const computedExtraLines = inputExtraLines.map((line) => {
         const quantity = new Prisma.Decimal(line.quantity)
@@ -356,11 +370,14 @@ export async function POST(request: Request) {
               freeTrialSessions: line.freeTrialSessions,
               paidSessionsBeforeReceipt: line.paidSessionsBeforeReceipt,
               grossAmount: line.grossAmount,
-              discountAmount: line.discountAmount,
-              discountPercent: line.discountPercent,
-              amount: line.amount,
-              remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt
-            }))
+	              discountAmount: line.discountAmount,
+	              discountPercent: line.discountPercent,
+	              amount: line.amount,
+	              remainingSessionsAfterReceipt: line.remainingSessionsAfterReceipt,
+	              billingPeriodStart: line.billingPeriod.start,
+	              billingPeriodEnd: line.billingPeriod.end,
+	              billingLabel: line.billingPeriod.label
+	            }))
           },
           extraLines: {
             create: computedExtraLines.map((line) => ({
@@ -456,11 +473,15 @@ export async function POST(request: Request) {
       return fail({ code: "MULTI_STUDENT_RECEIPT", message: "Một phiếu thu chỉ được tạo cho một học viên." }, { status: 400 })
     }
 
-    if (error instanceof Error && error.message === "NO_PAYABLE_SESSIONS") {
-      return fail({ code: "NO_PAYABLE_SESSIONS", message: "Không có buổi tính phí sau học thử. Hãy kiểm tra lại số buổi học thử hoặc nhập số tiền cần thu nếu đây là ngoại lệ." }, { status: 400 })
-    }
+	    if (error instanceof Error && error.message === "NO_PAYABLE_SESSIONS") {
+	      return fail({ code: "NO_PAYABLE_SESSIONS", message: "Không có buổi tính phí sau học thử. Hãy kiểm tra lại số buổi học thử hoặc nhập số tiền cần thu nếu đây là ngoại lệ." }, { status: 400 })
+	    }
 
-    if (error instanceof Error && error.message === "WALLET_CREDIT_EXCEEDS_BALANCE") {
+	    if (error instanceof Error && error.message === "INVALID_BILLING_PERIOD") {
+	      return fail({ code: "INVALID_BILLING_PERIOD", message: "Kỳ thu học phí không hợp lệ." }, { status: 400 })
+	    }
+
+	    if (error instanceof Error && error.message === "WALLET_CREDIT_EXCEEDS_BALANCE") {
       return fail({ code: "WALLET_CREDIT_EXCEEDS_BALANCE", message: "Credit áp dụng vượt quá số dư ví học viên." }, { status: 400 })
     }
 

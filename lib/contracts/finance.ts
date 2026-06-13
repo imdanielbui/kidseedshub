@@ -35,6 +35,9 @@ export type ReceiptLineItem = {
   freeTrialSessions: number
   paidSessionsBeforeReceipt: number
   remainingSessionsAfterReceipt: number
+  billingPeriodStart?: string
+  billingPeriodEnd?: string
+  billingLabel?: string
 }
 
 export type ReceiptExtraLineItem = {

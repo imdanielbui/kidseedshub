@@ -17,6 +17,11 @@ export type TuitionReminderItem = {
   sessionsBought: number
   sessionsUsed: number
   sessionsRemaining: number
+  billingMonth?: string
+  billingLabel?: string
+  billableSessionsDue?: number
+  billedSessionsInMonth?: number
+  expectedAmount?: string
   lastReceiptAt?: string
   templateId: ZaloTemplateKey
   message: string

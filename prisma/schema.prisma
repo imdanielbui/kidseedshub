@@ -823,10 +823,14 @@ model ReceiptLine {
   discountPercent               Decimal    @default(0) @db.Decimal(5, 2)
   amount                        Decimal    @db.Decimal(12, 2)
   remainingSessionsAfterReceipt Int        @default(0)
+  billingPeriodStart            DateTime?
+  billingPeriodEnd              DateTime?
+  billingLabel                  String?
   createdAt                     DateTime   @default(now())
 
   @@index([receiptId])
   @@index([enrollmentId])
+  @@index([billingPeriodStart])
 }
 
 model Expense {

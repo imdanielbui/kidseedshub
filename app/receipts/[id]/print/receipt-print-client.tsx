@@ -145,15 +145,16 @@ export function ReceiptPrintClient({ receiptId }: { receiptId: string }) {
               amount: receipt.amount,
               billableSessions: receipt.billableSessions,
               freeTrialSessions: receipt.freeTrialSessions,
-              paidSessionsBeforeReceipt: receipt.paidSessionsBeforeReceipt,
-              remainingSessionsAfterReceipt: receipt.remainingSessionsAfterReceipt
-            }]).map((line) => {
-              return (
-                <div key={line.id} className="receipt-line-table-row">
-                  <span>
-                    <strong>{line.courseName}</strong>
-                    <small>{formatCurrency(line.coursePrice)} · {line.courseTotalSessions} buổi · {formatCurrency(line.unitPrice)}/buổi</small>
-                  </span>
+	              paidSessionsBeforeReceipt: receipt.paidSessionsBeforeReceipt,
+	              remainingSessionsAfterReceipt: receipt.remainingSessionsAfterReceipt
+	            }]).map((line) => {
+	              return (
+	                <div key={line.id} className="receipt-line-table-row">
+	                  <span>
+	                    <strong>{line.courseName}</strong>
+	                    <small>{formatCurrency(line.coursePrice)} · {line.courseTotalSessions} buổi · {formatCurrency(line.unitPrice)}/buổi</small>
+	                    {line.billingLabel ? <small>{line.billingLabel}</small> : null}
+	                  </span>
                   <span>{line.billableSessions}</span>
                   <span>{line.freeTrialSessions}</span>
                   <span>{line.paidSessionsBeforeReceipt}</span>

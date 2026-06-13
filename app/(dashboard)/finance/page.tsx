@@ -16,6 +16,7 @@ import {
 import { payrollRunStatusLabels, type PayrollLineItem, type PayrollRunItem } from "@/lib/contracts/payroll"
 import type { QueuedTuitionReminder, TuitionReminderItem, ZaloTemplateItem } from "@/lib/contracts/reminders"
 import type { StudentListItem } from "@/lib/contracts/students"
+import type { ClassListItem } from "@/lib/contracts/courses"
 
 type FinanceRole = "ADMIN" | "SALE" | "TEACHER" | "PARENT"
 type FinanceTab = "overview" | "receipts" | "expenses" | "payroll" | "reminders"
@@ -29,8 +30,8 @@ type SessionPayload = {
 
 type ReceiptFormState = {
   enrollmentId: string
-  amount: string
-  sessions: string
+  billingMonth: string
+  billableSessions: string
   method: PaymentMethodKey
   note: string
 }
@@ -52,8 +53,8 @@ type PayrollLineEditState = {
 
 const emptyReceiptForm: ReceiptFormState = {
   enrollmentId: "",
-  amount: "",
-  sessions: "1",
+  billingMonth: getCurrentMonth(),
+  billableSessions: "",
   method: "BANK_TRANSFER",
   note: ""
 }
@@ -121,6 +122,33 @@ function getReceiptTotal(receipts: ReceiptListItem[]) {
   return receipts.reduce((total, receipt) => total + Number(receipt.amount), 0)
 }
 
+function getBillingPeriodForMonth(month: string) {
+  const [year, value] = month.split("-").map(Number)
+  const start = new Date(Date.UTC(year, value - 1, 1))
+  const end = new Date(Date.UTC(year, value, 1))
+
+  return {
+    start,
+    end,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    label: `Học phí tháng ${String(value).padStart(2, "0")}/${year}`
+  }
+}
+
+function countCourseSessionsInBillingMonth(course: StudentListItem["courses"][number] | undefined, classes: ClassListItem[], month: string) {
+  if (!course?.classId) return undefined
+  const klass = classes.find((item) => item.id === course.classId)
+  if (!klass) return undefined
+  const period = getBillingPeriodForMonth(month)
+  const startGate = course.startDate && new Date(course.startDate) > period.start ? new Date(course.startDate) : period.start
+
+  return klass.sessionDates.filter((session) => {
+    const sessionDate = new Date(session.date)
+    return session.status !== "CANCELED" && sessionDate >= startGate && sessionDate < period.end
+  }).length
+}
+
 export default function FinancePage() {
   const [month, setMonth] = useState(getCurrentMonth)
   const [activeTab, setActiveTab] = useState<FinanceTab>("overview")
@@ -130,9 +158,10 @@ export default function FinancePage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [receipts, setReceipts] = useState<ReceiptListItem[]>([])
   const [expenses, setExpenses] = useState<ExpenseListItem[]>([])
-  const [payrollRuns, setPayrollRuns] = useState<PayrollRunItem[]>([])
-  const [students, setStudents] = useState<StudentListItem[]>([])
-  const [templates, setTemplates] = useState<ZaloTemplateItem[]>([])
+	  const [payrollRuns, setPayrollRuns] = useState<PayrollRunItem[]>([])
+	  const [students, setStudents] = useState<StudentListItem[]>([])
+	  const [classes, setClasses] = useState<ClassListItem[]>([])
+	  const [templates, setTemplates] = useState<ZaloTemplateItem[]>([])
   const [reminders, setReminders] = useState<TuitionReminderItem[]>([])
   const [receiptForm, setReceiptForm] = useState<ReceiptFormState>(emptyReceiptForm)
   const [expenseForm, setExpenseForm] = useState<ExpenseFormState>(emptyExpenseForm)
@@ -222,7 +251,7 @@ export default function FinancePage() {
         const expensesRequest = isAdmin ? fetch(`/api/expenses?month=${month}`, { cache: "no-store" }) : null
         const payrollRequest = isAdmin ? fetch(`/api/payroll-runs?month=${month}`, { cache: "no-store" }) : null
         const templatesRequest = canManageReminders ? fetch("/api/message-templates", { cache: "no-store" }) : null
-        const remindersRequest = canManageReminders ? fetch(`/api/tuition-reminders?templateId=${selectedTemplateId}`, { cache: "no-store" }) : null
+	        const remindersRequest = canManageReminders ? fetch(`/api/tuition-reminders?templateId=${selectedTemplateId}&billingMonth=${month}`, { cache: "no-store" }) : null
 
         const [summaryResult, receiptsResult, expensesResult, payrollResult, templatesResult, remindersResult] = await Promise.all([
           summaryRequest ? summaryRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<FinanceSummary> })) : Promise.resolve(null),
@@ -265,18 +294,29 @@ export default function FinancePage() {
 
     let isMounted = true
 
-    async function loadStudents() {
-      try {
-        const response = await fetch("/api/students?limit=100", { cache: "no-store" })
-        const payload = (await response.json()) as ApiResponse<StudentListItem[]>
+	async function loadStudents() {
+	  try {
+	    const [studentsResponse, classesResponse] = await Promise.all([
+	      fetch("/api/students?limit=100", { cache: "no-store" }),
+	      fetch("/api/classes?active=true", { cache: "no-store" })
+	    ])
+	    const studentsPayload = (await studentsResponse.json()) as ApiResponse<StudentListItem[]>
+	    const classesPayload = (await classesResponse.json()) as ApiResponse<ClassListItem[]>
 
-        if (isMounted && response.ok && payload.success && payload.data) {
-          setStudents(payload.data)
-        }
-      } catch {
-        if (isMounted) setStudents([])
-      }
-    }
+	    if (isMounted && studentsResponse.ok && studentsPayload.success && studentsPayload.data) {
+	      setStudents(studentsPayload.data)
+	    }
+
+	    if (isMounted && classesResponse.ok && classesPayload.success && classesPayload.data) {
+	      setClasses(classesPayload.data)
+	    }
+	  } catch {
+	    if (isMounted) {
+	      setStudents([])
+	      setClasses([])
+	    }
+	  }
+	}
 
     loadStudents()
 
@@ -306,18 +346,38 @@ export default function FinancePage() {
   )
   const enrollmentOptions = useMemo(
     () =>
-      students.flatMap((student) =>
-        student.courses.map((course) => ({
-          studentName: student.name,
-          parentName: student.parentName,
-          enrollmentId: course.enrollmentId,
-          courseName: course.courseName,
-          sessionsRemaining: course.sessionsRemaining
-        }))
-      ),
-    [students]
-  )
-  const payrollRun = payrollRuns[0]
+	      students.flatMap((student) =>
+	        student.courses.map((course) => ({
+	          studentName: student.name,
+	          parentName: student.parentName,
+	          enrollmentId: course.enrollmentId,
+	          course,
+	          courseName: course.courseName,
+	          sessionsRemaining: course.sessionsRemaining
+	        }))
+	      ),
+	    [students]
+	  )
+	  const selectedReceiptEnrollment = useMemo(
+	    () => enrollmentOptions.find((option) => option.enrollmentId === receiptForm.enrollmentId),
+	    [enrollmentOptions, receiptForm.enrollmentId]
+	  )
+	  const suggestedReceiptSessions = useMemo(
+	    () => countCourseSessionsInBillingMonth(selectedReceiptEnrollment?.course, classes, receiptForm.billingMonth),
+	    [classes, receiptForm.billingMonth, selectedReceiptEnrollment?.course]
+	  )
+	  const selectedReceiptUnitPrice = selectedReceiptEnrollment?.course.courseTotalSessions
+	    ? Number(selectedReceiptEnrollment.course.coursePrice) / selectedReceiptEnrollment.course.courseTotalSessions
+	    : 0
+	  const receiptBillableSessions = Number(receiptForm.billableSessions || suggestedReceiptSessions || 0)
+	  const receiptExpectedAmount = selectedReceiptUnitPrice * receiptBillableSessions
+	  const payrollRun = payrollRuns[0]
+
+	  function suggestReceiptSessions(enrollmentId: string, billingMonth: string) {
+	    const option = enrollmentOptions.find((item) => item.enrollmentId === enrollmentId)
+	    const suggested = countCourseSessionsInBillingMonth(option?.course, classes, billingMonth)
+	    return suggested === undefined ? "" : String(Math.max(0, suggested))
+	  }
 
   async function submitReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -329,12 +389,17 @@ export default function FinancePage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          enrollmentId: receiptForm.enrollmentId,
-          amount: Number(receiptForm.amount),
-          sessions: Number(receiptForm.sessions),
-          method: receiptForm.method,
-          note: receiptForm.note.trim() || undefined
-        })
+	          enrollmentId: receiptForm.enrollmentId,
+	          lines: [{
+	            enrollmentId: receiptForm.enrollmentId,
+	            billableSessions: receiptBillableSessions,
+	            billingPeriodStart: getBillingPeriodForMonth(receiptForm.billingMonth).startIso,
+	            billingPeriodEnd: getBillingPeriodForMonth(receiptForm.billingMonth).endIso,
+	            billingLabel: getBillingPeriodForMonth(receiptForm.billingMonth).label
+	          }],
+	          method: receiptForm.method,
+	          note: receiptForm.note.trim() || undefined
+	        })
       })
       const payload = (await response.json()) as ApiResponse<ReceiptListItem>
 
@@ -395,10 +460,11 @@ export default function FinancePage() {
       const response = await fetch("/api/tuition-reminders", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          enrollmentId: reminder.enrollmentId,
-          templateId: selectedTemplateId
-        })
+	        body: JSON.stringify({
+	          enrollmentId: reminder.enrollmentId,
+	          billingMonth: reminder.billingMonth ?? month,
+	          templateId: selectedTemplateId
+	        })
       })
       const payload = (await response.json()) as ApiResponse<QueuedTuitionReminder>
 
@@ -700,7 +766,7 @@ export default function FinancePage() {
         <DialogFormShell
           title="Tạo phiếu thu"
           eyebrow="Receipt"
-          description="Ghi nhận học phí và cộng số buổi vào khóa đã đăng ký."
+	          description="Ghi nhận học phí theo kỳ tháng và cộng số buổi vào khóa đã đăng ký."
           onClose={() => setActiveDialog(null)}
           onSubmit={submitReceipt}
           size="lg"
@@ -724,11 +790,18 @@ export default function FinancePage() {
             <label className="md:col-span-2">
               <span className="text-sm font-medium text-stone-600">Học viên / khóa học</span>
               <select
-                className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
-                value={receiptForm.enrollmentId}
-                onChange={(event) => setReceiptForm((current) => ({ ...current, enrollmentId: event.target.value }))}
-                required
-              >
+	                className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+	                value={receiptForm.enrollmentId}
+	                onChange={(event) => {
+	                  const enrollmentId = event.target.value
+	                  setReceiptForm((current) => ({
+	                    ...current,
+	                    enrollmentId,
+	                    billableSessions: suggestReceiptSessions(enrollmentId, current.billingMonth)
+	                  }))
+	                }}
+	                required
+	              >
                 <option value="">Chọn học viên / khóa học</option>
                 {enrollmentOptions.map((option) => (
                   <option key={option.enrollmentId} value={option.enrollmentId}>
@@ -737,23 +810,38 @@ export default function FinancePage() {
                 ))}
               </select>
             </label>
-            <FinanceInput
-              label="Số tiền"
-              type="number"
-              min="1"
-              value={receiptForm.amount}
-              onChange={(value) => setReceiptForm((current) => ({ ...current, amount: value }))}
-              required
-            />
-            <FinanceInput
-              label="Số buổi cộng"
-              type="number"
-              min="1"
-              value={receiptForm.sessions}
-              onChange={(value) => setReceiptForm((current) => ({ ...current, sessions: value }))}
-              required
-            />
-            <label>
+	            <FinanceInput
+	              label="Kỳ thu học phí"
+	              type="month"
+	              value={receiptForm.billingMonth}
+	              onChange={(value) => {
+	                const billingMonth = value || getCurrentMonth()
+	                setReceiptForm((current) => ({
+	                  ...current,
+	                  billingMonth,
+	                  billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth)
+	                }))
+	              }}
+	              required
+	            />
+	            <FinanceInput
+	              label="Số buổi tính phí"
+	              type="number"
+	              min="0"
+	              value={receiptForm.billableSessions}
+	              onChange={(value) => setReceiptForm((current) => ({ ...current, billableSessions: value }))}
+	              required
+	            />
+	            <div className="md:col-span-2 rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-600">
+	              <p className="font-semibold text-brand-ink">{getBillingPeriodForMonth(receiptForm.billingMonth).label}</p>
+	              <p className="mt-1">
+	                {suggestedReceiptSessions === undefined
+	                  ? "Chưa có lịch lớp để tự gợi ý, backend sẽ kiểm tra lại khi lưu."
+	                  : `Gợi ý từ lịch lớp: ${suggestedReceiptSessions} buổi.`}
+	              </p>
+	              <p className="mt-1">Dự kiến: {formatMoney(String(Math.round(receiptExpectedAmount)))}</p>
+	            </div>
+	            <label>
               <span className="text-sm font-medium text-stone-600">Phương thức</span>
               <select
                 className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
@@ -1188,12 +1276,19 @@ function RemindersTab({
                     <p className="mt-1 text-xs text-stone-500">
                       PH {reminder.parentName} - {reminder.parentPhone} - {reminder.courseName}
                     </p>
-                  </div>
-                  <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
-                    Còn {reminder.sessionsRemaining}
-                  </span>
-                </div>
-                <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs leading-5 text-stone-600">{reminder.message}</p>
+	                  </div>
+	                  <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
+	                    {reminder.billingMonth ? `Cần thu ${reminder.billableSessionsDue ?? 0}` : `Còn ${reminder.sessionsRemaining}`}
+	                  </span>
+	                </div>
+	                {reminder.billingLabel ? (
+	                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-stone-500">
+	                    <span className="rounded-full border border-brand-red/10 px-2 py-1">{reminder.billingLabel}</span>
+	                    <span className="rounded-full border border-brand-red/10 px-2 py-1">Đã thu {reminder.billedSessionsInMonth ?? 0} buổi</span>
+	                    <span className="rounded-full border border-brand-red/10 px-2 py-1">Dự kiến {formatMoney(reminder.expectedAmount ?? "0")}</span>
+	                  </div>
+	                ) : null}
+	                <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs leading-5 text-stone-600">{reminder.message}</p>
                 <button
                   type="button"
                   className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
@@ -1232,11 +1327,11 @@ function ReceiptItem({ compact = false, receipt }: { compact?: boolean; receipt:
           <p className="mt-1 text-xs text-stone-500">
             {receipt.studentName} - {receipt.courseName}
           </p>
-          {!compact ? (
-            <p className="mt-2 text-xs text-stone-500">
-              {receipt.sessions} buổi - {formatDate(receipt.createdAt)} - tạo bởi {receipt.createdByName}
-            </p>
-          ) : null}
+	          {!compact ? (
+	            <p className="mt-2 text-xs text-stone-500">
+	              {receipt.sessions} buổi{receipt.lines[0]?.billingLabel ? ` - ${receipt.lines[0].billingLabel}` : ""} - {formatDate(receipt.createdAt)} - tạo bởi {receipt.createdByName}
+	            </p>
+	          ) : null}
         </div>
         <div className="text-left sm:text-right">
           <p className="text-sm font-semibold text-brand-red">{formatMoney(receipt.amount)}</p>

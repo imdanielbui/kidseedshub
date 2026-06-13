@@ -72,18 +72,20 @@ export async function GET() {
       },
       orderBy: { updatedAt: "desc" }
     }),
-    prisma.receipt.findMany({
-      include: {
-        createdBy: true,
-        enrollment: {
-          include: {
-            student: { include: { parent: { include: { user: true } } } },
-            course: true
-          }
-        }
-      },
-      orderBy: { createdAt: "desc" }
-    }),
+	    prisma.receipt.findMany({
+	      include: {
+	        createdBy: true,
+	        enrollment: {
+	          include: {
+	            student: { include: { parent: { include: { user: true } } } },
+	            course: true
+	          }
+	        },
+	        lines: { orderBy: { createdAt: "asc" } },
+	        extraLines: { orderBy: { createdAt: "asc" } }
+	      },
+	      orderBy: { createdAt: "desc" }
+	    }),
     prisma.expense.findMany({
       include: { createdBy: true },
       orderBy: { date: "desc" }
@@ -152,31 +154,51 @@ export async function GET() {
     { header: "Student Code", key: "studentCode", width: 16 },
     { header: "Student Name", key: "studentName", width: 24 },
     { header: "Parent Name", key: "parentName", width: 24 },
-    { header: "Parent Phone", key: "parentPhone", width: 18 },
-    { header: "Course", key: "course", width: 28 },
-    { header: "Amount", key: "amount", width: 16 },
-    { header: "Sessions", key: "sessions", width: 12 },
-    { header: "Method", key: "method", width: 18 },
-    { header: "Created By", key: "createdBy", width: 22 },
-    { header: "Note", key: "note", width: 32 }
-  ]
-  receipts.forEach((receipt) => {
-    receiptsSheet.addRow({
-      code: receipt.code,
-      date: formatDate(receipt.createdAt),
-      studentCode: receipt.enrollment.student.code,
-      studentName: receipt.enrollment.student.name,
-      parentName: receipt.enrollment.student.parent.user.name,
-      parentPhone: receipt.enrollment.student.parent.user.phone,
-      course: receipt.enrollment.course.name,
-      amount: Number(receipt.amount.toString()),
-      sessions: receipt.sessions,
-      method: paymentMethodLabels[receipt.method],
-      createdBy: receipt.createdBy.name,
-      note: receipt.note ?? ""
-    })
-  })
-  receiptsSheet.getColumn("amount").numFmt = "#,##0"
+	    { header: "Parent Phone", key: "parentPhone", width: 18 },
+	    { header: "Course", key: "course", width: 28 },
+	    { header: "Billing Period", key: "billingPeriod", width: 22 },
+	    { header: "Amount", key: "amount", width: 16 },
+	    { header: "Line Amount", key: "lineAmount", width: 16 },
+	    { header: "Wallet Credit", key: "walletCredit", width: 16 },
+	    { header: "Sessions", key: "sessions", width: 12 },
+	    { header: "Extra Lines", key: "extraLines", width: 36 },
+	    { header: "Method", key: "method", width: 18 },
+	    { header: "Created By", key: "createdBy", width: 22 },
+	    { header: "Note", key: "note", width: 32 }
+	  ]
+	  receipts.forEach((receipt) => {
+	    const extraLineSummary = receipt.extraLines.map((line) => `${line.type}: ${line.description} - ${line.amount.toString()}`).join("; ")
+	    const lines = receipt.lines.length ? receipt.lines : [{
+	      courseName: receipt.enrollment.course.name,
+	      billingLabel: null,
+	      amount: receipt.amount,
+	      billableSessions: receipt.sessions
+	    }]
+
+	    lines.forEach((line) => {
+	      receiptsSheet.addRow({
+	        code: receipt.code,
+	        date: formatDate(receipt.createdAt),
+	        studentCode: receipt.enrollment.student.code,
+	        studentName: receipt.enrollment.student.name,
+	        parentName: receipt.enrollment.student.parent.user.name,
+	        parentPhone: receipt.enrollment.student.parent.user.phone,
+	        course: line.courseName,
+	        billingPeriod: line.billingLabel ?? "",
+	        amount: Number(receipt.amount.toString()),
+	        lineAmount: Number(line.amount.toString()),
+	        walletCredit: Number(receipt.walletCreditAmount.toString()),
+	        sessions: line.billableSessions,
+	        extraLines: extraLineSummary,
+	        method: paymentMethodLabels[receipt.method],
+	        createdBy: receipt.createdBy.name,
+	        note: receipt.note ?? ""
+	      })
+	    })
+	  })
+	  receiptsSheet.getColumn("amount").numFmt = "#,##0"
+	  receiptsSheet.getColumn("lineAmount").numFmt = "#,##0"
+	  receiptsSheet.getColumn("walletCredit").numFmt = "#,##0"
   addWorksheetBranding(receiptsSheet, "Students Finance Export - Phiếu thu", logoImageId)
 
   const expensesSheet = workbook.addWorksheet("Expenses")

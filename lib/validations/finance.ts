@@ -11,7 +11,10 @@ const receiptLineCreateSchema = z.object({
   freeTrialSessions: z.number().int().min(0).max(200).default(0),
   paidSessionsBeforeReceipt: z.number().int().min(0).max(200).default(0),
   discountInput: z.string().trim().max(64).optional(),
-  extraDiscountInput: z.string().trim().max(64).optional()
+  extraDiscountInput: z.string().trim().max(64).optional(),
+  billingPeriodStart: z.string().datetime().optional(),
+  billingPeriodEnd: z.string().datetime().optional(),
+  billingLabel: z.string().trim().max(64).optional()
 })
 
 const receiptExtraLineCreateSchema = z.object({
@@ -50,6 +53,7 @@ export const receiptCreateSchema = z.object({
 
 export const receiptListQuerySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  billingMonth: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   studentId: z.string().min(1).optional()
 })
 

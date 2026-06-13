@@ -187,6 +187,46 @@ function moneySuggestions(value: string) {
   return [base * 10000, base * 100000]
 }
 
+function getCurrentMonth() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+}
+
+function getBillingPeriodForMonth(month: string) {
+  const [year, value] = month.split("-").map(Number)
+  const start = new Date(Date.UTC(year, value - 1, 1))
+  const end = new Date(Date.UTC(year, value, 1))
+
+  return {
+    start,
+    end,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    label: `Học phí tháng ${String(value).padStart(2, "0")}/${year}`
+  }
+}
+
+function countCourseSessionsInBillingMonth(course: StudentDetail["courses"][number] | undefined, classes: ClassListItem[], month: string) {
+  if (!course?.classId) return undefined
+  const klass = classes.find((item) => item.id === course.classId)
+  if (!klass) return undefined
+  const period = getBillingPeriodForMonth(month)
+  const startGate = course.startDate && new Date(course.startDate) > period.start ? new Date(course.startDate) : period.start
+
+  return klass.sessionDates.filter((session) => {
+    const sessionDate = new Date(session.date)
+    return session.status !== "CANCELED" && sessionDate >= startGate && sessionDate < period.end
+  }).length
+}
+
+function countBilledSessionsForMonth(receipts: ReceiptListItem[], enrollmentId: string, month: string) {
+  return receipts.reduce((total, receipt) => {
+    return total + receipt.lines
+      .filter((line) => line.enrollmentId === enrollmentId && line.billingPeriodStart?.startsWith(month))
+      .reduce((lineTotal, line) => lineTotal + line.billableSessions, 0)
+  }, 0)
+}
+
 function startOfLocalDay(value: Date) {
   const result = new Date(value)
   result.setHours(0, 0, 0, 0)
@@ -313,9 +353,10 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [enrollmentFreeTrialSessions, setEnrollmentFreeTrialSessions] = useState("0")
   const [enrollmentStartDate, setEnrollmentStartDate] = useState(new Date().toISOString().slice(0, 10))
   const [receiptAmount, setReceiptAmount] = useState("")
-  const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([])
-  const [receiptExtraLines, setReceiptExtraLines] = useState<ReceiptExtraDraftLine[]>([])
-  const [receiptMethod, setReceiptMethod] = useState<PaymentMethodKey>("BANK_TRANSFER")
+	  const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([])
+	  const [receiptExtraLines, setReceiptExtraLines] = useState<ReceiptExtraDraftLine[]>([])
+	  const [receiptBillingMonth, setReceiptBillingMonth] = useState(getCurrentMonth)
+	  const [receiptMethod, setReceiptMethod] = useState<PaymentMethodKey>("BANK_TRANSFER")
   const [receiptNote, setReceiptNote] = useState("")
   const [isReceiptAmountOverride, setIsReceiptAmountOverride] = useState(false)
   const [pendingBillableEnrollmentId, setPendingBillableEnrollmentId] = useState<string | null>(null)
@@ -411,12 +452,15 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     const coursePrice = Number(course?.coursePrice ?? 0)
     const totalSessions = course?.courseTotalSessions ?? 0
     const unitPrice = totalSessions ? coursePrice / totalSessions : 0
-    const freeTrialSessions = toNonNegativeNumber(line.freeTrialSessions)
-    const joinSessionNumber = course?.joinSessionNumber ?? 1
-    const sessionsFromJoin = totalSessions ? Math.max(0, totalSessions - joinSessionNumber + 1) : 0
-    const defaultBillableSessions = Math.max(0, sessionsFromJoin - freeTrialSessions)
-    const fallbackBillableSessions = Math.max(0, course?.sessionsRemaining ?? 0)
-    const billableSessions = line.isBillableOverride ? toNonNegativeNumber(line.billableSessions) : (totalSessions ? defaultBillableSessions : fallbackBillableSessions)
+	    const freeTrialSessions = toNonNegativeNumber(line.freeTrialSessions)
+	    const joinSessionNumber = course?.joinSessionNumber ?? 1
+	    const sessionsFromJoin = totalSessions ? Math.max(0, totalSessions - joinSessionNumber + 1) : 0
+	    const defaultBillableSessions = Math.max(0, sessionsFromJoin - freeTrialSessions)
+	    const fallbackBillableSessions = Math.max(0, course?.sessionsRemaining ?? 0)
+	    const monthlySessions = countCourseSessionsInBillingMonth(course, classes, receiptBillingMonth)
+	    const billedThisMonth = course ? countBilledSessionsForMonth(studentReceipts, course.enrollmentId, receiptBillingMonth) : 0
+	    const monthlyBillableSessions = monthlySessions === undefined ? undefined : Math.max(0, monthlySessions - billedThisMonth - freeTrialSessions)
+	    const billableSessions = line.isBillableOverride ? toNonNegativeNumber(line.billableSessions) : (monthlyBillableSessions ?? (totalSessions ? defaultBillableSessions : fallbackBillableSessions))
     const paidSessionsBeforeReceipt = toNonNegativeNumber(line.paidSessionsBeforeReceipt)
     const grossAmount = unitPrice * billableSessions
     const discount = parseDiscountInputs([line.discountInput, line.extraDiscountInput], grossAmount)
@@ -429,14 +473,16 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       course,
       unitPrice,
       billableSessions,
-      freeTrialSessions,
-      paidSessionsBeforeReceipt,
-      grossAmount,
+	      freeTrialSessions,
+	      paidSessionsBeforeReceipt,
+	      monthlySessions,
+	      billedThisMonth,
+	      grossAmount,
       discount,
       amount,
       remainingAfterReceipt: Math.max(0, nextSessionsBought - nextSessionsUsed)
     }
-  }), [receiptLines, student?.courses])
+	  }), [classes, receiptBillingMonth, receiptLines, student?.courses, studentReceipts])
   const coursePayableAmount = receiptLineSummaries.reduce((total, line) => total + line.amount, 0)
   const receiptExtraLineSummaries = useMemo(() => receiptExtraLines.map((line) => {
     const quantity = toNonNegativeNumber(line.quantity)
@@ -1001,12 +1047,13 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     setIsConfirmingPayment(true)
   }
 
-  async function confirmReceiptPayment() {
-    setIsSubmittingReceipt(true)
-    setError(null)
+	  async function confirmReceiptPayment() {
+	    setIsSubmittingReceipt(true)
+	    setError(null)
+	    const billingPeriod = getBillingPeriodForMonth(receiptBillingMonth)
 
-    try {
-      const response = await fetch("/api/receipts", {
+	    try {
+	      const response = await fetch("/api/receipts", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -1015,11 +1062,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           lines: receiptLineSummaries.map((summary) => ({
             enrollmentId: summary.line.enrollmentId,
             billableSessions: summary.billableSessions,
-            freeTrialSessions: summary.freeTrialSessions,
-            paidSessionsBeforeReceipt: summary.paidSessionsBeforeReceipt,
-            discountInput: summary.line.discountInput.trim() || undefined,
-            extraDiscountInput: summary.line.extraDiscountInput.trim() || undefined
-          })),
+	            freeTrialSessions: summary.freeTrialSessions,
+	            paidSessionsBeforeReceipt: summary.paidSessionsBeforeReceipt,
+	            discountInput: summary.line.discountInput.trim() || undefined,
+	            extraDiscountInput: summary.line.extraDiscountInput.trim() || undefined,
+	            billingPeriodStart: billingPeriod.startIso,
+	            billingPeriodEnd: billingPeriod.endIso,
+	            billingLabel: billingPeriod.label
+	          })),
           extraLines: receiptExtraLineSummaries.map((summary) => ({
             type: summary.line.type,
             description: summary.line.description.trim(),
@@ -1466,11 +1516,21 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
             </div>
             <FormFooter loading={isSubmittingEnrollment} label="Ghi danh" loadingLabel="Đang ghi danh" disabled={!enrollmentCourseId} />
           </form>
-          <form className="neu-card rounded-3xl" onSubmit={submitReceipt}>
-            <SectionHeader icon={<CreditCard className="h-5 w-5 text-brand-red" />} title="2. Tạo phiếu thu" description="Chọn một hoặc nhiều khóa đã đăng ký, hệ thống tự tính buổi và tổng cần thanh toán." />
-            <div className="content-border space-y-4 p-5">
-              <div>
-                <p className="text-sm font-semibold text-stone-700">Khóa cần thu</p>
+	          <form className="neu-card rounded-3xl" onSubmit={submitReceipt}>
+	            <SectionHeader icon={<CreditCard className="h-5 w-5 text-brand-red" />} title="2. Tạo phiếu thu" description="Chọn một hoặc nhiều khóa đã đăng ký, hệ thống tự tính buổi và tổng cần thanh toán." />
+	            <div className="content-border space-y-4 p-5">
+	              <label className="block text-sm font-semibold text-stone-700">
+	                Kỳ thu học phí
+	                <input
+	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+	                  type="month"
+	                  value={receiptBillingMonth}
+	                  onChange={(event) => setReceiptBillingMonth(event.target.value || getCurrentMonth())}
+	                />
+	                <span className="mt-1 block text-xs text-stone-500">Hệ thống đếm các buổi trong tháng này từ lịch lớp, bỏ qua buổi nghỉ/hủy.</span>
+	              </label>
+	              <div>
+	                <p className="text-sm font-semibold text-stone-700">Khóa cần thu</p>
                 <div className="mt-2 grid gap-2">
                   {activeStudentCourses(student).length ? activeStudentCourses(student).map((course) => {
                     const selected = receiptLines.some((line) => line.enrollmentId === course.enrollmentId)
@@ -1509,10 +1569,15 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                   {receiptLineSummaries.map((summary) => (
                     <article key={summary.line.enrollmentId} className="rounded-2xl border border-brand-red/10 bg-white/35 p-4">
                       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <p className="font-semibold text-brand-ink">{summary.course?.courseName ?? "Khóa đã đăng ký"}</p>
-                          <p className="mt-1 text-xs text-stone-500">Đơn giá {formatCurrency(summary.unitPrice)} · thành tiền {formatCurrency(summary.amount)}</p>
-                        </div>
+	                        <div>
+	                          <p className="font-semibold text-brand-ink">{summary.course?.courseName ?? "Khóa đã đăng ký"}</p>
+	                          <p className="mt-1 text-xs text-stone-500">Đơn giá {formatCurrency(summary.unitPrice)} · thành tiền {formatCurrency(summary.amount)}</p>
+	                          <p className="mt-1 text-xs text-stone-500">
+	                            {summary.monthlySessions === undefined
+	                              ? "Chưa có lịch lớp trong kỳ, hệ thống fallback theo quỹ buổi khóa."
+	                              : `Kỳ ${getBillingPeriodForMonth(receiptBillingMonth).label}: ${summary.monthlySessions} buổi lịch lớp, đã thu ${summary.billedThisMonth} buổi.`}
+	                          </p>
+	                        </div>
                         <p className="text-sm font-semibold text-brand-red">{summary.remainingAfterReceipt} buổi còn sau thu</p>
                       </div>
                       <div className="mt-3 grid gap-3 md:grid-cols-5">
@@ -1971,11 +2036,12 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
           }
         >
           <div className="content-border space-y-4 p-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
-              <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
-              <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
-              <InfoPill label="Thực thu" value={formatCurrency(actualReceiptPaymentAmount)} />
+	            <div className="grid gap-3 md:grid-cols-5">
+	              <InfoPill label="Kỳ thu" value={getBillingPeriodForMonth(receiptBillingMonth).label.replace("Học phí ", "")} />
+	              <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
+	              <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
+	              <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
+	              <InfoPill label="Thực thu" value={formatCurrency(actualReceiptPaymentAmount)} />
             </div>
             <div className="grid gap-3 lg:grid-cols-2">
               <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
@@ -1983,7 +2049,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 <div className="mt-3 space-y-2 text-sm text-stone-600">
                   {receiptLineSummaries.map((summary) => (
                     <div key={summary.line.enrollmentId} className="flex justify-between gap-3">
-                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi</span>
+	                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi · {getBillingPeriodForMonth(receiptBillingMonth).label}</span>
                       <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
                     </div>
                   ))}
@@ -2473,10 +2539,10 @@ function ReceiptHistoryCard({ receipts }: { receipts: ReceiptListItem[] }) {
                 <p className="mt-2 text-sm font-semibold text-brand-ink">{receipt.courseName}</p>
                 <p className="mt-1 line-clamp-2 text-xs text-stone-500">{receipt.note ?? "Không có ghi chú phiếu thu."}</p>
                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold text-stone-500">
-                  {receipt.lines.length ? receipt.lines.map((line) => (
-                    <span key={line.id} className="rounded-full border border-brand-red/10 px-2 py-1">
-                      {line.courseName}: {line.billableSessions} buổi · {formatCurrency(Number(line.amount))}
-                    </span>
+	                  {receipt.lines.length ? receipt.lines.map((line) => (
+	                    <span key={line.id} className="rounded-full border border-brand-red/10 px-2 py-1">
+	                      {line.courseName}: {line.billableSessions} buổi{line.billingLabel ? ` · ${line.billingLabel}` : ""} · {formatCurrency(Number(line.amount))}
+	                    </span>
                   )) : (
                     <span className="rounded-full border border-brand-red/10 px-2 py-1">{receipt.billableSessions} buổi tính phí</span>
                   )}
