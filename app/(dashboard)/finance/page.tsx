@@ -21,6 +21,7 @@ import type { ClassListItem } from "@/lib/contracts/courses"
 type FinanceRole = "ADMIN" | "SALE" | "TEACHER" | "PARENT"
 type FinanceTab = "overview" | "receipts" | "expenses" | "payroll" | "reminders"
 type FinanceDialog = "receipt" | "expense" | null
+type ReceiptBillingMode = "COURSE" | "MONTHLY"
 
 type SessionPayload = {
   user?: {
@@ -30,6 +31,7 @@ type SessionPayload = {
 
 type ReceiptFormState = {
   enrollmentId: string
+  billingMode: ReceiptBillingMode
   billingMonth: string
   billableSessions: string
   method: PaymentMethodKey
@@ -53,6 +55,7 @@ type PayrollLineEditState = {
 
 const emptyReceiptForm: ReceiptFormState = {
   enrollmentId: "",
+  billingMode: "COURSE",
   billingMonth: getCurrentMonth(),
   billableSessions: "",
   method: "BANK_TRANSFER",
@@ -367,19 +370,22 @@ export default function FinancePage() {
 	    () => enrollmentOptions.find((option) => option.enrollmentId === receiptForm.enrollmentId),
 	    [enrollmentOptions, receiptForm.enrollmentId]
 	  )
+	  const isReceiptMonthlyBilling = receiptForm.billingMode === "MONTHLY"
 	  const suggestedReceiptSessions = useMemo(
-	    () => countCourseSessionsInBillingMonth(selectedReceiptEnrollment?.course, classes, receiptForm.billingMonth),
-	    [classes, receiptForm.billingMonth, selectedReceiptEnrollment?.course]
+	    () => isReceiptMonthlyBilling ? countCourseSessionsInBillingMonth(selectedReceiptEnrollment?.course, classes, receiptForm.billingMonth) : undefined,
+	    [classes, isReceiptMonthlyBilling, receiptForm.billingMonth, selectedReceiptEnrollment?.course]
 	  )
 	  const selectedReceiptUnitPrice = selectedReceiptEnrollment?.course.courseTotalSessions
 	    ? Number(selectedReceiptEnrollment.course.coursePrice) / selectedReceiptEnrollment.course.courseTotalSessions
 	    : 0
-	  const receiptBillableSessions = Number(receiptForm.billableSessions || suggestedReceiptSessions || 0)
+	  const defaultReceiptSessions = selectedReceiptEnrollment ? selectedReceiptEnrollment.sessionsRemaining : 0
+	  const receiptBillableSessions = Number(receiptForm.billableSessions || suggestedReceiptSessions || defaultReceiptSessions || 0)
 	  const receiptExpectedAmount = selectedReceiptUnitPrice * receiptBillableSessions
 	  const payrollRun = payrollRuns[0]
 
-	  function suggestReceiptSessions(enrollmentId: string, billingMonth: string) {
+	  function suggestReceiptSessions(enrollmentId: string, billingMonth: string, billingMode: ReceiptBillingMode) {
 	    const option = enrollmentOptions.find((item) => item.enrollmentId === enrollmentId)
+	    if (billingMode === "COURSE") return option ? String(option.sessionsRemaining) : ""
 	    const suggested = countCourseSessionsInBillingMonth(option?.course, classes, billingMonth)
 	    return suggested === undefined ? "" : String(Math.max(0, suggested))
 	  }
@@ -390,6 +396,7 @@ export default function FinancePage() {
     setError(null)
 
     try {
+      const billingPeriod = isReceiptMonthlyBilling ? getBillingPeriodForMonth(receiptForm.billingMonth) : null
       const response = await fetch("/api/receipts", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -398,9 +405,9 @@ export default function FinancePage() {
 	          lines: [{
 	            enrollmentId: receiptForm.enrollmentId,
 	            billableSessions: receiptBillableSessions,
-	            billingPeriodStart: getBillingPeriodForMonth(receiptForm.billingMonth).startIso,
-	            billingPeriodEnd: getBillingPeriodForMonth(receiptForm.billingMonth).endIso,
-	            billingLabel: getBillingPeriodForMonth(receiptForm.billingMonth).label
+	            billingPeriodStart: billingPeriod?.startIso,
+	            billingPeriodEnd: billingPeriod?.endIso,
+	            billingLabel: billingPeriod?.label
 	          }],
 	          method: receiptForm.method,
 	          note: receiptForm.note.trim() || undefined
@@ -771,7 +778,7 @@ export default function FinancePage() {
         <DialogFormShell
           title="Tạo phiếu thu"
           eyebrow="Receipt"
-	          description="Ghi nhận học phí theo kỳ tháng và cộng số buổi vào khóa đã đăng ký."
+	          description="Ghi nhận học phí theo khóa hoặc theo tháng và cộng số buổi vào khóa đã đăng ký."
           onClose={() => setActiveDialog(null)}
           onSubmit={submitReceipt}
           size="lg"
@@ -802,7 +809,7 @@ export default function FinancePage() {
 	                  setReceiptForm((current) => ({
 	                    ...current,
 	                    enrollmentId,
-	                    billableSessions: suggestReceiptSessions(enrollmentId, current.billingMonth)
+	                    billableSessions: suggestReceiptSessions(enrollmentId, current.billingMonth, current.billingMode)
 	                  }))
 	                }}
 	                required
@@ -815,46 +822,66 @@ export default function FinancePage() {
                 ))}
               </select>
             </label>
-	            <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
-	              <label>
-	                <span className="text-sm font-medium text-stone-600">Tháng kỳ thu</span>
-	                <select
-	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
-	                  value={getMonthPart(receiptForm.billingMonth)}
-	                  onChange={(event) => {
-	                    const billingMonth = `${getYearPart(receiptForm.billingMonth)}-${event.target.value}`
-	                    setReceiptForm((current) => ({
-	                      ...current,
-	                      billingMonth,
-	                      billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth)
-	                    }))
-	                  }}
-	                >
-	                  {financeMonthChoices.map((choice) => (
-	                    <option key={choice.value} value={choice.value}>{choice.label}</option>
-	                  ))}
-	                </select>
-	              </label>
-	              <label>
-	                <span className="text-sm font-medium text-stone-600">Năm kỳ thu</span>
-	                <select
-	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
-	                  value={getYearPart(receiptForm.billingMonth)}
-	                  onChange={(event) => {
-	                    const billingMonth = `${event.target.value}-${getMonthPart(receiptForm.billingMonth)}`
-	                    setReceiptForm((current) => ({
-	                      ...current,
-	                      billingMonth,
-	                      billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth)
-	                    }))
-	                  }}
-	                >
-	                  {buildYearOptions(getYearPart(receiptForm.billingMonth)).map((year) => (
-	                    <option key={year} value={year}>{year}</option>
-	                  ))}
-	                </select>
-	              </label>
-	            </div>
+            <label className="md:col-span-2">
+              <span className="text-sm font-medium text-stone-600">Cách thu học phí</span>
+              <select
+                className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+                value={receiptForm.billingMode}
+                onChange={(event) => {
+                  const billingMode = event.target.value as ReceiptBillingMode
+                  setReceiptForm((current) => ({
+                    ...current,
+                    billingMode,
+                    billableSessions: suggestReceiptSessions(current.enrollmentId, current.billingMonth, billingMode)
+                  }))
+                }}
+              >
+                <option value="COURSE">Thu theo khóa / số buổi còn lại</option>
+                <option value="MONTHLY">Thu theo tháng</option>
+              </select>
+            </label>
+	            {isReceiptMonthlyBilling ? (
+	              <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+	                <label>
+	                  <span className="text-sm font-medium text-stone-600">Tháng kỳ thu</span>
+	                  <select
+	                    className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+	                    value={getMonthPart(receiptForm.billingMonth)}
+	                    onChange={(event) => {
+	                      const billingMonth = `${getYearPart(receiptForm.billingMonth)}-${event.target.value}`
+	                      setReceiptForm((current) => ({
+	                        ...current,
+	                        billingMonth,
+	                        billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth, current.billingMode)
+	                      }))
+	                    }}
+	                  >
+	                    {financeMonthChoices.map((choice) => (
+	                      <option key={choice.value} value={choice.value}>{choice.label}</option>
+	                    ))}
+	                  </select>
+	                </label>
+	                <label>
+	                  <span className="text-sm font-medium text-stone-600">Năm kỳ thu</span>
+	                  <select
+	                    className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm font-medium text-brand-ink outline-none"
+	                    value={getYearPart(receiptForm.billingMonth)}
+	                    onChange={(event) => {
+	                      const billingMonth = `${event.target.value}-${getMonthPart(receiptForm.billingMonth)}`
+	                      setReceiptForm((current) => ({
+	                        ...current,
+	                        billingMonth,
+	                        billableSessions: suggestReceiptSessions(current.enrollmentId, billingMonth, current.billingMode)
+	                      }))
+	                    }}
+	                  >
+	                    {buildYearOptions(getYearPart(receiptForm.billingMonth)).map((year) => (
+	                      <option key={year} value={year}>{year}</option>
+	                    ))}
+	                  </select>
+	                </label>
+	              </div>
+	            ) : null}
 	            <FinanceInput
 	              label="Số buổi tính phí"
 	              type="number"
@@ -864,11 +891,13 @@ export default function FinancePage() {
 	              required
 	            />
 	            <div className="md:col-span-2 rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-600">
-	              <p className="font-semibold text-brand-ink">{getBillingPeriodForMonth(receiptForm.billingMonth).label}</p>
+	              <p className="font-semibold text-brand-ink">{isReceiptMonthlyBilling ? getBillingPeriodForMonth(receiptForm.billingMonth).label : "Thu theo khóa / số buổi còn lại"}</p>
 	              <p className="mt-1">
-	                {suggestedReceiptSessions === undefined
-	                  ? "Chưa có lịch lớp để tự gợi ý, backend sẽ kiểm tra lại khi lưu."
-	                  : `Gợi ý từ lịch lớp: ${suggestedReceiptSessions} buổi.`}
+	                {isReceiptMonthlyBilling
+	                  ? (suggestedReceiptSessions === undefined
+	                    ? "Chưa có lịch lớp để tự gợi ý, backend sẽ kiểm tra lại khi lưu."
+	                    : `Gợi ý từ lịch lớp: ${suggestedReceiptSessions} buổi.`)
+	                  : `Gợi ý theo số buổi còn lại: ${defaultReceiptSessions} buổi.`}
 	              </p>
 	              <p className="mt-1">Dự kiến: {formatMoney(String(Math.round(receiptExpectedAmount)))}</p>
 	            </div>

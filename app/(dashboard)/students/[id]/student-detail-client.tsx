@@ -19,6 +19,7 @@ import { studentWalletEntryTypeLabels, type StudentWalletSummary } from "@/lib/c
 type DetailTab = "overview" | "crm" | "learning" | "finance" | "journal" | "parent-account"
 type ParentAccountAction = "activate" | "reset_default_password"
 type PhotoReviewFilter = "ALL" | "DRAFT" | "PUBLISHED"
+type ReceiptBillingMode = "COURSE" | "MONTHLY"
 type ReceiptDraftLine = {
   enrollmentId: string
   freeTrialSessions: string
@@ -387,6 +388,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [receiptAmount, setReceiptAmount] = useState("")
 	  const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([])
 	  const [receiptExtraLines, setReceiptExtraLines] = useState<ReceiptExtraDraftLine[]>([])
+	  const [receiptBillingMode, setReceiptBillingMode] = useState<ReceiptBillingMode>("COURSE")
 	  const [receiptBillingMonth, setReceiptBillingMonth] = useState(getCurrentMonth)
 	  const [receiptMethod, setReceiptMethod] = useState<PaymentMethodKey>("BANK_TRANSFER")
   const [receiptNote, setReceiptNote] = useState("")
@@ -479,6 +481,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     [editingCourse?.courseTotalSessions, editingEnrollment?.startDate, editingSelectedClass]
   )
   const enrollmentSessionsFromJoin = enrollmentJoinPreview.sessionsFromJoin
+  const isReceiptMonthlyBilling = receiptBillingMode === "MONTHLY"
   const receiptLineSummaries = useMemo(() => receiptLines.map((line) => {
     const course = student?.courses.find((item) => item.enrollmentId === line.enrollmentId)
     const coursePrice = Number(course?.coursePrice ?? 0)
@@ -489,9 +492,9 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	    const sessionsFromJoin = totalSessions ? Math.max(0, totalSessions - joinSessionNumber + 1) : 0
 	    const defaultBillableSessions = Math.max(0, sessionsFromJoin - freeTrialSessions)
 	    const fallbackBillableSessions = Math.max(0, course?.sessionsRemaining ?? 0)
-	    const monthlySessions = countCourseSessionsInBillingMonth(course, classes, receiptBillingMonth)
-	    const billedThisMonth = course ? countBilledSessionsForMonth(studentReceipts, course.enrollmentId, receiptBillingMonth) : 0
-	    const monthlyBillableSessions = monthlySessions === undefined ? undefined : Math.max(0, monthlySessions - billedThisMonth - freeTrialSessions)
+	    const monthlySessions = isReceiptMonthlyBilling ? countCourseSessionsInBillingMonth(course, classes, receiptBillingMonth) : undefined
+	    const billedThisMonth = isReceiptMonthlyBilling && course ? countBilledSessionsForMonth(studentReceipts, course.enrollmentId, receiptBillingMonth) : 0
+	    const monthlyBillableSessions = isReceiptMonthlyBilling && monthlySessions !== undefined ? Math.max(0, monthlySessions - billedThisMonth - freeTrialSessions) : undefined
 	    const billableSessions = line.isBillableOverride ? toNonNegativeNumber(line.billableSessions) : (monthlyBillableSessions ?? (totalSessions ? defaultBillableSessions : fallbackBillableSessions))
     const paidSessionsBeforeReceipt = toNonNegativeNumber(line.paidSessionsBeforeReceipt)
     const grossAmount = unitPrice * billableSessions
@@ -514,7 +517,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       amount,
       remainingAfterReceipt: Math.max(0, nextSessionsBought - nextSessionsUsed)
     }
-	  }), [classes, receiptBillingMonth, receiptLines, student?.courses, studentReceipts])
+	  }), [classes, isReceiptMonthlyBilling, receiptBillingMonth, receiptLines, student?.courses, studentReceipts])
   const coursePayableAmount = receiptLineSummaries.reduce((total, line) => total + line.amount, 0)
   const receiptExtraLineSummaries = useMemo(() => receiptExtraLines.map((line) => {
     const quantity = toNonNegativeNumber(line.quantity)
@@ -1083,7 +1086,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	  async function confirmReceiptPayment() {
 	    setIsSubmittingReceipt(true)
 	    setError(null)
-	    const billingPeriod = getBillingPeriodForMonth(receiptBillingMonth)
+	    const billingPeriod = isReceiptMonthlyBilling ? getBillingPeriodForMonth(receiptBillingMonth) : null
 
 	    try {
 	      const response = await fetch("/api/receipts", {
@@ -1099,9 +1102,9 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	            paidSessionsBeforeReceipt: summary.paidSessionsBeforeReceipt,
 	            discountInput: summary.line.discountInput.trim() || undefined,
 	            extraDiscountInput: summary.line.extraDiscountInput.trim() || undefined,
-	            billingPeriodStart: billingPeriod.startIso,
-	            billingPeriodEnd: billingPeriod.endIso,
-	            billingLabel: billingPeriod.label
+	            billingPeriodStart: billingPeriod?.startIso,
+	            billingPeriodEnd: billingPeriod?.endIso,
+	            billingLabel: billingPeriod?.label
 	          })),
           extraLines: receiptExtraLineSummaries.map((summary) => ({
             type: summary.line.type,
@@ -1126,6 +1129,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       setWalletCreditInput("")
       setIsWalletCreditManual(false)
       setIsReceiptAmountOverride(false)
+      setReceiptBillingMode("COURSE")
       setReceiptNote("")
       setReceiptExtraLines([])
       setIsConfirmingPayment(false)
@@ -1553,34 +1557,51 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	            <SectionHeader icon={<CreditCard className="h-5 w-5 text-brand-red" />} title="2. Tạo phiếu thu" description="Chọn một hoặc nhiều khóa đã đăng ký, hệ thống tự tính buổi và tổng cần thanh toán." />
 	            <div className="content-border space-y-4 p-5">
 	              <div>
-	                <p className="text-sm font-semibold text-stone-700">Kỳ thu học phí</p>
-	                <div className="mt-2 grid gap-3 md:grid-cols-2">
-	                  <label>
-	                    <span className="text-xs font-semibold text-stone-500">Tháng</span>
-	                    <select
-	                      className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-	                      value={getMonthPart(receiptBillingMonth)}
-	                      onChange={(event) => setReceiptBillingMonth(`${getYearPart(receiptBillingMonth)}-${event.target.value}`)}
-	                    >
-	                      {billingMonthChoices.map((choice) => (
-	                        <option key={choice.value} value={choice.value}>{choice.label}</option>
-	                      ))}
-	                    </select>
-	                  </label>
-	                  <label>
-	                    <span className="text-xs font-semibold text-stone-500">Năm</span>
-	                    <select
-	                      className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-	                      value={getYearPart(receiptBillingMonth)}
-	                      onChange={(event) => setReceiptBillingMonth(`${event.target.value}-${getMonthPart(receiptBillingMonth)}`)}
-	                    >
-	                      {receiptBillingYearOptions.map((year) => (
-	                        <option key={year} value={year}>{year}</option>
-	                      ))}
-	                    </select>
-	                  </label>
-	                </div>
-	                <span className="mt-1 block text-xs text-stone-500">Hệ thống đếm các buổi trong tháng này từ lịch lớp, bỏ qua buổi nghỉ/hủy.</span>
+	                <p className="text-sm font-semibold text-stone-700">Cách thu học phí</p>
+	                <select
+	                  className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+	                  value={receiptBillingMode}
+	                  onChange={(event) => {
+	                    setReceiptBillingMode(event.target.value as ReceiptBillingMode)
+	                    setReceiptAmount("")
+	                    setIsReceiptAmountOverride(false)
+	                    setIsWalletCreditManual(false)
+	                  }}
+	                >
+	                  <option value="COURSE">Thu theo khóa / số buổi còn lại</option>
+	                  <option value="MONTHLY">Thu theo tháng</option>
+	                </select>
+	                {isReceiptMonthlyBilling ? (
+	                  <>
+	                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+	                      <label>
+	                        <span className="text-xs font-semibold text-stone-500">Tháng</span>
+	                        <select
+	                          className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+	                          value={getMonthPart(receiptBillingMonth)}
+	                          onChange={(event) => setReceiptBillingMonth(`${getYearPart(receiptBillingMonth)}-${event.target.value}`)}
+	                        >
+	                          {billingMonthChoices.map((choice) => (
+	                            <option key={choice.value} value={choice.value}>{choice.label}</option>
+	                          ))}
+	                        </select>
+	                      </label>
+	                      <label>
+	                        <span className="text-xs font-semibold text-stone-500">Năm</span>
+	                        <select
+	                          className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
+	                          value={getYearPart(receiptBillingMonth)}
+	                          onChange={(event) => setReceiptBillingMonth(`${event.target.value}-${getMonthPart(receiptBillingMonth)}`)}
+	                        >
+	                          {receiptBillingYearOptions.map((year) => (
+	                            <option key={year} value={year}>{year}</option>
+	                          ))}
+	                        </select>
+	                      </label>
+	                    </div>
+	                    <span className="mt-1 block text-xs text-stone-500">Hệ thống đếm các buổi trong tháng này từ lịch lớp, bỏ qua buổi nghỉ/hủy.</span>
+	                  </>
+	                ) : null}
 	              </div>
 	              <div>
 	                <p className="text-sm font-semibold text-stone-700">Khóa cần thu</p>
@@ -1626,9 +1647,11 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	                          <p className="font-semibold text-brand-ink">{summary.course?.courseName ?? "Khóa đã đăng ký"}</p>
 	                          <p className="mt-1 text-xs text-stone-500">Đơn giá {formatCurrency(summary.unitPrice)} · thành tiền {formatCurrency(summary.amount)}</p>
 	                          <p className="mt-1 text-xs text-stone-500">
-	                            {summary.monthlySessions === undefined
-	                              ? "Chưa có lịch lớp trong kỳ, hệ thống fallback theo quỹ buổi khóa."
-	                              : `Kỳ ${getBillingPeriodForMonth(receiptBillingMonth).label}: ${summary.monthlySessions} buổi lịch lớp, đã thu ${summary.billedThisMonth} buổi.`}
+	                            {isReceiptMonthlyBilling
+	                              ? (summary.monthlySessions === undefined
+	                                ? "Chưa có lịch lớp trong kỳ, hệ thống fallback theo quỹ buổi khóa."
+	                                : `Kỳ ${getBillingPeriodForMonth(receiptBillingMonth).label}: ${summary.monthlySessions} buổi lịch lớp, đã thu ${summary.billedThisMonth} buổi.`)
+	                              : `Thu theo khóa / số buổi còn lại: ${summary.billableSessions} buổi tính phí.`}
 	                          </p>
 	                        </div>
                         <p className="text-sm font-semibold text-brand-red">{summary.remainingAfterReceipt} buổi còn sau thu</p>
@@ -2090,7 +2113,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
         >
           <div className="content-border space-y-4 p-5">
 	            <div className="grid gap-3 md:grid-cols-5">
-	              <InfoPill label="Kỳ thu" value={getBillingPeriodForMonth(receiptBillingMonth).label.replace("Học phí ", "")} />
+	              <InfoPill label="Cách thu" value={isReceiptMonthlyBilling ? getBillingPeriodForMonth(receiptBillingMonth).label.replace("Học phí ", "") : "Theo khóa"} />
 	              <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
 	              <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
 	              <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
@@ -2102,7 +2125,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 <div className="mt-3 space-y-2 text-sm text-stone-600">
                   {receiptLineSummaries.map((summary) => (
                     <div key={summary.line.enrollmentId} className="flex justify-between gap-3">
-	                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi · {getBillingPeriodForMonth(receiptBillingMonth).label}</span>
+	                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi{isReceiptMonthlyBilling ? ` · ${getBillingPeriodForMonth(receiptBillingMonth).label}` : ""}</span>
                       <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
                     </div>
                   ))}
