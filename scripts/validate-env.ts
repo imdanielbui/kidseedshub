@@ -19,10 +19,23 @@ function validate() {
   const errors: string[] = []
   const warnings: string[] = []
   const isProduction = process.env.NODE_ENV === "production"
+  const appEnvironment = process.env.KIDSEEDSHUB_ENVIRONMENT?.trim() || (isProduction ? "production" : "local")
   const classPhotoUploadDriver = process.env.CLASS_PHOTO_UPLOAD_DRIVER?.trim() || "cloudinary"
 
   if (!hasValue(process.env.DATABASE_URL)) {
     errors.push("DATABASE_URL is required.")
+  }
+
+  if (isProduction && !["staging", "production"].includes(appEnvironment)) {
+    errors.push("KIDSEEDSHUB_ENVIRONMENT must be staging or production when NODE_ENV=production.")
+  }
+
+  if (isProduction && appEnvironment === "production" && !hasValue(process.env.DIRECT_URL)) {
+    errors.push("DIRECT_URL is required for production migration safety. Use the direct Postgres URL, not the pooled runtime URL.")
+  }
+
+  if (isProduction && appEnvironment === "staging" && !hasValue(process.env.DIRECT_URL)) {
+    warnings.push("DIRECT_URL is not set. Runtime can still work, but run migrations with a direct database URL before trial go-live.")
   }
 
   if (hasValue(process.env.NEXTAUTH_URL) && !isValidUrl(process.env.NEXTAUTH_URL)) {

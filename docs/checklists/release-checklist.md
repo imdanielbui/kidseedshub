@@ -1,9 +1,12 @@
 # Release Checklist
 
 - Branch and release scope confirmed.
+- For center trial deploys, branch is `staging` and the target URL is a Vercel URL, not `kidseedhub.edu.vn`.
 - Deployment target confirmed. Primary target: Vercel.
 - Env variables confirmed without printing values:
+  - `KIDSEEDSHUB_ENVIRONMENT=staging` for trial, `production` for real go-live
   - `DATABASE_URL`
+  - `DIRECT_URL` for Prisma migration deploys
   - `NEXTAUTH_SECRET` or `AUTH_SECRET`
   - `NEXTAUTH_URL`
   - `AUTH_TRUST_HOST=true` for non-Vercel production, or `VERCEL=1` on Vercel
@@ -11,6 +14,7 @@
   - `CLOUDINARY_UPLOAD_PRESET` or `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET` for class photo uploads
 - Production bootstrap seed uses `npm run prisma:seed:production` with `KIDSEEDSHUB_ADMIN_*` variables.
 - Demo seed is used only for isolated demo databases with `npm run prisma:seed:demo`.
+- Trial data uses a dedicated staging database and must not share future production secrets or database URLs.
 - Migrations/data changes approved.
 - Preflight passed:
   - `npm run release:preflight`

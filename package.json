@@ -14,6 +14,7 @@
     "release:smoke": "tsx scripts/release-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed:demo": "KIDSEEDSHUB_SEED_MODE=demo tsx prisma/seed.ts",
     "prisma:seed:production": "KIDSEEDSHUB_SEED_MODE=production tsx prisma/seed.ts",
     "prisma:seed": "tsx prisma/seed.ts"
