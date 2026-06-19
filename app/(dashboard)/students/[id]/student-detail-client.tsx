@@ -203,6 +203,13 @@ const billingMonthChoices = Array.from({ length: 12 }, (_, index) => {
   return { value, label: `Tháng ${value}` }
 })
 
+type BillingMonthOption = {
+  value: string
+  month: string
+  year: string
+  label: string
+}
+
 function getMonthPart(value: string) {
   const monthPart = value.split("-")[1] ?? "01"
 
@@ -215,13 +222,74 @@ function getYearPart(value: string) {
   return /^\d{4}$/.test(yearPart) ? yearPart : String(new Date().getFullYear())
 }
 
-function buildYearOptions(selectedYear: string) {
-  const currentYear = new Date().getFullYear()
-  const selectedYearNumber = Number(selectedYear)
-  const firstYear = Math.min(2020, selectedYearNumber)
-  const lastYear = Math.max(currentYear + 20, selectedYearNumber)
+function toValidDate(value?: string) {
+  if (!value) return undefined
+  const date = new Date(value)
 
-  return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => String(lastYear - index))
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+function toBillingMonthKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`
+}
+
+function toBillingMonthOption(monthKey: string): BillingMonthOption {
+  const [year, month] = monthKey.split("-")
+
+  return { value: monthKey, month, year, label: `Tháng ${month}` }
+}
+
+function getSingleCourseBillingMonthOptions(course: StudentDetail["courses"][number] | undefined, classes: ClassListItem[]) {
+  if (!course) return []
+  const klass = course.classId ? classes.find((item) => item.id === course.classId) : undefined
+  const sessionDates = (klass?.sessionDates ?? [])
+    .map((session) => toValidDate(session.date))
+    .filter((date): date is Date => Boolean(date))
+    .sort((first, second) => first.getTime() - second.getTime())
+  const firstSessionDate = sessionDates[0]
+  const lastSessionDate = sessionDates[sessionDates.length - 1]
+  const startDate = toValidDate(course.startDate) ?? firstSessionDate ?? toValidDate(klass?.startDate)
+
+  if (!startDate) return []
+
+  const endDate = toValidDate(course.endDate) ?? lastSessionDate ?? startDate
+  const startMonth = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1))
+  const endMonthSource = endDate < startDate ? startDate : endDate
+  const endMonth = new Date(Date.UTC(endMonthSource.getUTCFullYear(), endMonthSource.getUTCMonth(), 1))
+  const options: BillingMonthOption[] = []
+
+  for (let cursor = new Date(startMonth); cursor <= endMonth && options.length < 120; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+    options.push(toBillingMonthOption(toBillingMonthKey(cursor)))
+  }
+
+  return options
+}
+
+function getCourseBillingMonthOptions(courses: StudentDetail["courses"], classes: ClassListItem[]) {
+  const optionMap = new Map<string, BillingMonthOption>()
+
+  courses.forEach((course) => {
+    getSingleCourseBillingMonthOptions(course, classes).forEach((option) => optionMap.set(option.value, option))
+  })
+
+  return Array.from(optionMap.values()).sort((first, second) => first.value.localeCompare(second.value))
+}
+
+function getBillingMonthInRange(month: string, options: BillingMonthOption[]) {
+  const normalizedMonth = normalizeMonth(month)
+
+  if (!options.length) return normalizedMonth
+  return options.some((option) => option.value === normalizedMonth) ? normalizedMonth : options[0].value
+}
+
+function getBillingYearOptions(options: BillingMonthOption[], activeMonth: string) {
+  const years = Array.from(new Set(options.map((option) => option.year)))
+
+  return years.includes(getYearPart(activeMonth)) ? years : years.slice(0, 1)
+}
+
+function getBillingMonthChoicesForYear(options: BillingMonthOption[], year: string) {
+  return options.filter((option) => option.year === year)
 }
 
 function getBillingPeriodForMonth(month: string) {
@@ -482,6 +550,29 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   )
   const enrollmentSessionsFromJoin = enrollmentJoinPreview.sessionsFromJoin
   const isReceiptMonthlyBilling = receiptBillingMode === "MONTHLY"
+  const receiptSelectedCourses = useMemo(
+    () => receiptLines
+      .map((line) => student?.courses.find((course) => course.enrollmentId === line.enrollmentId))
+      .filter((course): course is StudentDetail["courses"][number] => Boolean(course)),
+    [receiptLines, student?.courses]
+  )
+  const receiptBillingMonthOptions = useMemo(
+    () => getCourseBillingMonthOptions(receiptSelectedCourses, classes),
+    [classes, receiptSelectedCourses]
+  )
+  const activeReceiptBillingMonth = useMemo(
+    () => getBillingMonthInRange(receiptBillingMonth, receiptBillingMonthOptions),
+    [receiptBillingMonth, receiptBillingMonthOptions]
+  )
+  const activeReceiptBillingYear = useMemo(() => getYearPart(activeReceiptBillingMonth), [activeReceiptBillingMonth])
+  const receiptBillingYearOptions = useMemo(
+    () => getBillingYearOptions(receiptBillingMonthOptions, activeReceiptBillingMonth),
+    [activeReceiptBillingMonth, receiptBillingMonthOptions]
+  )
+  const receiptBillingMonthChoices = useMemo(
+    () => getBillingMonthChoicesForYear(receiptBillingMonthOptions, activeReceiptBillingYear),
+    [activeReceiptBillingYear, receiptBillingMonthOptions]
+  )
   const receiptLineSummaries = useMemo(() => receiptLines.map((line) => {
     const course = student?.courses.find((item) => item.enrollmentId === line.enrollmentId)
     const coursePrice = Number(course?.coursePrice ?? 0)
@@ -492,8 +583,8 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	    const sessionsFromJoin = totalSessions ? Math.max(0, totalSessions - joinSessionNumber + 1) : 0
 	    const defaultBillableSessions = Math.max(0, sessionsFromJoin - freeTrialSessions)
 	    const fallbackBillableSessions = Math.max(0, course?.sessionsRemaining ?? 0)
-	    const monthlySessions = isReceiptMonthlyBilling ? countCourseSessionsInBillingMonth(course, classes, receiptBillingMonth) : undefined
-	    const billedThisMonth = isReceiptMonthlyBilling && course ? countBilledSessionsForMonth(studentReceipts, course.enrollmentId, receiptBillingMonth) : 0
+	    const monthlySessions = isReceiptMonthlyBilling ? countCourseSessionsInBillingMonth(course, classes, activeReceiptBillingMonth) : undefined
+	    const billedThisMonth = isReceiptMonthlyBilling && course ? countBilledSessionsForMonth(studentReceipts, course.enrollmentId, activeReceiptBillingMonth) : 0
 	    const monthlyBillableSessions = isReceiptMonthlyBilling && monthlySessions !== undefined ? Math.max(0, monthlySessions - billedThisMonth - freeTrialSessions) : undefined
 	    const billableSessions = line.isBillableOverride ? toNonNegativeNumber(line.billableSessions) : (monthlyBillableSessions ?? (totalSessions ? defaultBillableSessions : fallbackBillableSessions))
     const paidSessionsBeforeReceipt = toNonNegativeNumber(line.paidSessionsBeforeReceipt)
@@ -517,7 +608,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       amount,
       remainingAfterReceipt: Math.max(0, nextSessionsBought - nextSessionsUsed)
     }
-	  }), [classes, isReceiptMonthlyBilling, receiptBillingMonth, receiptLines, student?.courses, studentReceipts])
+	  }), [activeReceiptBillingMonth, classes, isReceiptMonthlyBilling, receiptLines, student?.courses, studentReceipts])
   const coursePayableAmount = receiptLineSummaries.reduce((total, line) => total + line.amount, 0)
   const receiptExtraLineSummaries = useMemo(() => receiptExtraLines.map((line) => {
     const quantity = toNonNegativeNumber(line.quantity)
@@ -541,9 +632,12 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	  const suggestedWalletCreditAmount = Math.min(walletBalance, actualReceiptAmount)
 	  const walletCreditAmount = isWalletCreditManual ? parseMoneyInput(walletCreditInput) : suggestedWalletCreditAmount
 	  const actualReceiptPaymentAmount = Math.max(0, actualReceiptAmount - walletCreditAmount)
-	  const receiptBillingYearOptions = useMemo(() => buildYearOptions(getYearPart(receiptBillingMonth)), [receiptBillingMonth])
 	  const receiptValidationErrors = useMemo(() => {
     const errors: string[] = []
+
+    if (isReceiptMonthlyBilling && receiptLines.length && !receiptBillingMonthOptions.length) {
+      errors.push("Các khóa đã chọn chưa có khoảng tháng hợp lệ để thu theo tháng.")
+    }
 
     receiptLines.forEach((line) => {
       const courseName = student?.courses.find((course) => course.enrollmentId === line.enrollmentId)?.courseName ?? "Khóa đã đăng ký"
@@ -572,7 +666,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     }
 
     return errors
-  }, [actualReceiptAmount, hasManualReceiptAmount, receiptExtraLineSummaries, receiptLineSummaries, receiptLines, student?.courses, walletBalance, walletCreditAmount])
+  }, [actualReceiptAmount, hasManualReceiptAmount, isReceiptMonthlyBilling, receiptBillingMonthOptions.length, receiptExtraLineSummaries, receiptLineSummaries, receiptLines, student?.courses, walletBalance, walletCreditAmount])
   const photoCourseOptions = useMemo(() => {
     const names = new Set((student?.photos ?? []).map((photo) => photo.courseName).filter(Boolean))
     return Array.from(names).sort() as string[]
@@ -1086,7 +1180,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	  async function confirmReceiptPayment() {
 	    setIsSubmittingReceipt(true)
 	    setError(null)
-	    const billingPeriod = isReceiptMonthlyBilling ? getBillingPeriodForMonth(receiptBillingMonth) : null
+	    const billingPeriod = isReceiptMonthlyBilling ? getBillingPeriodForMonth(activeReceiptBillingMonth) : null
 
 	    try {
 	      const response = await fetch("/api/receipts", {
@@ -1572,17 +1666,18 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	                  <option value="MONTHLY">Thu theo tháng</option>
 	                </select>
 	                {isReceiptMonthlyBilling ? (
+	                  receiptBillingMonthOptions.length ? (
 	                  <>
 	                    <div className="mt-3 grid gap-3 md:grid-cols-2">
 	                      <label>
 	                        <span className="text-xs font-semibold text-stone-500">Tháng</span>
 	                        <select
 	                          className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-	                          value={getMonthPart(receiptBillingMonth)}
-	                          onChange={(event) => setReceiptBillingMonth(`${getYearPart(receiptBillingMonth)}-${event.target.value}`)}
+	                          value={getMonthPart(activeReceiptBillingMonth)}
+	                          onChange={(event) => setReceiptBillingMonth(`${activeReceiptBillingYear}-${event.target.value}`)}
 	                        >
-	                          {billingMonthChoices.map((choice) => (
-	                            <option key={choice.value} value={choice.value}>{choice.label}</option>
+	                          {receiptBillingMonthChoices.map((choice) => (
+	                            <option key={choice.value} value={choice.month}>{choice.label}</option>
 	                          ))}
 	                        </select>
 	                      </label>
@@ -1590,8 +1685,14 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	                        <span className="text-xs font-semibold text-stone-500">Năm</span>
 	                        <select
 	                          className="neu-pressed mt-1 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-	                          value={getYearPart(receiptBillingMonth)}
-	                          onChange={(event) => setReceiptBillingMonth(`${event.target.value}-${getMonthPart(receiptBillingMonth)}`)}
+	                          value={activeReceiptBillingYear}
+	                          onChange={(event) => {
+	                            const yearMonthOptions = getBillingMonthChoicesForYear(receiptBillingMonthOptions, event.target.value)
+	                            const month = yearMonthOptions.some((option) => option.month === getMonthPart(activeReceiptBillingMonth))
+	                              ? getMonthPart(activeReceiptBillingMonth)
+	                              : (yearMonthOptions[0]?.month ?? "01")
+	                            setReceiptBillingMonth(`${event.target.value}-${month}`)
+	                          }}
 	                        >
 	                          {receiptBillingYearOptions.map((year) => (
 	                            <option key={year} value={year}>{year}</option>
@@ -1601,6 +1702,11 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	                    </div>
 	                    <span className="mt-1 block text-xs text-stone-500">Hệ thống đếm các buổi trong tháng này từ lịch lớp, bỏ qua buổi nghỉ/hủy.</span>
 	                  </>
+	                  ) : (
+	                    <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/45 px-4 py-3 text-sm font-semibold text-stone-500">
+	                      Các khóa đã chọn chưa có lịch lớp hoặc ngày học hợp lệ để chọn kỳ thu theo tháng.
+	                    </p>
+	                  )
 	                ) : null}
 	              </div>
 	              <div>
@@ -1650,7 +1756,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
 	                            {isReceiptMonthlyBilling
 	                              ? (summary.monthlySessions === undefined
 	                                ? "Chưa có lịch lớp trong kỳ, hệ thống fallback theo quỹ buổi khóa."
-	                                : `Kỳ ${getBillingPeriodForMonth(receiptBillingMonth).label}: ${summary.monthlySessions} buổi lịch lớp, đã thu ${summary.billedThisMonth} buổi.`)
+	                                : `Kỳ ${getBillingPeriodForMonth(activeReceiptBillingMonth).label}: ${summary.monthlySessions} buổi lịch lớp, đã thu ${summary.billedThisMonth} buổi.`)
 	                              : `Thu theo khóa / số buổi còn lại: ${summary.billableSessions} buổi tính phí.`}
 	                          </p>
 	                        </div>
@@ -2113,7 +2219,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
         >
           <div className="content-border space-y-4 p-5">
 	            <div className="grid gap-3 md:grid-cols-5">
-	              <InfoPill label="Cách thu" value={isReceiptMonthlyBilling ? getBillingPeriodForMonth(receiptBillingMonth).label.replace("Học phí ", "") : "Theo khóa"} />
+	              <InfoPill label="Cách thu" value={isReceiptMonthlyBilling ? getBillingPeriodForMonth(activeReceiptBillingMonth).label.replace("Học phí ", "") : "Theo khóa"} />
 	              <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
 	              <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
 	              <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
@@ -2125,7 +2231,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
                 <div className="mt-3 space-y-2 text-sm text-stone-600">
                   {receiptLineSummaries.map((summary) => (
                     <div key={summary.line.enrollmentId} className="flex justify-between gap-3">
-	                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi{isReceiptMonthlyBilling ? ` · ${getBillingPeriodForMonth(receiptBillingMonth).label}` : ""}</span>
+	                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi{isReceiptMonthlyBilling ? ` · ${getBillingPeriodForMonth(activeReceiptBillingMonth).label}` : ""}</span>
                       <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
                     </div>
                   ))}
