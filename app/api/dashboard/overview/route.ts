@@ -212,7 +212,7 @@ export async function GET(request: Request) {
               : { student: studentScope })
           },
           include: {
-            student: { include: { parent: { include: { user: true } } } },
+            student: true,
             course: true,
             attendances: {
               orderBy: { date: "desc" },

@@ -373,7 +373,7 @@ export default function FinancePage() {
 	  try {
 	    const [studentsResponse, classesResponse] = await Promise.all([
 	      fetch("/api/students?limit=100", { cache: "no-store" }),
-	      fetch("/api/classes?active=true", { cache: "no-store" })
+	      fetch("/api/classes?active=true&summary=true", { cache: "no-store" })
 	    ])
 	    const studentsPayload = (await studentsResponse.json()) as ApiResponse<StudentListItem[]>
 	    const classesPayload = (await classesResponse.json()) as ApiResponse<ClassListItem[]>

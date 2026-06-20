@@ -19,7 +19,19 @@ const classListInclude = Prisma.validator<Prisma.ClassInclude>()({
   _count: { select: { sessions: true } }
 })
 
+const classSummaryInclude = Prisma.validator<Prisma.ClassInclude>()({
+  course: true,
+  teacher: true,
+  sessions: {
+    select: { date: true, status: true },
+    orderBy: { date: "asc" }
+  },
+  scheduleSlots: { orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
+  _count: { select: { sessions: true } }
+})
+
 type ClassListRecord = Prisma.ClassGetPayload<{ include: typeof classListInclude }>
+type ClassSummaryRecord = Prisma.ClassGetPayload<{ include: typeof classSummaryInclude }>
 
 function toClassListItem(klass: ClassListRecord): ClassListItem {
   return {
@@ -62,6 +74,40 @@ function toClassListItem(klass: ClassListRecord): ClassListItem {
   }
 }
 
+function toClassSummaryItem(klass: ClassSummaryRecord): ClassListItem {
+  return {
+    id: klass.id,
+    code: klass.code ?? undefined,
+    name: klass.name,
+    courseId: klass.courseId,
+    courseName: klass.course.name,
+    subject: klass.course.subject,
+    teacherId: klass.teacher.id,
+    teacherName: klass.teacher.name,
+    weekday: klass.weekday,
+    startTime: klass.startTime,
+    endTime: klass.endTime,
+    room: klass.room ?? undefined,
+    startDate: klass.startDate?.toISOString(),
+    plannedSessions: klass.plannedSessions ?? undefined,
+    isActive: klass.isActive,
+    scheduleSlots: klass.scheduleSlots.map((slot) => ({
+      id: slot.id,
+      weekday: slot.weekday,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      room: slot.room ?? undefined,
+      isActive: slot.isActive
+    })),
+    sessionDates: klass.sessions.map((session) => ({
+      date: session.date.toISOString(),
+      status: session.status
+    })),
+    students: [],
+    generatedSessionCount: klass._count.sessions
+  }
+}
+
 export async function GET(request: Request) {
   const session = await auth()
 
@@ -80,13 +126,26 @@ export async function GET(request: Request) {
     return fail({ code: "INVALID_QUERY", message: "Bộ lọc lớp học không hợp lệ." }, { status: 400 })
   }
 
+  const where = {
+    ...(parsed.data.active ? { isActive: parsed.data.active === "true" } : {}),
+    ...(session.user.role === "TEACHER" ? { teacherId: session.user.id } : {})
+  }
+  const orderBy = [{ isActive: "desc" as const }, { weekday: "asc" as const }, { startTime: "asc" as const }]
+
+  if (parsed.data.summary === "true") {
+    const classes = await prisma.class.findMany({
+      where,
+      include: classSummaryInclude,
+      orderBy
+    })
+
+    return ok(classes.map(toClassSummaryItem))
+  }
+
   const classes = await prisma.class.findMany({
-    where: {
-      ...(parsed.data.active ? { isActive: parsed.data.active === "true" } : {}),
-      ...(session.user.role === "TEACHER" ? { teacherId: session.user.id } : {})
-    },
+    where,
     include: classListInclude,
-    orderBy: [{ isActive: "desc" }, { weekday: "asc" }, { startTime: "asc" }]
+    orderBy
   })
 
   return ok(classes.map(toClassListItem))

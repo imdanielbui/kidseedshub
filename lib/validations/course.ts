@@ -41,7 +41,8 @@ export const classCreateSchema = z.object({
 export const classUpdateSchema = classCreateSchema.omit({ studentIds: true }).partial()
 
 export const classListQuerySchema = z.object({
-  active: z.enum(["true", "false"]).optional()
+  active: z.enum(["true", "false"]).optional(),
+  summary: z.enum(["true", "false"]).optional()
 })
 
 export const classSessionListQuerySchema = z.object({

@@ -759,7 +759,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
         const [studentResponse, coursesResponse, classesResponse, receiptsResponse, walletResponse, makeupResponse] = await Promise.all([
           fetch(`/api/students/${studentId}`, { cache: "no-store" }),
           fetch("/api/courses"),
-          fetch("/api/classes?active=true"),
+          fetch("/api/classes?active=true&summary=true"),
           fetch(`/api/receipts?studentId=${studentId}`, { cache: "no-store" }),
           fetch(`/api/student-wallet?studentId=${studentId}`, { cache: "no-store" }),
           fetch(`/api/makeup-entitlements?studentId=${studentId}`, { cache: "no-store" })

@@ -152,7 +152,7 @@ export default function StudentsPage() {
       const [studentsResponse, optionsResponse, classesResponse] = await Promise.all([
         fetch(`/api/students?${params.toString()}`, { cache: "no-store" }),
         fetch("/api/students/options", { cache: "no-store" }),
-        fetch("/api/classes?active=true", { cache: "no-store" })
+        fetch("/api/classes?active=true&summary=true", { cache: "no-store" })
       ])
       const studentsPayload = (await studentsResponse.json()) as ApiResponse<StudentListItem[]>
       const optionsPayload = (await optionsResponse.json()) as ApiResponse<PipelineOptions>

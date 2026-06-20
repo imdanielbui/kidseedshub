@@ -31,7 +31,7 @@ export async function GET() {
         isActive: true
       },
       include: {
-        student: { include: { parent: { include: { user: true } } } },
+        student: true,
         course: true,
         attendances: {
           orderBy: { date: "desc" },
