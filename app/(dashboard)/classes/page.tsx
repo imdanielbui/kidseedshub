@@ -8,7 +8,6 @@ import {
   CircleSlash,
   Clock,
   ImagePlus,
-  QrCode,
   Settings2,
   StickyNote,
   Trash2,
@@ -89,8 +88,6 @@ export default function ClassesPage() {
   const [studentPhotoCaptionsById, setStudentPhotoCaptionsById] = useState<Record<string, string>>({})
   const [classPhotosBySession, setClassPhotosBySession] = useState<Record<string, ClassPhotoListItem[]>>({})
   const [photoCaptionDrafts, setPhotoCaptionDrafts] = useState<Record<string, string>>({})
-  const [qrCode, setQrCode] = useState("")
-  const [qrResult, setQrResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const classPhotoPreviewUrlsRef = useRef<string[]>([])
   const studentPhotoPreviewUrlsRef = useRef<Record<string, string[]>>({})
@@ -630,51 +627,6 @@ export default function ClassesPage() {
     }
   }
 
-  async function markQrAttendance() {
-    if (!qrCode.trim()) {
-      setError("Nhập hoặc quét mã QR trước khi điểm danh.")
-      return
-    }
-
-    setIsSaving("qr-attendance")
-    setError(null)
-    setQrResult(null)
-
-    try {
-      const response = await fetch("/api/attendance/qr", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          qrCode,
-          date: new Date().toISOString(),
-          note: "QR attendance"
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<AttendanceMarkResult>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không điểm danh được bằng QR.")
-        return
-      }
-
-      const result = payload.data
-      setQrCode("")
-      setQrResult(`${result.studentName} đã được điểm danh QR. Còn ${result.sessionsRemaining} buổi.`)
-      setClasses((current) =>
-        current.map((klass) => ({
-          ...klass,
-          students: klass.students.map((student) =>
-            student.studentId === result.studentId ? updateStudentAttendanceStatus(student, result) : student
-          )
-        }))
-      )
-    } catch {
-      setError("Không điểm danh được bằng QR.")
-    } finally {
-      setIsSaving(null)
-    }
-  }
-
   return (
     <main className="space-y-6">
       <div className="neu-card rounded-3xl p-4 md:p-5">
@@ -756,36 +708,6 @@ export default function ClassesPage() {
               </article>
             ))}
           </div>
-        </section>
-      ) : null}
-
-      {activeTab === "today" ? (
-        <section className="neu-card rounded-3xl p-5">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)] lg:items-end">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">QR Attendance</p>
-              <h2 className="mt-2 text-lg font-semibold text-brand-ink">Điểm danh bằng mã QR</h2>
-              <p className="mt-1 text-sm text-stone-500">Mã hỗ trợ: `KSH:ENROLLMENT:&lt;enrollmentId&gt;` hoặc nhập trực tiếp enrollmentId.</p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-              <input
-                className="neu-pressed rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none placeholder:text-stone-400"
-                value={qrCode}
-                onChange={(event) => setQrCode(event.target.value)}
-                placeholder="KSH:ENROLLMENT:..."
-              />
-              <button
-                type="button"
-                disabled={isSaving === "qr-attendance"}
-                className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-50"
-                onClick={() => void markQrAttendance()}
-              >
-                <QrCode className="h-4 w-4" />
-                {isSaving === "qr-attendance" ? "Đang lưu" : "Điểm danh"}
-              </button>
-            </div>
-          </div>
-          {qrResult ? <p className="content-border mt-4 pt-4 text-sm font-semibold text-brand-red">{qrResult}</p> : null}
         </section>
       ) : null}
 
