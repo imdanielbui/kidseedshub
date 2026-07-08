@@ -32,6 +32,7 @@ function runStep(step: Step) {
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as PackageJson
 const steps: Step[] = [
   { name: "Environment validation", command: "npm", args: ["run", "env:validate"] },
+  { name: "Repo bloat audit", command: "npm", args: ["run", "repo:audit"] },
   { name: "TypeScript", command: "npm", args: ["run", "typecheck"] },
   { name: "ESLint", command: "npm", args: ["run", "lint"] },
   { name: "Prisma schema validation", command: "npx", args: ["prisma", "validate"] },
