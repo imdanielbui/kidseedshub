@@ -5,3 +5,4 @@ Historical planning and handoff material from May 2026.
 ## Contents
 
 - `kidseedshub-2026-05-13-handoff.md`: long-form project handoff retained for traceability. It is no longer part of the active agent context. Extract any still-active decisions into `docs/ai-context/` before relying on them.
+- `ship-readiness-remediation-plan.md`: historical production-hardening plan from the baseline phase. Active release gates now live in `docs/checklists/release-checklist.md` and `npm run release:preflight`.

@@ -68,7 +68,6 @@ const legacyLargeFiles = new Map([
   ["app/globals.css", "current global stylesheet; extract component styles when touching related UI"],
   ["app/api/receipts/route.ts", "legacy receipt API; split validation/domain helpers when touching receipts"],
   ["AGENTS.md", "global agent contract; shrink only after module context files are in place"],
-  ["docs/specs/ship-readiness-remediation-plan.md", "historical release plan; archive after active release gates are moved to checklists"],
 ])
 
 function toRelative(file) {
