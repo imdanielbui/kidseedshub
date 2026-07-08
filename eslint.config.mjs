@@ -5,7 +5,17 @@ const config = [
   ...nextVitals,
   ...nextTypescript,
   {
-    ignores: [".next/**", "node_modules/**", "dist/**", "coverage/**"]
+    ignores: [
+      ".gitnexus/**",
+      ".next/**",
+      ".playwright-cli/**",
+      "coverage/**",
+      "dist/**",
+      "node_modules/**",
+      "out/**",
+      "output/**",
+      "public/uploads/**"
+    ]
   }
 ]
 
