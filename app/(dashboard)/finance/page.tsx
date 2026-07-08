@@ -1,7 +1,7 @@
 "use client"
 
 import { DialogFormShell } from "@/components/shared/dialog-shell"
-import { BarChart3, BellRing, Download, FileText, MessageSquareText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
+import { BarChart3, BellRing, Download, FileText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import {
@@ -19,11 +19,9 @@ import type { StudentListItem } from "@/lib/contracts/students"
 import type { ClassListItem } from "@/lib/contracts/courses"
 import {
   FinanceInput,
-  PanelState,
   PermissionState,
-  SectionHeader,
 } from "./finance-presentational"
-import { ExpensesTab, OverviewTab, PayrollTab, ReceiptsTab } from "./finance-tabs"
+import { ExpensesTab, OverviewTab, PayrollTab, ReceiptsTab, RemindersTab } from "./finance-tabs"
 import {
   buildYearOptions,
   countCourseSessionsInBillingMonth,
@@ -927,92 +925,5 @@ export default function FinancePage() {
         </DialogFormShell>
       ) : null}
     </main>
-  )
-}
-
-function RemindersTab({
-  onQueue,
-  onSelectTemplate,
-  queueingEnrollmentId,
-  reminders,
-  selectedTemplateId,
-  templates
-}: {
-  onQueue: (reminder: TuitionReminderItem) => void
-  onSelectTemplate: (templateId: string) => void
-  queueingEnrollmentId: string
-  reminders: TuitionReminderItem[]
-  selectedTemplateId: string
-  templates: ZaloTemplateItem[]
-}) {
-  return (
-    <section className="neu-card rounded-3xl">
-      <SectionHeader
-        title="Nhắc học phí"
-        eyebrow="Automation"
-        action={
-          <label className="text-sm font-medium text-stone-600">
-            Template
-            <select
-              className="neu-pressed mt-2 block rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
-              value={selectedTemplateId}
-              onChange={(event) => onSelectTemplate(event.target.value)}
-            >
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        }
-      />
-      <div className="content-border max-h-[68vh] overflow-auto p-4">
-        {reminders.length ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {reminders.map((reminder) => (
-              <article key={reminder.enrollmentId} className="neu-list-item rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-brand-ink">{reminder.studentName}</p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      PH {reminder.parentName} - {reminder.parentPhone} - {reminder.courseName}
-                    </p>
-	                  </div>
-	                  <span className="rounded-2xl border border-brand-red/10 px-3 py-2 text-xs font-semibold text-brand-red">
-	                    {reminder.billingMonth ? `Cần thu ${reminder.billableSessionsDue ?? 0}` : `Còn ${reminder.sessionsRemaining}`}
-	                  </span>
-	                </div>
-	                {reminder.billingLabel ? (
-	                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-stone-500">
-	                    <span className="rounded-full border border-brand-red/10 px-2 py-1">{reminder.billingLabel}</span>
-	                    <span className="rounded-full border border-brand-red/10 px-2 py-1">Đã thu {reminder.billedSessionsInMonth ?? 0} buổi</span>
-	                    <span className="rounded-full border border-brand-red/10 px-2 py-1">Dự kiến {formatMoney(reminder.expectedAmount ?? "0")}</span>
-	                  </div>
-	                ) : null}
-	                <p className="mt-3 rounded-2xl border border-brand-red/10 bg-white/35 p-3 text-xs leading-5 text-stone-600">{reminder.message}</p>
-                <button
-                  type="button"
-                  className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-brand-red px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  disabled={queueingEnrollmentId === reminder.enrollmentId}
-                  onClick={() => onQueue(reminder)}
-                >
-                  <BellRing className="h-3.5 w-3.5" />
-                  {queueingEnrollmentId === reminder.enrollmentId ? "Đang tạo" : "Tạo task nhắc"}
-                </button>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <PanelState text="Không có học viên cần nhắc học phí theo ngưỡng hiện tại." />
-        )}
-      </div>
-      {templates.length ? (
-        <div className="content-border flex items-center gap-2 px-5 py-4 text-xs text-stone-500">
-          <MessageSquareText className="h-4 w-4 text-brand-red" />
-          {templates.length} template Zalo đã duyệt sẵn trong hệ thống.
-        </div>
-      ) : null}
-    </section>
   )
 }
