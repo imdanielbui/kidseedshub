@@ -5,9 +5,9 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { DialogFormShell, DialogShell } from "@/components/shared/dialog-shell"
-import { assessmentStatusLabels, subjectLabels } from "@/lib/contracts/assessment"
+import { subjectLabels } from "@/lib/contracts/assessment"
 import { attendanceStatusLabels, type ClassPhotoListItem } from "@/lib/contracts/classes"
-import { contactResultLabels, type ContactResultKey, taskStatusLabels } from "@/lib/contracts/crm"
+import { contactResultLabels, taskStatusLabels, type ContactResultKey } from "@/lib/contracts/crm"
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
 import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
@@ -15,68 +15,40 @@ import { paymentMethodLabels, receiptExtraLineTypeLabels, type PaymentMethodKey,
 import { makeupEntitlementStatusLabels, type MakeupEntitlementItem } from "@/lib/contracts/makeup-entitlements"
 import { studentStatusLabels, type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
 import { studentWalletEntryTypeLabels, type StudentWalletSummary } from "@/lib/contracts/student-wallet"
-
-type DetailTab = "overview" | "crm" | "learning" | "finance" | "journal" | "parent-account"
-type ParentAccountAction = "activate" | "reset_default_password"
-type PhotoReviewFilter = "ALL" | "DRAFT" | "PUBLISHED"
-type ReceiptBillingMode = "COURSE" | "MONTHLY"
-type ReceiptDraftLine = {
-  enrollmentId: string
-  freeTrialSessions: string
-  paidSessionsBeforeReceipt: string
-  billableSessions: string
-  isBillableOverride: boolean
-  discountInput: string
-  extraDiscountInput: string
-  isExtraDiscountVisible: boolean
-}
-type ReceiptExtraDraftLine = {
-  id: string
-  type: "TUTORING" | "OTHER"
-  description: string
-  quantity: string
-  unitPrice: string
-  note: string
-}
-type EnrollmentEditDraft = {
-  enrollmentId: string
-  classId: string
-  startDate: string
-  joinSessionNumber: string
-  freeTrialSessions: string
-  sessionsBought: string
-  sessionsUsed: string
-  isActive: boolean
-}
-type EnrollmentTransferDraft = {
-  fromEnrollmentId: string
-  toCourseId: string
-  toClassId: string
-  startDate: string
-  reason: string
-}
-type LearningDetailTarget =
-  | { kind: "course"; course: StudentDetail["courses"][number] }
-  | { kind: "class"; klass: StudentDetail["classes"][number] }
-
-const contactResults = Object.entries(contactResultLabels) as Array<[ContactResultKey, string]>
-const paymentMethods = Object.entries(paymentMethodLabels) as Array<[PaymentMethodKey, string]>
-const studentStatusOptions = Object.entries(studentStatusLabels) as Array<[StudentStatusKey, string]>
-const usesTemporaryParentPassword = process.env.NODE_ENV === "production"
-const detailTabs: Array<{ key: DetailTab; label: string }> = [
-  { key: "overview", label: "Tổng quan" },
-  { key: "crm", label: "CRM" },
-  { key: "learning", label: "Học tập" },
-  { key: "finance", label: "Tài chính" },
-  { key: "journal", label: "Ảnh & nhật ký" },
-  { key: "parent-account", label: "Tài khoản PH" }
-]
-
-const photoReviewFilters: Array<{ key: PhotoReviewFilter; label: string }> = [
-  { key: "ALL", label: "Tất cả" },
-  { key: "DRAFT", label: "Nháp" },
-  { key: "PUBLISHED", label: "Đã gửi" }
-]
+import {
+  activeStudentCourses,
+  assessmentProgressPercent,
+  calculateClassJoinPreview,
+  contactResults,
+  countBilledSessionsForMonth,
+  countCourseSessionsInBillingMonth,
+  detailTabs,
+  getBillingMonthChoicesForYear,
+  getBillingMonthInRange,
+  getBillingPeriodForMonth,
+  getBillingYearOptions,
+  getCourseBillingMonthOptions,
+  getCurrentMonth,
+  getMonthPart,
+  getYearPart,
+  paymentMethods,
+  photoReviewFilters,
+  studentStatusOptions,
+  timelineStatusLabel,
+  timelineTypeLabel,
+  toEnrollmentEditDraft,
+  toReceiptDraftLine,
+  usesTemporaryParentPassword,
+  type DetailTab,
+  type EnrollmentEditDraft,
+  type EnrollmentTransferDraft,
+  type LearningDetailTarget,
+  type ParentAccountAction,
+  type PhotoReviewFilter,
+  type ReceiptBillingMode,
+  type ReceiptDraftLine,
+  type ReceiptExtraDraftLine
+} from "./student-detail-utils"
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -186,246 +158,6 @@ function moneySuggestions(value: string) {
   if (!Number.isFinite(base) || base <= 0) return []
 
   return [base * 10000, base * 100000]
-}
-
-function getCurrentMonth() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-}
-
-function normalizeMonth(value: string) {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : getCurrentMonth()
-}
-
-const billingMonthChoices = Array.from({ length: 12 }, (_, index) => {
-  const value = String(index + 1).padStart(2, "0")
-
-  return { value, label: `Tháng ${value}` }
-})
-
-type BillingMonthOption = {
-  value: string
-  month: string
-  year: string
-  label: string
-}
-
-function getMonthPart(value: string) {
-  const monthPart = value.split("-")[1] ?? "01"
-
-  return billingMonthChoices.some((choice) => choice.value === monthPart) ? monthPart : "01"
-}
-
-function getYearPart(value: string) {
-  const yearPart = value.split("-")[0] ?? ""
-
-  return /^\d{4}$/.test(yearPart) ? yearPart : String(new Date().getFullYear())
-}
-
-function toValidDate(value?: string) {
-  if (!value) return undefined
-  const date = new Date(value)
-
-  return Number.isNaN(date.getTime()) ? undefined : date
-}
-
-function toBillingMonthKey(date: Date) {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`
-}
-
-function toBillingMonthOption(monthKey: string): BillingMonthOption {
-  const [year, month] = monthKey.split("-")
-
-  return { value: monthKey, month, year, label: `Tháng ${month}` }
-}
-
-function getSingleCourseBillingMonthOptions(course: StudentDetail["courses"][number] | undefined, classes: ClassListItem[]) {
-  if (!course) return []
-  const klass = course.classId ? classes.find((item) => item.id === course.classId) : undefined
-  const sessionDates = (klass?.sessionDates ?? [])
-    .map((session) => toValidDate(session.date))
-    .filter((date): date is Date => Boolean(date))
-    .sort((first, second) => first.getTime() - second.getTime())
-  const firstSessionDate = sessionDates[0]
-  const lastSessionDate = sessionDates[sessionDates.length - 1]
-  const startDate = toValidDate(course.startDate) ?? firstSessionDate ?? toValidDate(klass?.startDate)
-
-  if (!startDate) return []
-
-  const endDate = toValidDate(course.endDate) ?? lastSessionDate ?? startDate
-  const startMonth = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1))
-  const endMonthSource = endDate < startDate ? startDate : endDate
-  const endMonth = new Date(Date.UTC(endMonthSource.getUTCFullYear(), endMonthSource.getUTCMonth(), 1))
-  const options: BillingMonthOption[] = []
-
-  for (let cursor = new Date(startMonth); cursor <= endMonth && options.length < 120; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
-    options.push(toBillingMonthOption(toBillingMonthKey(cursor)))
-  }
-
-  return options
-}
-
-function getCourseBillingMonthOptions(courses: StudentDetail["courses"], classes: ClassListItem[]) {
-  const optionMap = new Map<string, BillingMonthOption>()
-
-  courses.forEach((course) => {
-    getSingleCourseBillingMonthOptions(course, classes).forEach((option) => optionMap.set(option.value, option))
-  })
-
-  return Array.from(optionMap.values()).sort((first, second) => first.value.localeCompare(second.value))
-}
-
-function getBillingMonthInRange(month: string, options: BillingMonthOption[]) {
-  const normalizedMonth = normalizeMonth(month)
-
-  if (!options.length) return normalizedMonth
-  return options.some((option) => option.value === normalizedMonth) ? normalizedMonth : options[0].value
-}
-
-function getBillingYearOptions(options: BillingMonthOption[], activeMonth: string) {
-  const years = Array.from(new Set(options.map((option) => option.year)))
-
-  return years.includes(getYearPart(activeMonth)) ? years : years.slice(0, 1)
-}
-
-function getBillingMonthChoicesForYear(options: BillingMonthOption[], year: string) {
-  return options.filter((option) => option.year === year)
-}
-
-function getBillingPeriodForMonth(month: string) {
-  const normalizedMonth = normalizeMonth(month)
-  const [year, value] = normalizedMonth.split("-").map(Number)
-  const start = new Date(Date.UTC(year, value - 1, 1))
-  const end = new Date(Date.UTC(year, value, 1))
-
-  return {
-    start,
-    end,
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
-    label: `Học phí tháng ${String(value).padStart(2, "0")}/${year}`
-  }
-}
-
-function countCourseSessionsInBillingMonth(course: StudentDetail["courses"][number] | undefined, classes: ClassListItem[], month: string) {
-  if (!course?.classId) return undefined
-  const klass = classes.find((item) => item.id === course.classId)
-  if (!klass) return undefined
-  const period = getBillingPeriodForMonth(month)
-  const startGate = course.startDate && new Date(course.startDate) > period.start ? new Date(course.startDate) : period.start
-
-  return klass.sessionDates.filter((session) => {
-    const sessionDate = new Date(session.date)
-    return session.status !== "CANCELED" && sessionDate >= startGate && sessionDate < period.end
-  }).length
-}
-
-function countBilledSessionsForMonth(receipts: ReceiptListItem[], enrollmentId: string, month: string) {
-  return receipts.reduce((total, receipt) => {
-    return total + receipt.lines
-      .filter((line) => line.enrollmentId === enrollmentId && line.billingPeriodStart?.startsWith(month))
-      .reduce((lineTotal, line) => lineTotal + line.billableSessions, 0)
-  }, 0)
-}
-
-function startOfLocalDay(value: Date) {
-  const result = new Date(value)
-  result.setHours(0, 0, 0, 0)
-  return result
-}
-
-function calculateClassJoinPreview(klass: ClassListItem | undefined, startDate: string, totalSessions: number) {
-  if (!totalSessions) {
-    return { joinSessionNumber: 1, sessionsFromJoin: 0, warning: "Chưa chọn khóa học." }
-  }
-
-  if (!klass) {
-    return {
-      joinSessionNumber: 1,
-      sessionsFromJoin: totalSessions,
-      warning: "Chưa xếp lớp nên hệ thống tạm tính từ buổi 1."
-    }
-  }
-
-  const activeSessions = klass.sessionDates
-    .filter((session) => session.status !== "CANCELED")
-    .sort((first, second) => new Date(first.date).getTime() - new Date(second.date).getTime())
-
-  if (!activeSessions.length || !startDate) {
-    return {
-      joinSessionNumber: 1,
-      sessionsFromJoin: totalSessions,
-      warning: "Lớp chưa có lịch học đã sinh, hệ thống sẽ fallback từ buổi 1."
-    }
-  }
-
-  const start = startOfLocalDay(new Date(`${startDate}T00:00:00`)).getTime()
-  const index = activeSessions.findIndex((session) => startOfLocalDay(new Date(session.date)).getTime() >= start)
-  const joinSessionNumber = index === -1 ? activeSessions.length + 1 : index + 1
-
-  return {
-    joinSessionNumber,
-    sessionsFromJoin: Math.max(0, totalSessions - joinSessionNumber + 1),
-    warning: undefined
-  }
-}
-
-function toReceiptDraftLine(course: StudentDetail["courses"][number]): ReceiptDraftLine {
-  return {
-    enrollmentId: course.enrollmentId,
-    freeTrialSessions: String(course.freeTrialSessions),
-    paidSessionsBeforeReceipt: String(course.paidSessionsBeforeReceipt),
-    billableSessions: "",
-    isBillableOverride: false,
-    discountInput: "",
-    extraDiscountInput: "",
-    isExtraDiscountVisible: false
-  }
-}
-
-function toEnrollmentEditDraft(course: StudentDetail["courses"][number]): EnrollmentEditDraft {
-  return {
-    enrollmentId: course.enrollmentId,
-    classId: course.classId ?? "",
-    startDate: course.startDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    joinSessionNumber: String(course.joinSessionNumber ?? 1),
-    freeTrialSessions: String(course.freeTrialSessions),
-    sessionsBought: String(course.sessionsBought),
-    sessionsUsed: String(course.sessionsUsed),
-    isActive: course.isActive
-  }
-}
-
-function activeStudentCourses(student: StudentDetail) {
-  return student.courses.filter((course) => course.isActive)
-}
-
-function timelineTypeLabel(type: StudentDetail["learningTimeline"][number]["type"]) {
-  switch (type) {
-    case "attendance":
-      return "Điểm danh"
-    case "photo":
-      return "Ảnh"
-    case "weekly_assessment":
-      return "Weekly"
-    case "final_assessment":
-      return "Cuối khóa"
-    case "course":
-    default:
-      return "Khóa học"
-  }
-}
-
-function timelineStatusLabel(item: StudentDetail["learningTimeline"][number]) {
-  if (!item.status) return undefined
-  if (item.type === "attendance") return attendanceStatusLabels[item.status as keyof typeof attendanceStatusLabels]
-  if (item.type === "weekly_assessment") return assessmentStatusLabels[item.status as keyof typeof assessmentStatusLabels]
-  return undefined
-}
-
-function assessmentProgressPercent(item: StudentDetail["assessmentProgress"][number]) {
-  if (!item.totalWeeks) return 0
-  return Math.min(100, Math.round((item.completedWeeks / item.totalWeeks) * 100))
 }
 
 export function StudentDetailClient({ studentId }: { studentId: string }) {
