@@ -1,5 +1,7 @@
 node_modules
 .next
+.gitnexus/
+output/
 out
 dist
 .env

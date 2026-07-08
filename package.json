@@ -9,6 +9,7 @@
     "test": "node --import tsx --test tests/**/*.test.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "repo:audit": "node scripts/audit-repo-bloat.mjs",
     "env:validate": "tsx scripts/validate-env.ts",
     "release:preflight": "tsx scripts/release-preflight.ts",
     "release:smoke": "tsx scripts/release-smoke.ts",
