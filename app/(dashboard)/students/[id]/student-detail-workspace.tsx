@@ -223,6 +223,18 @@ type StudentDetailWorkspaceProps = {
   onPatchPhoto: (photoId: string, body: { caption?: string | null; isFeatured?: boolean; isPublished?: boolean; markSent?: boolean }) => void
 }
 
+export function StudentDetailMissingState({ error }: { error: string | null }) {
+  return (
+    <main className="space-y-4">
+      <Link href="/students" className="inline-flex items-center gap-2 text-sm font-semibold text-brand-red">
+        <ArrowLeft className="h-4 w-4" />
+        Quay lại học viên
+      </Link>
+      <p className="neu-card rounded-3xl p-6 text-sm text-brand-red">{error ?? "Không tìm thấy học viên."}</p>
+    </main>
+  )
+}
+
 export function StudentDetailWorkspace(props: StudentDetailWorkspaceProps) {
   const {
     activeCourseOptions,

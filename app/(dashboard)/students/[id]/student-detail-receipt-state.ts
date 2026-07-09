@@ -25,6 +25,11 @@ export function toNonNegativeNumber(value: string) {
   return Math.max(0, toNumber(value))
 }
 
+export function toNonNegativeIntegerInput(value: string) {
+  const digits = value.replace(/[^\d]/g, "")
+  return digits || "0"
+}
+
 function hasNegativeSign(value: string) {
   return value.trim().startsWith("-")
 }

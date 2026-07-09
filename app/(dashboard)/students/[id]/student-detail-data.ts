@@ -13,13 +13,11 @@ import {
 
 export function useStudentDetailData({
   setEnrollmentCourseId,
-  setPhotoCaptionDrafts,
   setReceiptLines,
   studentId,
   syncProfileForm
 }: {
   setEnrollmentCourseId: Dispatch<SetStateAction<string>>
-  setPhotoCaptionDrafts: Dispatch<SetStateAction<Record<string, string>>>
   setReceiptLines: Dispatch<SetStateAction<ReceiptDraftLine[]>>
   studentId: string
   syncProfileForm: (student: StudentDetail) => void
@@ -31,6 +29,7 @@ export function useStudentDetailData({
   const [studentWallet, setStudentWallet] = useState<StudentWalletSummary | null>(null)
   const [makeupEntitlements, setMakeupEntitlements] = useState<MakeupEntitlementItem[]>([])
   const [lastReceipt, setLastReceipt] = useState<ReceiptListItem | null>(null)
+  const [photoCaptionDrafts, setPhotoCaptionDrafts] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -145,7 +144,7 @@ export function useStudentDetailData({
     return () => {
       isMounted = false
     }
-  }, [setEnrollmentCourseId, setPhotoCaptionDrafts, setReceiptLines, studentId, syncProfileForm])
+  }, [setEnrollmentCourseId, setReceiptLines, studentId, syncProfileForm])
 
   return {
     classes,
@@ -157,8 +156,10 @@ export function useStudentDetailData({
     loadReceipts,
     loadStudent,
     makeupEntitlements,
+    photoCaptionDrafts,
     setError,
     setLastReceipt,
+    setPhotoCaptionDrafts,
     setStudent,
     student,
     studentReceipts,

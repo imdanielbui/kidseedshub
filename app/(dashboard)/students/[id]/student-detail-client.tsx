@@ -1,15 +1,11 @@
 "use client"
 
-import { ArrowLeft } from "lucide-react"
-import Link from "next/link"
 import { useCallback, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
-import type { ClassPhotoListItem } from "@/lib/contracts/classes"
-import type { ContactResultKey } from "@/lib/contracts/crm"
 import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import type { PaymentMethodKey, ReceiptListItem } from "@/lib/contracts/finance"
-import { type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
+import { type ParentAccountInfo, type StudentDetail, type StudentStatusKey } from "@/lib/contracts/students"
 import {
   calculateClassJoinPreview,
   getBillingPeriodForMonth,
@@ -20,42 +16,16 @@ import {
   type EnrollmentTransferDraft,
   type LearningDetailTarget,
   type ParentAccountAction,
-  type PhotoReviewFilter,
   type ReceiptBillingMode,
   type ReceiptDraftLine,
   type ReceiptExtraDraftLine
 } from "./student-detail-utils"
-import {
-  formatMoneyInput
-} from "./student-detail-money"
-import { StudentDetailWorkspace } from "./student-detail-workspace"
-import { toNonNegativeNumber, useStudentReceiptState } from "./student-detail-receipt-state"
+import { formatMoneyInput } from "./student-detail-money"
+import { StudentDetailMissingState, StudentDetailWorkspace } from "./student-detail-workspace"
+import { toNonNegativeIntegerInput, toNonNegativeNumber, useStudentReceiptState } from "./student-detail-receipt-state"
 import { useStudentDetailData } from "./student-detail-data"
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  }).format(new Date(value))
-}
-
-function formatWeekday(weekday: number) {
-  return weekday === 0 ? "Chủ nhật" : `Thứ ${weekday + 1}`
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("vi-VN", {
-    maximumFractionDigits: 0,
-    style: "currency",
-    currency: "VND"
-  }).format(Number.isFinite(value) ? value : 0)
-}
-
-function toNonNegativeIntegerInput(value: string) {
-  const digits = value.replace(/[^\d]/g, "")
-  return digits || "0"
-}
+import { useStudentEngagementState } from "./student-detail-engagement-state"
+import { formatCurrency, formatDate, formatWeekday } from "./student-detail-format"
 
 export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [activeTab, setActiveTab] = useState<DetailTab>("overview")
@@ -69,11 +39,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [profileLeadSource, setProfileLeadSource] = useState("")
   const [profileLeadNote, setProfileLeadNote] = useState("")
   const [profileHealthNote, setProfileHealthNote] = useState("")
-  const [content, setContent] = useState("")
-  const [result, setResult] = useState<ContactResultKey>("INTERESTED")
-  const [taskTitle, setTaskTitle] = useState("")
-  const [taskNote, setTaskNote] = useState("")
-  const [taskDueDate, setTaskDueDate] = useState(new Date().toISOString().slice(0, 10))
   const [enrollmentCourseId, setEnrollmentCourseId] = useState("")
   const [enrollmentClassId, setEnrollmentClassId] = useState("")
   const [enrollmentSessions, setEnrollmentSessions] = useState("0")
@@ -97,14 +62,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [walletCreditInput, setWalletCreditInput] = useState("")
   const [isWalletCreditManual, setIsWalletCreditManual] = useState(false)
   const [temporaryParentPassword, setTemporaryParentPassword] = useState<string | null>(null)
-  const [photoReviewFilter, setPhotoReviewFilter] = useState<PhotoReviewFilter>("DRAFT")
-  const [photoCourseFilter, setPhotoCourseFilter] = useState("ALL")
-  const [photoDateFrom, setPhotoDateFrom] = useState("")
-  const [photoDateTo, setPhotoDateTo] = useState("")
-  const [photoCaptionDrafts, setPhotoCaptionDrafts] = useState<Record<string, string>>({})
-  const [photoSavingId, setPhotoSavingId] = useState<string | null>(null)
-  const [isSubmittingLog, setIsSubmittingLog] = useState(false)
-  const [isSubmittingTask, setIsSubmittingTask] = useState(false)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isSubmittingEnrollment, setIsSubmittingEnrollment] = useState(false)
   const [isUpdatingEnrollment, setIsUpdatingEnrollment] = useState(false)
@@ -112,7 +69,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false)
   const [isSubmittingReceipt, setIsSubmittingReceipt] = useState(false)
   const [isUpdatingParentAccount, setIsUpdatingParentAccount] = useState(false)
-  const [savingTaskId, setSavingTaskId] = useState<string | null>(null)
 
   const syncProfileForm = useCallback((nextStudent: StudentDetail) => {
     setProfileName(nextStudent.name)
@@ -137,18 +93,56 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     loadReceipts,
     loadStudent,
     makeupEntitlements,
+    photoCaptionDrafts,
     setError,
     setLastReceipt,
+    setPhotoCaptionDrafts,
     setStudent,
     student,
     studentReceipts,
     studentWallet
   } = useStudentDetailData({
     setEnrollmentCourseId,
-    setPhotoCaptionDrafts,
     setReceiptLines,
     studentId,
     syncProfileForm
+  })
+  const {
+    content,
+    deleteStudentPhoto,
+    filteredPhotos,
+    isSubmittingLog,
+    isSubmittingTask,
+    markTaskDone,
+    patchStudentPhoto,
+    photoCourseFilter,
+    photoCourseOptions,
+    photoDateFrom,
+    photoDateTo,
+    photoReviewFilter,
+    photoSavingId,
+    result,
+    savingTaskId,
+    setContent,
+    setPhotoCourseFilter,
+    setPhotoDateFrom,
+    setPhotoDateTo,
+    setPhotoReviewFilter,
+    setResult,
+    setTaskDueDate,
+    setTaskNote,
+    setTaskTitle,
+    submitContactLog,
+    submitTask,
+    taskDueDate,
+    taskNote,
+    taskTitle
+  } = useStudentEngagementState({
+    loadStudent,
+    setError,
+    setStudent,
+    student,
+    studentId
   })
 
   const activeCourseOptions = useMemo(() => courses.filter((course) => course.isActive), [courses])
@@ -242,26 +236,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     studentWallet,
     walletCreditInput
   })
-  const photoCourseOptions = useMemo(() => {
-    const names = new Set((student?.photos ?? []).map((photo) => photo.courseName).filter(Boolean))
-    return Array.from(names).sort() as string[]
-  }, [student?.photos])
-  const filteredPhotos = useMemo(() => {
-    const fromTime = photoDateFrom ? new Date(`${photoDateFrom}T00:00:00`).getTime() : undefined
-    const toTime = photoDateTo ? new Date(`${photoDateTo}T23:59:59`).getTime() : undefined
-
-    return (student?.photos ?? []).filter((photo) => {
-      const takenTime = new Date(photo.takenAt).getTime()
-      const matchesStatus =
-        photoReviewFilter === "ALL" ||
-        (photoReviewFilter === "DRAFT" ? !photo.isPublished : photo.isPublished)
-      const matchesCourse = photoCourseFilter === "ALL" || photo.courseName === photoCourseFilter
-      const matchesFrom = fromTime === undefined || takenTime >= fromTime
-      const matchesTo = toTime === undefined || takenTime <= toTime
-
-      return matchesStatus && matchesCourse && matchesFrom && matchesTo
-    })
-  }, [photoCourseFilter, photoDateFrom, photoDateTo, photoReviewFilter, student?.photos])
 
   async function submitProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -301,144 +275,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
       setError("Không cập nhật được hồ sơ học viên.")
     } finally {
       setIsSavingProfile(false)
-    }
-  }
-
-  async function submitContactLog(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSubmittingLog(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/students/${studentId}/contact-logs`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          content: content.trim(),
-          result
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<StudentContactLogItem>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không lưu được lịch sử liên hệ.")
-        return
-      }
-
-      setStudent((current) => current ? { ...current, contactLogs: [payload.data as StudentContactLogItem, ...current.contactLogs] } : current)
-      setContent("")
-      setResult("INTERESTED")
-    } catch {
-      setError("Không lưu được lịch sử liên hệ.")
-    } finally {
-      setIsSubmittingLog(false)
-    }
-  }
-
-  async function submitTask(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSubmittingTask(true)
-    setError(null)
-
-    try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: taskTitle.trim(),
-          note: taskNote.trim() || undefined,
-          dueDate: new Date(`${taskDueDate}T17:00:00`).toISOString(),
-          studentId
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<StudentTaskItem>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không tạo được task.")
-        return
-      }
-
-      setStudent((current) => current ? { ...current, tasks: [payload.data as StudentTaskItem, ...current.tasks] } : current)
-      setTaskTitle("")
-      setTaskNote("")
-      setTaskDueDate(new Date().toISOString().slice(0, 10))
-    } catch {
-      setError("Không tạo được task.")
-    } finally {
-      setIsSubmittingTask(false)
-    }
-  }
-
-  async function markTaskDone(taskId: string) {
-    setSavingTaskId(taskId)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "DONE" })
-      })
-      const payload = (await response.json()) as ApiResponse<StudentTaskItem>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không cập nhật được task.")
-        return
-      }
-
-      setStudent((current) => current ? { ...current, tasks: current.tasks.map((task) => (task.id === taskId ? (payload.data as StudentTaskItem) : task)) } : current)
-    } catch {
-      setError("Không cập nhật được task.")
-    } finally {
-      setSavingTaskId(null)
-    }
-  }
-
-  async function patchStudentPhoto(photoId: string, body: { caption?: string | null; isFeatured?: boolean; isPublished?: boolean; markSent?: boolean }) {
-    setPhotoSavingId(photoId)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/class-photos/${photoId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      })
-      const payload = (await response.json()) as ApiResponse<ClassPhotoListItem>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không cập nhật được ảnh học viên.")
-        return
-      }
-
-      await loadStudent()
-    } catch {
-      setError("Không cập nhật được ảnh học viên.")
-    } finally {
-      setPhotoSavingId(null)
-    }
-  }
-
-  async function deleteStudentPhoto(photoId: string) {
-    if (!window.confirm("Xóa ảnh này khỏi hồ sơ học viên?")) return
-
-    setPhotoSavingId(photoId)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/class-photos/${photoId}`, { method: "DELETE" })
-      const payload = (await response.json()) as ApiResponse<{ deleted: boolean }>
-
-      if (!response.ok || !payload.success) {
-        setError(payload.error?.message ?? "Không xóa được ảnh học viên.")
-        return
-      }
-
-      await loadStudent()
-    } catch {
-      setError("Không xóa được ảnh học viên.")
-    } finally {
-      setPhotoSavingId(null)
     }
   }
 
@@ -786,15 +622,7 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   }
 
   if (!student) {
-    return (
-      <main className="space-y-4">
-        <Link href="/students" className="inline-flex items-center gap-2 text-sm font-semibold text-brand-red">
-          <ArrowLeft className="h-4 w-4" />
-          Quay lại học viên
-        </Link>
-        <p className="neu-card rounded-3xl p-6 text-sm text-brand-red">{error ?? "Không tìm thấy học viên."}</p>
-      </main>
-    )
+    return <StudentDetailMissingState error={error} />
   }
 
   return (
