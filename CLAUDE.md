@@ -78,6 +78,10 @@ Keep frontend-only changes separate from backend platform changes.
 
 - Search first, read targeted files second, edit third.
 - Read current patterns before creating new patterns.
+- Start broad tasks from `docs/ai-context/context-map.md`; do not read generated/cache/history folders by default.
+- Keep `.gitnexus/`, `.next/`, `.playwright-cli/`, `out/`, `output/`, `coverage/`, `public/uploads/`, and `docs/archive/` out of normal context reads.
+- Run `npm run repo:audit` before broad refactors, release preflight, or cleanup that may add large files.
+- If a legacy oversized file is touched, split the requested workflow into focused modules instead of adding unrelated code to that file.
 - Avoid repeating large code blocks in chat.
 - When context exceeds roughly 70%, create a handoff summary with goal, decisions, files, changes, checks, and next action.
 

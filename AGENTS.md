@@ -70,6 +70,17 @@ GitNexus:
 
 Use `docs/specs/kidseedshub-full-product-plan.md` as roadmap/status reference, not as the only working contract for implementation.
 
+## Repo Scope And Bloat Rules
+
+Keep agent context and active files small by default.
+
+- Start broad tasks from `docs/ai-context/context-map.md`; read only the matching workflow and code area.
+- Do not read generated/cache/history folders by default: `.gitnexus/`, `.next/`, `.playwright-cli/`, `out/`, `output/`, `coverage/`, `public/uploads/`, and `docs/archive/`.
+- Run `npm run repo:audit` before broad refactors, release preflight, or any cleanup that may add large files.
+- New generated artifacts must stay ignored and untracked; do not move generated output into docs/archive.
+- New active files should stay under the audit line targets. If a legacy oversized file is touched, split the requested workflow into focused modules instead of adding more unrelated code to that file.
+- Add a legacy allowlist entry only with a concrete reason and only when splitting in the current slice would be riskier than allowing the existing file temporarily.
+
 ## GitNexus Codebase Intelligence
 
 Use GitNexus when the task needs architectural context beyond local file reading.
