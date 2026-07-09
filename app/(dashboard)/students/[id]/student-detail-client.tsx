@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, UserRound } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
@@ -11,14 +11,13 @@ import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transf
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import type { PaymentMethodKey, ReceiptListItem } from "@/lib/contracts/finance"
 import type { MakeupEntitlementItem } from "@/lib/contracts/makeup-entitlements"
-import { studentStatusLabels, type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
+import { type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
 import type { StudentWalletSummary } from "@/lib/contracts/student-wallet"
 import {
   activeStudentCourses,
   calculateClassJoinPreview,
   countBilledSessionsForMonth,
   countCourseSessionsInBillingMonth,
-  detailTabs,
   getBillingMonthChoicesForYear,
   getBillingMonthInRange,
   getBillingPeriodForMonth,
@@ -37,17 +36,13 @@ import {
   type ReceiptDraftLine,
   type ReceiptExtraDraftLine
 } from "./student-detail-utils"
-import { ConfirmDialog, LearningDetailDialog, ReceiptPaymentConfirmDialog } from "./student-detail-dialogs"
 import {
   formatMoneyInput,
   moneySuggestions,
   parseDiscountInputs,
   parseMoneyInput
 } from "./student-detail-money"
-import { StudentFinanceTab } from "./student-detail-finance-tab"
-import { StudentEnrollmentDialogs } from "./student-detail-enrollment-dialogs"
-import { StudentJournalTab } from "./student-detail-journal-tab"
-import { ParentAccountTab, StudentCrmTab, StudentLearningTab, StudentOverviewTab } from "./student-detail-tabs"
+import { StudentDetailWorkspace } from "./student-detail-workspace"
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -1008,307 +1003,173 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   }
 
   return (
-    <main className="space-y-4">
-      <Link href="/students" className="inline-flex items-center gap-2 text-sm font-semibold text-brand-red">
-        <ArrowLeft className="h-4 w-4" />
-        Quay lại học viên
-      </Link>
-
-      <section className="neu-card rounded-3xl p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="neu-pressed flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
-              <UserRound className="h-7 w-7 text-brand-red" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Student profile</p>
-              <h1 className="truncate text-3xl font-semibold text-brand-ink">{student.name}</h1>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="rounded-full border border-brand-red/15 px-3 py-1 text-brand-red">{student.code}</span>
-                <span className="rounded-full border border-brand-red/15 px-3 py-1 text-stone-600">{studentStatusLabels[student.status]}</span>
-                <span className="rounded-full border border-brand-red/15 px-3 py-1 text-stone-600">{student.parentName} · {student.parentPhone}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {detailTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`rounded-full border px-3 py-2 text-xs font-semibold transition-colors ${
-                  activeTab === tab.key ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/45 text-stone-600 hover:text-brand-red"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {error ? <p className="rounded-3xl border border-brand-red/15 bg-white/50 p-4 text-sm text-brand-red">{error}</p> : null}
-
-      {activeTab === "overview" ? (
-        <StudentOverviewTab
-          student={student}
-          profileAddress={profileAddress}
-          profileBirthDate={profileBirthDate}
-          profileHealthNote={profileHealthNote}
-          profileLeadNote={profileLeadNote}
-          profileLeadSource={profileLeadSource}
-          profileName={profileName}
-          profileParentEmail={profileParentEmail}
-          profileParentName={profileParentName}
-          profileParentPhone={profileParentPhone}
-          profileStatus={profileStatus}
-          isSavingProfile={isSavingProfile}
-          onSubmit={submitProfile}
-          setProfileAddress={setProfileAddress}
-          setProfileBirthDate={setProfileBirthDate}
-          setProfileHealthNote={setProfileHealthNote}
-          setProfileLeadNote={setProfileLeadNote}
-          setProfileLeadSource={setProfileLeadSource}
-          setProfileName={setProfileName}
-          setProfileParentEmail={setProfileParentEmail}
-          setProfileParentName={setProfileParentName}
-          setProfileParentPhone={setProfileParentPhone}
-          setProfileStatus={setProfileStatus}
-        />
-      ) : null}
-
-      {activeTab === "crm" ? (
-        <StudentCrmTab
-          student={student}
-          content={content}
-          isSubmittingLog={isSubmittingLog}
-          isSubmittingTask={isSubmittingTask}
-          result={result}
-          savingTaskId={savingTaskId}
-          taskDueDate={taskDueDate}
-          taskNote={taskNote}
-          taskTitle={taskTitle}
-          formatDate={formatDate}
-          markTaskDone={(taskId) => void markTaskDone(taskId)}
-          setContent={setContent}
-          setResult={setResult}
-          setTaskDueDate={setTaskDueDate}
-          setTaskNote={setTaskNote}
-          setTaskTitle={setTaskTitle}
-          submitContactLog={submitContactLog}
-          submitTask={submitTask}
-        />
-      ) : null}
-
-      {activeTab === "learning" ? (
-        <StudentLearningTab
-          student={student}
-          formatDate={formatDate}
-          formatWeekday={formatWeekday}
-          setSelectedLearningDetail={setSelectedLearningDetail}
-        />
-      ) : null}
-
-      {activeTab === "finance" ? (
-        <StudentFinanceTab
-          student={student}
-          studentReceipts={studentReceipts}
-          studentWallet={studentWallet}
-          makeupEntitlements={makeupEntitlements}
-          activeCourseOptions={activeCourseOptions}
-          classOptions={classOptions}
-          enrollmentCourseId={enrollmentCourseId}
-          enrollmentClassId={enrollmentClassId}
-          enrollmentStartDate={enrollmentStartDate}
-          enrollmentFreeTrialSessions={enrollmentFreeTrialSessions}
-          enrollmentSessions={enrollmentSessions}
-          selectedEnrollmentCourse={selectedEnrollmentCourse}
-          selectedEnrollmentPrice={selectedEnrollmentPrice}
-          selectedEnrollmentUnitPrice={selectedEnrollmentUnitPrice}
-          enrollmentJoinPreview={enrollmentJoinPreview}
-          enrollmentSessionsFromJoin={enrollmentSessionsFromJoin}
-          isSubmittingEnrollment={isSubmittingEnrollment}
-          receiptBillingMode={receiptBillingMode}
-          isReceiptMonthlyBilling={isReceiptMonthlyBilling}
-          receiptBillingMonthOptions={receiptBillingMonthOptions}
-          receiptBillingMonthChoices={receiptBillingMonthChoices}
-          receiptBillingYearOptions={receiptBillingYearOptions}
-          activeReceiptBillingMonth={activeReceiptBillingMonth}
-          activeReceiptBillingYear={activeReceiptBillingYear}
-          receiptLines={receiptLines}
-          receiptLineSummaries={receiptLineSummaries}
-          receiptExtraLineSummaries={receiptExtraLineSummaries}
-          receiptMethod={receiptMethod}
-          receiptNote={receiptNote}
-          receiptAmount={receiptAmount}
-          receiptAmountSuggestions={receiptAmountSuggestions}
-          receiptValidationErrors={receiptValidationErrors}
-          isReceiptAmountOverride={isReceiptAmountOverride}
-          isWalletCreditManual={isWalletCreditManual}
-          walletCreditInput={walletCreditInput}
-          walletBalance={walletBalance}
-          suggestedWalletCreditAmount={suggestedWalletCreditAmount}
-          walletCreditAmount={walletCreditAmount}
-          actualReceiptAmount={actualReceiptAmount}
-          actualReceiptPaymentAmount={actualReceiptPaymentAmount}
-          payableAmount={payableAmount}
-          coursePayableAmount={coursePayableAmount}
-          extraPayableAmount={extraPayableAmount}
-          latestReceipt={latestReceipt}
-          lastReceipt={lastReceipt}
-          totalReceiptAmount={totalReceiptAmount}
-          isSubmittingReceipt={isSubmittingReceipt}
-          formatDate={formatDate}
-          formatCurrency={formatCurrency}
-          toNonNegativeIntegerInput={toNonNegativeIntegerInput}
-          setEnrollmentCourseId={setEnrollmentCourseId}
-          setEnrollmentClassId={setEnrollmentClassId}
-          setEnrollmentStartDate={setEnrollmentStartDate}
-          setEnrollmentFreeTrialSessions={setEnrollmentFreeTrialSessions}
-          setEnrollmentSessions={setEnrollmentSessions}
-          setReceiptBillingMode={setReceiptBillingMode}
-          setReceiptAmount={setReceiptAmount}
-          setIsReceiptAmountOverride={setIsReceiptAmountOverride}
-          setIsWalletCreditManual={setIsWalletCreditManual}
-          setReceiptBillingMonth={setReceiptBillingMonth}
-          setPendingBillableEnrollmentId={setPendingBillableEnrollmentId}
-          setIsConfirmingReceiptAmount={setIsConfirmingReceiptAmount}
-          setWalletCreditInput={setWalletCreditInput}
-          setReceiptMethod={setReceiptMethod}
-          setReceiptNote={setReceiptNote}
-          setEditingEnrollment={setEditingEnrollment}
-          submitEnrollment={submitEnrollment}
-          submitReceipt={submitReceipt}
-          toggleReceiptLine={toggleReceiptLine}
-          openTransferDialog={openTransferDialog}
-          updateReceiptLine={updateReceiptLine}
-          addReceiptExtraLine={addReceiptExtraLine}
-          updateReceiptExtraLine={updateReceiptExtraLine}
-          removeReceiptExtraLine={removeReceiptExtraLine}
-        />
-      ) : null}
-
-      {activeTab === "journal" ? (
-        <StudentJournalTab
-          student={student}
-          filteredPhotos={filteredPhotos}
-          photoCaptionDrafts={photoCaptionDrafts}
-          photoCourseOptions={photoCourseOptions}
-          photoCourseFilter={photoCourseFilter}
-          photoDateFrom={photoDateFrom}
-          photoDateTo={photoDateTo}
-          photoReviewFilter={photoReviewFilter}
-          photoSavingId={photoSavingId}
-          formatDate={formatDate}
-          onCaptionChange={(photoId, value) => setPhotoCaptionDrafts((current) => ({ ...current, [photoId]: value }))}
-          onCourseFilterChange={setPhotoCourseFilter}
-          onDateFromChange={setPhotoDateFrom}
-          onDateToChange={setPhotoDateTo}
-          onDeletePhoto={(photoId) => void deleteStudentPhoto(photoId)}
-          onPatchPhoto={(photoId, body) => void patchStudentPhoto(photoId, body)}
-          onResetFilters={() => {
-            setPhotoReviewFilter("ALL")
-            setPhotoCourseFilter("ALL")
-            setPhotoDateFrom("")
-            setPhotoDateTo("")
-          }}
-          onReviewFilterChange={setPhotoReviewFilter}
-        />
-      ) : null}
-
-      {activeTab === "parent-account" ? (
-        <ParentAccountTab
-          student={student}
-          isUpdatingParentAccount={isUpdatingParentAccount}
-          temporaryParentPassword={temporaryParentPassword}
-          updateParentAccount={(action) => void updateParentAccount(action)}
-        />
-      ) : null}
-
-      <ConfirmDialog
-        open={Boolean(pendingBillableEnrollmentId)}
-        title="Sửa số buổi tính phí?"
-        description="Số buổi này đang được hệ thống tự tính từ khóa đã đăng ký. Chỉ sửa tay khi trường hợp thu học phí có ngoại lệ."
-        confirmLabel="Cho phép sửa"
-        onCancel={() => setPendingBillableEnrollmentId(null)}
-        onConfirm={confirmBillableOverride}
-      />
-
-      <ConfirmDialog
-        open={isConfirmingReceiptAmount}
-        title="Sửa số tiền thanh toán?"
-        description="Số tiền phụ huynh cần thanh toán đang được tính tự động từ các dòng khóa và giảm giá. Nếu sửa tay, hệ thống sẽ lưu tổng phiếu theo số tiền bạn nhập."
-        confirmLabel="Cho phép sửa"
-        onCancel={() => setIsConfirmingReceiptAmount(false)}
-        onConfirm={confirmReceiptAmountOverride}
-      />
-
-      <ReceiptPaymentConfirmDialog
-        activeReceiptBillingMonth={activeReceiptBillingMonth}
-        actualReceiptAmount={actualReceiptAmount}
-        actualReceiptPaymentAmount={actualReceiptPaymentAmount}
-        coursePayableAmount={coursePayableAmount}
-        extraPayableAmount={extraPayableAmount}
-        formatCurrency={formatCurrency}
-        isOpen={isConfirmingPayment}
-        isReceiptMonthlyBilling={isReceiptMonthlyBilling}
-        isSubmittingReceipt={isSubmittingReceipt}
-        onClose={() => setIsConfirmingPayment(false)}
-        onConfirm={() => void confirmReceiptPayment()}
-        receiptExtraLineSummaries={receiptExtraLineSummaries}
-        receiptLineSummaries={receiptLineSummaries}
-        receiptMethod={receiptMethod}
-        receiptNote={receiptNote}
-        receiptValidationErrors={receiptValidationErrors}
-        walletBalance={walletBalance}
-        walletCreditAmount={walletCreditAmount}
-      />
-
-      <ConfirmDialog
-        open={isConfirmingEnrollmentDelete}
-        title="Xóa hoặc hủy ghi danh?"
-        description="Nếu khóa chưa có phiếu thu, điểm danh hoặc đánh giá, hệ thống sẽ xóa ghi danh. Nếu đã phát sinh dữ liệu, hệ thống chỉ hủy ghi danh để giữ lịch sử đối soát."
-        confirmLabel={isDeletingEnrollment ? "Đang xử lý" : "Xác nhận"}
-        onCancel={() => setIsConfirmingEnrollmentDelete(false)}
-        onConfirm={() => {
-          if (!isDeletingEnrollment) void deleteOrCancelEnrollment()
-        }}
-      />
-
-      <LearningDetailDialog
-        target={selectedLearningDetail}
-        onClose={() => setSelectedLearningDetail(null)}
-        formatDate={formatDate}
-        formatCurrency={formatCurrency}
-        formatWeekday={formatWeekday}
-      />
-
-      <StudentEnrollmentDialogs
-        transferDraft={transferDraft}
-        transferSourceCourse={transferSourceCourse}
-        transferRemainingSessions={transferRemainingSessions}
-        transferCreditPreview={transferCreditPreview}
-        transferTargetPrice={transferTargetPrice}
-        transferTopUpPreview={transferTopUpPreview}
-        transferTargetCourse={transferTargetCourse}
-        transferClassOptions={transferClassOptions}
-        activeCourseOptions={activeCourseOptions}
-        isCourseTransfer={isCourseTransfer}
-        isSubmittingTransfer={isSubmittingTransfer}
-        editingEnrollment={editingEnrollment}
-        editingCourse={editingCourse}
-        editingClassOptions={editingClassOptions}
-        editingJoinPreview={editingJoinPreview}
-        isUpdatingEnrollment={isUpdatingEnrollment}
-        isDeletingEnrollment={isDeletingEnrollment}
-        formatCurrency={formatCurrency}
-        toNonNegativeIntegerInput={toNonNegativeIntegerInput}
-        setTransferDraft={setTransferDraft}
-        setEditingEnrollment={setEditingEnrollment}
-        setIsConfirmingEnrollmentDelete={setIsConfirmingEnrollmentDelete}
-        submitTransfer={submitTransfer}
-        submitEnrollmentEdit={submitEnrollmentEdit}
-      />
-    </main>
+    <StudentDetailWorkspace
+      activeCourseOptions={activeCourseOptions}
+      activeReceiptBillingMonth={activeReceiptBillingMonth}
+      activeReceiptBillingYear={activeReceiptBillingYear}
+      activeTab={activeTab}
+      actualReceiptAmount={actualReceiptAmount}
+      actualReceiptPaymentAmount={actualReceiptPaymentAmount}
+      addReceiptExtraLine={addReceiptExtraLine}
+      classOptions={classOptions}
+      content={content}
+      coursePayableAmount={coursePayableAmount}
+      editingClassOptions={editingClassOptions}
+      editingCourse={editingCourse}
+      editingEnrollment={editingEnrollment}
+      editingJoinPreview={editingJoinPreview}
+      enrollmentClassId={enrollmentClassId}
+      enrollmentCourseId={enrollmentCourseId}
+      enrollmentFreeTrialSessions={enrollmentFreeTrialSessions}
+      enrollmentJoinPreview={enrollmentJoinPreview}
+      enrollmentSessions={enrollmentSessions}
+      enrollmentSessionsFromJoin={enrollmentSessionsFromJoin}
+      enrollmentStartDate={enrollmentStartDate}
+      error={error}
+      extraPayableAmount={extraPayableAmount}
+      filteredPhotos={filteredPhotos}
+      formatCurrency={formatCurrency}
+      formatDate={formatDate}
+      formatWeekday={formatWeekday}
+      isConfirmingEnrollmentDelete={isConfirmingEnrollmentDelete}
+      isConfirmingPayment={isConfirmingPayment}
+      isConfirmingReceiptAmount={isConfirmingReceiptAmount}
+      isCourseTransfer={isCourseTransfer}
+      isDeletingEnrollment={isDeletingEnrollment}
+      isReceiptAmountOverride={isReceiptAmountOverride}
+      isReceiptMonthlyBilling={isReceiptMonthlyBilling}
+      isSavingProfile={isSavingProfile}
+      isSubmittingEnrollment={isSubmittingEnrollment}
+      isSubmittingLog={isSubmittingLog}
+      isSubmittingReceipt={isSubmittingReceipt}
+      isSubmittingTask={isSubmittingTask}
+      isSubmittingTransfer={isSubmittingTransfer}
+      isUpdatingEnrollment={isUpdatingEnrollment}
+      isUpdatingParentAccount={isUpdatingParentAccount}
+      isWalletCreditManual={isWalletCreditManual}
+      lastReceipt={lastReceipt}
+      latestReceipt={latestReceipt}
+      makeupEntitlements={makeupEntitlements}
+      markTaskDone={(taskId) => void markTaskDone(taskId)}
+      openTransferDialog={openTransferDialog}
+      payableAmount={payableAmount}
+      pendingBillableEnrollmentId={pendingBillableEnrollmentId}
+      photoCaptionDrafts={photoCaptionDrafts}
+      photoCourseFilter={photoCourseFilter}
+      photoCourseOptions={photoCourseOptions}
+      photoDateFrom={photoDateFrom}
+      photoDateTo={photoDateTo}
+      photoReviewFilter={photoReviewFilter}
+      photoSavingId={photoSavingId}
+      profileAddress={profileAddress}
+      profileBirthDate={profileBirthDate}
+      profileHealthNote={profileHealthNote}
+      profileLeadNote={profileLeadNote}
+      profileLeadSource={profileLeadSource}
+      profileName={profileName}
+      profileParentEmail={profileParentEmail}
+      profileParentName={profileParentName}
+      profileParentPhone={profileParentPhone}
+      profileStatus={profileStatus}
+      receiptAmount={receiptAmount}
+      receiptAmountSuggestions={receiptAmountSuggestions}
+      receiptBillingMode={receiptBillingMode}
+      receiptBillingMonthChoices={receiptBillingMonthChoices}
+      receiptBillingMonthOptions={receiptBillingMonthOptions}
+      receiptBillingYearOptions={receiptBillingYearOptions}
+      receiptExtraLineSummaries={receiptExtraLineSummaries}
+      receiptLineSummaries={receiptLineSummaries}
+      receiptLines={receiptLines}
+      receiptMethod={receiptMethod}
+      receiptNote={receiptNote}
+      receiptValidationErrors={receiptValidationErrors}
+      removeReceiptExtraLine={removeReceiptExtraLine}
+      result={result}
+      savingTaskId={savingTaskId}
+      selectedEnrollmentCourse={selectedEnrollmentCourse}
+      selectedEnrollmentPrice={selectedEnrollmentPrice}
+      selectedEnrollmentUnitPrice={selectedEnrollmentUnitPrice}
+      selectedLearningDetail={selectedLearningDetail}
+      setActiveTab={setActiveTab}
+      setContent={setContent}
+      setEditingEnrollment={setEditingEnrollment}
+      setEnrollmentClassId={setEnrollmentClassId}
+      setEnrollmentCourseId={setEnrollmentCourseId}
+      setEnrollmentFreeTrialSessions={setEnrollmentFreeTrialSessions}
+      setEnrollmentSessions={setEnrollmentSessions}
+      setEnrollmentStartDate={setEnrollmentStartDate}
+      setIsConfirmingEnrollmentDelete={setIsConfirmingEnrollmentDelete}
+      setIsConfirmingPayment={setIsConfirmingPayment}
+      setIsConfirmingReceiptAmount={setIsConfirmingReceiptAmount}
+      setIsReceiptAmountOverride={setIsReceiptAmountOverride}
+      setIsWalletCreditManual={setIsWalletCreditManual}
+      setPendingBillableEnrollmentId={setPendingBillableEnrollmentId}
+      setPhotoCaptionDrafts={setPhotoCaptionDrafts}
+      setPhotoCourseFilter={setPhotoCourseFilter}
+      setPhotoDateFrom={setPhotoDateFrom}
+      setPhotoDateTo={setPhotoDateTo}
+      setPhotoReviewFilter={setPhotoReviewFilter}
+      setProfileAddress={setProfileAddress}
+      setProfileBirthDate={setProfileBirthDate}
+      setProfileHealthNote={setProfileHealthNote}
+      setProfileLeadNote={setProfileLeadNote}
+      setProfileLeadSource={setProfileLeadSource}
+      setProfileName={setProfileName}
+      setProfileParentEmail={setProfileParentEmail}
+      setProfileParentName={setProfileParentName}
+      setProfileParentPhone={setProfileParentPhone}
+      setProfileStatus={setProfileStatus}
+      setReceiptAmount={setReceiptAmount}
+      setReceiptBillingMode={setReceiptBillingMode}
+      setReceiptBillingMonth={setReceiptBillingMonth}
+      setReceiptMethod={setReceiptMethod}
+      setReceiptNote={setReceiptNote}
+      setResult={setResult}
+      setSelectedLearningDetail={setSelectedLearningDetail}
+      setTaskDueDate={setTaskDueDate}
+      setTaskNote={setTaskNote}
+      setTaskTitle={setTaskTitle}
+      setTransferDraft={setTransferDraft}
+      setWalletCreditInput={setWalletCreditInput}
+      student={student}
+      studentReceipts={studentReceipts}
+      studentWallet={studentWallet}
+      submitContactLog={submitContactLog}
+      submitEnrollment={submitEnrollment}
+      submitEnrollmentEdit={submitEnrollmentEdit}
+      submitProfile={submitProfile}
+      submitReceipt={submitReceipt}
+      submitTask={submitTask}
+      submitTransfer={submitTransfer}
+      taskDueDate={taskDueDate}
+      taskNote={taskNote}
+      taskTitle={taskTitle}
+      temporaryParentPassword={temporaryParentPassword}
+      toNonNegativeIntegerInput={toNonNegativeIntegerInput}
+      toggleReceiptLine={toggleReceiptLine}
+      totalReceiptAmount={totalReceiptAmount}
+      transferClassOptions={transferClassOptions}
+      transferCreditPreview={transferCreditPreview}
+      transferDraft={transferDraft}
+      transferRemainingSessions={transferRemainingSessions}
+      transferSourceCourse={transferSourceCourse}
+      transferTargetCourse={transferTargetCourse}
+      transferTargetPrice={transferTargetPrice}
+      transferTopUpPreview={transferTopUpPreview}
+      updateParentAccount={(action) => void updateParentAccount(action)}
+      updateReceiptExtraLine={updateReceiptExtraLine}
+      updateReceiptLine={updateReceiptLine}
+      walletBalance={walletBalance}
+      walletCreditAmount={walletCreditAmount}
+      walletCreditInput={walletCreditInput}
+      onConfirmBillableOverride={confirmBillableOverride}
+      onConfirmReceiptAmountOverride={confirmReceiptAmountOverride}
+      onConfirmReceiptPayment={() => void confirmReceiptPayment()}
+      onDeleteEnrollment={() => {
+        if (!isDeletingEnrollment) void deleteOrCancelEnrollment()
+      }}
+      onDeletePhoto={(photoId) => void deleteStudentPhoto(photoId)}
+      onPatchPhoto={(photoId, body) => void patchStudentPhoto(photoId, body)}
+    />
   )
 }
