@@ -2,8 +2,6 @@ import nextVitals from "eslint-config-next/core-web-vitals"
 import nextTypescript from "eslint-config-next/typescript"
 
 const config = [
-  ...nextVitals,
-  ...nextTypescript,
   {
     ignores: [
       ".gitnexus/**",
@@ -14,9 +12,13 @@ const config = [
       "node_modules/**",
       "out/**",
       "output/**",
-      "public/uploads/**"
+      "public/uploads/**",
+      "scripts/imports/one-off",
+      "scripts/imports/one-off/**"
     ]
-  }
+  },
+  ...nextVitals,
+  ...nextTypescript
 ]
 
 export default config

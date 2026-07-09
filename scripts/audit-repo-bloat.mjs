@@ -17,6 +17,7 @@ const ignoredDirs = new Set([
   "out",
   "output",
   "public/uploads",
+  "scripts/imports/one-off",
 ])
 
 const generatedPathPrefixes = [
@@ -63,7 +64,6 @@ const legacyLargeFiles = new Map([
   ["app/(dashboard)/pipeline/page.tsx", "legacy pipeline workspace; split table, kanban, filters, and dialog when touched"],
   ["app/(dashboard)/classes/page.tsx", "legacy classes page; split class management, today view, and settings when touched"],
   ["prisma/seed.ts", "legacy seed script; split demo data builders when touched"],
-  ["scripts/import-real-members.ts", "one-off import utility; move to scripts/imports/one-off after production import is complete"],
   ["prisma/schema.prisma", "current database schema; split only if Prisma supports the target structure safely"],
   ["app/globals.css", "current global stylesheet; extract component styles when touching related UI"],
   ["app/api/receipts/route.ts", "legacy receipt API; split validation/domain helpers when touching receipts"],

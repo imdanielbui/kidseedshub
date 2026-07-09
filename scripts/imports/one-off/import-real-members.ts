@@ -4,8 +4,8 @@ import fs from "node:fs"
 import path from "node:path"
 import bcrypt from "bcryptjs"
 import { Prisma, PrismaClient, type CourseSubject, type Gender, type Role, type StudentStatus } from "@prisma/client"
-import { replaceClassSchedule, type ScheduleSlotInput } from "../lib/backend/class-schedule"
-import { createParentInitialPassword } from "../lib/backend/parent-password"
+import { replaceClassSchedule, type ScheduleSlotInput } from "../../../lib/backend/class-schedule"
+import { createParentInitialPassword } from "../../../lib/backend/parent-password"
 
 const prisma = new PrismaClient()
 
