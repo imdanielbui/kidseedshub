@@ -1,0 +1,188 @@
+.parent-portfolio-hero {
+    position: relative;
+    background:
+      linear-gradient(115deg, rgba(255, 255, 255, 0.70), rgba(247, 241, 236, 0.48)),
+      repeating-linear-gradient(135deg, rgba(165, 36, 39, 0.06) 0 1px, transparent 1px 18px);
+  }
+
+  .parent-visual-stage {
+    position: relative;
+    min-height: 360px;
+    border-radius: 32px;
+    border: 1px solid rgba(165, 36, 39, 0.12);
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(248, 241, 235, 0.62)),
+      linear-gradient(35deg, rgba(165, 36, 39, 0.10), transparent 45%);
+    overflow: hidden;
+  }
+
+  .parent-visual-stage::before {
+    content: "";
+    position: absolute;
+    inset: 34px;
+    border: 1px solid rgba(165, 36, 39, 0.12);
+    border-radius: 28px;
+    transform: rotate(-4deg);
+    animation: parent-frame-drift 7s ease-in-out infinite;
+  }
+
+  .parent-profile-frame {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 2;
+    display: flex;
+    width: min(78%, 360px);
+    transform: translate(-50%, -50%) rotate(-2deg);
+    align-items: center;
+    gap: 16px;
+    border-radius: 28px;
+    border: 1px solid rgba(165, 36, 39, 0.12);
+    background: rgba(255, 255, 255, 0.76);
+    padding: 18px;
+    box-shadow: 16px 18px 34px rgba(89, 51, 48, 0.14);
+    animation: parent-card-float 5s ease-in-out infinite;
+    backdrop-filter: blur(8px);
+  }
+
+  .parent-avatar {
+    display: flex;
+    height: 88px;
+    width: 88px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 26px;
+    background: #a52427;
+    color: #fff7f2;
+    font-size: 30px;
+    font-weight: 700;
+  }
+
+  .parent-floating-card {
+    position: absolute;
+    z-index: 3;
+    display: inline-flex;
+    max-width: 250px;
+    align-items: center;
+    gap: 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(165, 36, 39, 0.12);
+    background: rgba(255, 255, 255, 0.82);
+    padding: 12px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--brand-ink);
+    box-shadow: 10px 12px 22px rgba(89, 51, 48, 0.10);
+  }
+
+  .parent-floating-card-one {
+    left: 22px;
+    top: 44px;
+    animation: parent-float-one 4.8s ease-in-out infinite;
+  }
+
+  .parent-floating-card-two {
+    bottom: 42px;
+    right: 22px;
+    animation: parent-float-two 5.4s ease-in-out infinite;
+  }
+
+  .parent-filmstrip {
+    position: absolute;
+    bottom: 22px;
+    left: 24px;
+    display: grid;
+    grid-template-columns: repeat(4, 54px);
+    gap: 8px;
+    transform: rotate(3deg);
+    animation: parent-strip-slide 8s ease-in-out infinite;
+  }
+
+  .parent-filmstrip span {
+    height: 66px;
+    border-radius: 16px;
+    border: 1px solid rgba(165, 36, 39, 0.10);
+    background:
+      linear-gradient(145deg, rgba(165, 36, 39, 0.16), rgba(255, 255, 255, 0.40)),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.50) 0 4px, transparent 4px 12px);
+  }
+
+  .parent-course-card,
+  .parent-report-card,
+  .parent-timeline-item,
+  .parent-photo-placeholder {
+    border: 1px solid rgba(165, 36, 39, 0.10);
+    background: rgba(255, 255, 255, 0.48);
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      border-color 180ms ease;
+  }
+
+  .parent-course-card:hover,
+  .parent-report-card:hover,
+  .parent-timeline-item:hover,
+  .parent-photo-placeholder:hover,
+  .parent-photo-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(165, 36, 39, 0.22);
+    box-shadow: 12px 14px 24px rgba(89, 51, 48, 0.12);
+  }
+
+  .parent-photo-placeholder {
+    min-height: 190px;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.76), rgba(247, 241, 236, 0.58)),
+      repeating-linear-gradient(135deg, rgba(165, 36, 39, 0.07) 0 1px, transparent 1px 16px);
+  }
+
+  @keyframes parent-card-float {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) rotate(-2deg);
+    }
+    50% {
+      transform: translate(-50%, calc(-50% - 10px)) rotate(1deg);
+    }
+  }
+
+  @keyframes parent-frame-drift {
+    0%,
+    100% {
+      transform: rotate(-4deg) scale(1);
+    }
+    50% {
+      transform: rotate(3deg) scale(1.03);
+    }
+  }
+
+  @keyframes parent-float-one {
+    0%,
+    100% {
+      transform: translateY(0) rotate(-3deg);
+    }
+    50% {
+      transform: translateY(12px) rotate(2deg);
+    }
+  }
+
+  @keyframes parent-float-two {
+    0%,
+    100% {
+      transform: translateY(0) rotate(2deg);
+    }
+    50% {
+      transform: translateY(-12px) rotate(-3deg);
+    }
+  }
+
+  @keyframes parent-strip-slide {
+    0%,
+    100% {
+      transform: translateX(0) rotate(3deg);
+    }
+    50% {
+      transform: translateX(16px) rotate(-1deg);
+    }
+  }

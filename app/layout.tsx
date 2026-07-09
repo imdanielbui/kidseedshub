@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import "./receipt-print.css"
+import "./parent-portal.css"
 
 export const metadata: Metadata = {
   title: "Kid Seeds Hub",
