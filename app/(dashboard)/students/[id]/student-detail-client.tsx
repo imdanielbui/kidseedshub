@@ -66,6 +66,13 @@ import {
   ReceiptHistoryCard,
   StudentWalletCard
 } from "./student-detail-finance-cards"
+import {
+  formatDiscountInput,
+  formatMoneyInput,
+  moneySuggestions,
+  parseDiscountInputs,
+  parseMoneyInput
+} from "./student-detail-money"
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -103,78 +110,6 @@ function toNonNegativeIntegerInput(value: string) {
 
 function hasNegativeSign(value: string) {
   return value.trim().startsWith("-")
-}
-
-function parseMoneyInput(value: string) {
-  const parsed = Number(value.replace(/[^\d]/g, ""))
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-function formatMoneyInput(value: string | number) {
-  const digits = String(value).replace(/[^\d]/g, "")
-  return digits ? new Intl.NumberFormat("vi-VN").format(Number(digits)) : ""
-}
-
-function parseDiscountInput(value: string, grossAmount: number) {
-  const raw = value.trim()
-  if (!raw) return { discountAmount: 0, discountPercent: 0, totalDiscount: 0, label: "Không giảm" }
-
-  if (raw.includes("%")) {
-    const percent = Number(raw.replace("%", "").replace(",", ".").replace(/[^\d.-]/g, "").trim())
-    const discountPercent = Number.isFinite(percent) ? Math.min(Math.max(percent, 0), 100) : 0
-    const totalDiscount = grossAmount * discountPercent / 100
-    return { discountAmount: 0, discountPercent, totalDiscount, label: `Giảm ${discountPercent}% = ${formatCurrency(totalDiscount)}` }
-  }
-
-  const numericValue = parseMoneyInput(raw)
-  if (numericValue <= 100) {
-    const totalDiscount = grossAmount * numericValue / 100
-    return { discountAmount: 0, discountPercent: numericValue, totalDiscount, label: `Giảm ${numericValue}% = ${formatCurrency(totalDiscount)}` }
-  }
-
-  const discountAmount = parseMoneyInput(raw)
-  return { discountAmount, discountPercent: 0, totalDiscount: discountAmount, label: `Giảm ${formatCurrency(discountAmount)}` }
-}
-
-function parseDiscountInputs(values: string[], grossAmount: number) {
-  const parsedItems = values.map((value) => parseDiscountInput(value, grossAmount))
-  const discountAmount = parsedItems.reduce((total, item) => total + item.discountAmount, 0)
-  const discountPercent = Math.min(100, parsedItems.reduce((total, item) => total + item.discountPercent, 0))
-  const percentDiscount = grossAmount * discountPercent / 100
-  const totalDiscount = discountAmount + percentDiscount
-  const labelParts = []
-
-  if (discountPercent > 0) labelParts.push(`${discountPercent}%`)
-  if (discountAmount > 0) labelParts.push(`${formatMoneyInput(Math.round(discountAmount))}đ`)
-
-  return {
-    discountAmount,
-    discountPercent,
-    totalDiscount,
-    label: labelParts.length ? `Giảm ${labelParts.join(" + ")} = ${formatCurrency(totalDiscount)}` : "Không giảm"
-  }
-}
-
-function formatDiscountInput(value: string) {
-  const raw = value.trim()
-  if (!raw) return ""
-  const numericValue = parseMoneyInput(raw)
-
-  if (raw.includes("%") || numericValue <= 100) {
-    return `${Math.min(Math.max(numericValue, 0), 100)}%`
-  }
-
-  return `${formatMoneyInput(numericValue)}đ`
-}
-
-function moneySuggestions(value: string) {
-  const digits = value.replace(/[^\d]/g, "")
-  if (!digits || digits.length > 3) return []
-
-  const base = Number(digits)
-  if (!Number.isFinite(base) || base <= 0) return []
-
-  return [base * 10000, base * 100000]
 }
 
 export function StudentDetailClient({ studentId }: { studentId: string }) {
