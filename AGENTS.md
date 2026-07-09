@@ -378,7 +378,7 @@ Use `templates/handoff-summary.md` when context is high or work spans sessions.
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **kidseedshub** (4331 symbols, 8188 relationships, 261 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **kidseedshub** (4337 symbols, 8196 relationships, 261 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
