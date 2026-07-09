@@ -1,10 +1,26 @@
+import { CreditCard } from "lucide-react"
 import { DialogShell } from "@/components/shared/dialog-shell"
-import type { LearningDetailTarget } from "./student-detail-utils"
-import { LearningMetric } from "./student-detail-presentational"
+import { paymentMethodLabels, type PaymentMethodKey } from "@/lib/contracts/finance"
+import { getBillingPeriodForMonth, type LearningDetailTarget, type ReceiptDraftLine, type ReceiptExtraDraftLine } from "./student-detail-utils"
+import { InfoPill, LearningMetric } from "./student-detail-presentational"
 
 type FormatDate = (value: string) => string
 type FormatCurrency = (value: number) => string
 type FormatWeekday = (weekday: number) => string
+
+type ReceiptLineSummary = {
+  line: ReceiptDraftLine
+  course?: { courseName: string }
+  billableSessions: number
+  amount: number
+}
+
+type ReceiptExtraLineSummary = {
+  line: ReceiptExtraDraftLine
+  quantity: number
+  unitPrice: number
+  amount: number
+}
 
 export function ConfirmDialog({
   open,
@@ -29,6 +45,118 @@ export function ConfirmDialog({
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="glass-button-secondary px-4 py-3 text-sm font-semibold">Hủy</button>
         <button type="button" onClick={onConfirm} className="glass-button-primary px-4 py-3 text-sm font-semibold">{confirmLabel}</button>
+      </div>
+    </DialogShell>
+  )
+}
+
+export function ReceiptPaymentConfirmDialog({
+  activeReceiptBillingMonth,
+  actualReceiptAmount,
+  actualReceiptPaymentAmount,
+  coursePayableAmount,
+  extraPayableAmount,
+  formatCurrency,
+  isOpen,
+  isReceiptMonthlyBilling,
+  isSubmittingReceipt,
+  onClose,
+  onConfirm,
+  receiptExtraLineSummaries,
+  receiptLineSummaries,
+  receiptMethod,
+  receiptNote,
+  receiptValidationErrors,
+  walletBalance,
+  walletCreditAmount
+}: {
+  activeReceiptBillingMonth: string
+  actualReceiptAmount: number
+  actualReceiptPaymentAmount: number
+  coursePayableAmount: number
+  extraPayableAmount: number
+  formatCurrency: FormatCurrency
+  isOpen: boolean
+  isReceiptMonthlyBilling: boolean
+  isSubmittingReceipt: boolean
+  onClose: () => void
+  onConfirm: () => void
+  receiptExtraLineSummaries: ReceiptExtraLineSummary[]
+  receiptLineSummaries: ReceiptLineSummary[]
+  receiptMethod: PaymentMethodKey
+  receiptNote: string
+  receiptValidationErrors: string[]
+  walletBalance: number
+  walletCreditAmount: number
+}) {
+  if (!isOpen) return null
+
+  const billingPeriod = getBillingPeriodForMonth(activeReceiptBillingMonth)
+
+  return (
+    <DialogShell
+      eyebrow="Preview phiếu thu"
+      title="Xác nhận đóng tiền"
+      description="Kiểm tra học phí khóa, khoản thu riêng, credit và thực thu trước khi lưu phiếu."
+      onClose={onClose}
+      closeLabel="Đóng xác nhận đóng tiền"
+      size="lg"
+      bodyClassName="p-0"
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="glass-button-secondary px-4 py-3 text-sm font-semibold">Hủy</button>
+          <button
+            type="button"
+            disabled={isSubmittingReceipt || receiptValidationErrors.length > 0}
+            onClick={onConfirm}
+            className="glass-button-primary inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <CreditCard className="h-4 w-4" />
+            {isSubmittingReceipt ? "Đang lưu phiếu" : "Lưu phiếu thu"}
+          </button>
+        </div>
+      }
+    >
+      <div className="content-border space-y-4 p-5">
+        <div className="grid gap-3 md:grid-cols-5">
+          <InfoPill label="Cách thu" value={isReceiptMonthlyBilling ? billingPeriod.label.replace("Học phí ", "") : "Theo khóa"} />
+          <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
+          <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
+          <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
+          <InfoPill label="Thực thu" value={formatCurrency(actualReceiptPaymentAmount)} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
+            <p className="text-sm font-semibold text-brand-ink">Học phí khóa</p>
+            <div className="mt-3 space-y-2 text-sm text-stone-600">
+              {receiptLineSummaries.map((summary) => (
+                <div key={summary.line.enrollmentId} className="flex justify-between gap-3">
+                  <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi{isReceiptMonthlyBilling ? ` · ${billingPeriod.label}` : ""}</span>
+                  <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
+            <p className="text-sm font-semibold text-brand-ink">Cần thu riêng</p>
+            <div className="mt-3 space-y-2 text-sm text-stone-600">
+              {receiptExtraLineSummaries.length ? receiptExtraLineSummaries.map((summary) => (
+                <div key={summary.line.id} className="flex justify-between gap-3">
+                  <span>{summary.line.description} · {summary.quantity} x {formatCurrency(summary.unitPrice)}</span>
+                  <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
+                </div>
+              )) : <p className="text-xs font-semibold text-stone-500">Không có khoản thu riêng.</p>}
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-600">
+          <div className="grid gap-2 md:grid-cols-2">
+            <p>Phương thức: <strong className="text-brand-ink">{paymentMethodLabels[receiptMethod]}</strong></p>
+            <p>Tổng trước credit: <strong className="text-brand-ink">{formatCurrency(actualReceiptAmount)}</strong></p>
+            <p>Credit còn lại sau phiếu: <strong className="text-brand-ink">{formatCurrency(Math.max(0, walletBalance - walletCreditAmount))}</strong></p>
+            <p>Ghi chú: <strong className="text-brand-ink">{receiptNote.trim() || "Không có"}</strong></p>
+          </div>
+        </div>
       </div>
     </DialogShell>
   )

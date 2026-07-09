@@ -4,13 +4,13 @@ import { ArrowLeft, BookOpenCheck, CreditCard, Pencil, Plus, Printer, Repeat2, S
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
-import { DialogFormShell, DialogShell } from "@/components/shared/dialog-shell"
+import { DialogFormShell } from "@/components/shared/dialog-shell"
 import type { ClassPhotoListItem } from "@/lib/contracts/classes"
 import type { ContactResultKey } from "@/lib/contracts/crm"
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
 import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
-import { paymentMethodLabels, type PaymentMethodKey, type ReceiptListItem } from "@/lib/contracts/finance"
+import type { PaymentMethodKey, ReceiptListItem } from "@/lib/contracts/finance"
 import type { MakeupEntitlementItem } from "@/lib/contracts/makeup-entitlements"
 import { studentStatusLabels, type ParentAccountInfo, type StudentContactLogItem, type StudentDetail, type StudentStatusKey, type StudentTaskItem } from "@/lib/contracts/students"
 import type { StudentWalletSummary } from "@/lib/contracts/student-wallet"
@@ -49,7 +49,7 @@ import {
   InfoPill,
   SectionHeader
 } from "./student-detail-presentational"
-import { ConfirmDialog, LearningDetailDialog } from "./student-detail-dialogs"
+import { ConfirmDialog, LearningDetailDialog, ReceiptPaymentConfirmDialog } from "./student-detail-dialogs"
 import {
   EnrollmentTransferHistory,
   MakeupEntitlementCard,
@@ -1565,73 +1565,26 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
         onConfirm={confirmReceiptAmountOverride}
       />
 
-      {isConfirmingPayment ? (
-        <DialogShell
-          eyebrow="Preview phiếu thu"
-          title="Xác nhận đóng tiền"
-          description="Kiểm tra học phí khóa, khoản thu riêng, credit và thực thu trước khi lưu phiếu."
-          onClose={() => setIsConfirmingPayment(false)}
-          closeLabel="Đóng xác nhận đóng tiền"
-          size="lg"
-          bodyClassName="p-0"
-          footer={
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setIsConfirmingPayment(false)} className="glass-button-secondary px-4 py-3 text-sm font-semibold">Hủy</button>
-              <button
-                type="button"
-                disabled={isSubmittingReceipt || receiptValidationErrors.length > 0}
-                onClick={() => void confirmReceiptPayment()}
-                className="glass-button-primary inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <CreditCard className="h-4 w-4" />
-                {isSubmittingReceipt ? "Đang lưu phiếu" : "Lưu phiếu thu"}
-              </button>
-            </div>
-          }
-        >
-          <div className="content-border space-y-4 p-5">
-	            <div className="grid gap-3 md:grid-cols-5">
-	              <InfoPill label="Cách thu" value={isReceiptMonthlyBilling ? getBillingPeriodForMonth(activeReceiptBillingMonth).label.replace("Học phí ", "") : "Theo khóa"} />
-	              <InfoPill label="Học phí khóa" value={formatCurrency(coursePayableAmount)} />
-	              <InfoPill label="Cần thu riêng" value={formatCurrency(extraPayableAmount)} />
-	              <InfoPill label="Credit dùng" value={formatCurrency(walletCreditAmount)} />
-	              <InfoPill label="Thực thu" value={formatCurrency(actualReceiptPaymentAmount)} />
-            </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
-                <p className="text-sm font-semibold text-brand-ink">Học phí khóa</p>
-                <div className="mt-3 space-y-2 text-sm text-stone-600">
-                  {receiptLineSummaries.map((summary) => (
-                    <div key={summary.line.enrollmentId} className="flex justify-between gap-3">
-	                      <span>{summary.course?.courseName ?? "Khóa đã đăng ký"} · {summary.billableSessions} buổi{isReceiptMonthlyBilling ? ` · ${getBillingPeriodForMonth(activeReceiptBillingMonth).label}` : ""}</span>
-                      <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4">
-                <p className="text-sm font-semibold text-brand-ink">Cần thu riêng</p>
-                <div className="mt-3 space-y-2 text-sm text-stone-600">
-                  {receiptExtraLineSummaries.length ? receiptExtraLineSummaries.map((summary) => (
-                    <div key={summary.line.id} className="flex justify-between gap-3">
-                      <span>{summary.line.description} · {summary.quantity} x {formatCurrency(summary.unitPrice)}</span>
-                      <strong className="text-brand-ink">{formatCurrency(summary.amount)}</strong>
-                    </div>
-                  )) : <p className="text-xs font-semibold text-stone-500">Không có khoản thu riêng.</p>}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-brand-red/10 bg-white/45 p-4 text-sm text-stone-600">
-              <div className="grid gap-2 md:grid-cols-2">
-                <p>Phương thức: <strong className="text-brand-ink">{paymentMethodLabels[receiptMethod]}</strong></p>
-                <p>Tổng trước credit: <strong className="text-brand-ink">{formatCurrency(actualReceiptAmount)}</strong></p>
-                <p>Credit còn lại sau phiếu: <strong className="text-brand-ink">{formatCurrency(Math.max(0, walletBalance - walletCreditAmount))}</strong></p>
-                <p>Ghi chú: <strong className="text-brand-ink">{receiptNote.trim() || "Không có"}</strong></p>
-              </div>
-            </div>
-          </div>
-        </DialogShell>
-      ) : null}
+      <ReceiptPaymentConfirmDialog
+        activeReceiptBillingMonth={activeReceiptBillingMonth}
+        actualReceiptAmount={actualReceiptAmount}
+        actualReceiptPaymentAmount={actualReceiptPaymentAmount}
+        coursePayableAmount={coursePayableAmount}
+        extraPayableAmount={extraPayableAmount}
+        formatCurrency={formatCurrency}
+        isOpen={isConfirmingPayment}
+        isReceiptMonthlyBilling={isReceiptMonthlyBilling}
+        isSubmittingReceipt={isSubmittingReceipt}
+        onClose={() => setIsConfirmingPayment(false)}
+        onConfirm={() => void confirmReceiptPayment()}
+        receiptExtraLineSummaries={receiptExtraLineSummaries}
+        receiptLineSummaries={receiptLineSummaries}
+        receiptMethod={receiptMethod}
+        receiptNote={receiptNote}
+        receiptValidationErrors={receiptValidationErrors}
+        walletBalance={walletBalance}
+        walletCreditAmount={walletCreditAmount}
+      />
 
       <ConfirmDialog
         open={isConfirmingEnrollmentDelete}
