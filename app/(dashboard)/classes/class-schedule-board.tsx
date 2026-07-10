@@ -1,41 +1,17 @@
 "use client"
 
-import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, FormEvent, useEffect, useRef, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
-import { subjectLabels } from "@/lib/contracts/assessment"
 import { ClassScheduleToolbar } from "./class-schedule-toolbar"
 import { ClassSetupWorkspace } from "./class-setup-workspace"
 import { ManagedClassDialog } from "./managed-class-dialog"
 import { MonthCalendarView, WeekCalendarView } from "./class-calendar-views"
 import { ScheduleEventDialog } from "./schedule-event-dialog"
 import { SessionDetailDialog } from "./session-detail-dialog"
-import {
-  dialogBodyClassName,
-  dialogPanelClassName,
-  emptyClassForm,
-  emptyEventForm,
-  type ClassFormState,
-  type ClassPatchBody,
-  type ClassStatusFilter,
-  type ClassSubjectFilter,
-  type EventFormState,
-  type SetupPanel
-} from "./class-schedule-state"
-import {
-  defaultMonth,
-  getMonthCells,
-  getWeekCells,
-  isAcceptedPhotoFile,
-  startOfWeek,
-  today,
-  toDateKey,
-  uniqueById,
-  uniqueMonthKeys,
-} from "./class-schedule-utils"
-import {
-  classPhotoUploadMaxBytes,
-  type ClassPhotoListItem
-} from "@/lib/contracts/classes"
+import { useClassScheduleCollections } from "./use-class-schedule-collections"
+import { dialogBodyClassName, dialogPanelClassName, emptyClassForm, emptyEventForm, type ClassFormState, type ClassPatchBody, type ClassStatusFilter, type ClassSubjectFilter, type EventFormState, type SetupPanel } from "./class-schedule-state"
+import { defaultMonth, isAcceptedPhotoFile, startOfWeek, today, toDateKey, uniqueById } from "./class-schedule-utils"
+import { classPhotoUploadMaxBytes, type ClassPhotoListItem } from "@/lib/contracts/classes"
 import type { ClassCalendarSessionItem, ClassListItem, ClassStudentItem, CourseListItem } from "@/lib/contracts/courses"
 import type { ScheduleEventItem } from "@/lib/contracts/schedule-events"
 import type { StudentListItem } from "@/lib/contracts/students"
@@ -80,80 +56,16 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
   const [photoCaptionDrafts, setPhotoCaptionDrafts] = useState<Record<string, string>>({})
   const sessionPhotoPreviewUrlsRef = useRef<string[]>([])
 
-  const activeCourses = useMemo(() => courses.filter((course) => course.isActive), [courses])
-  const teacherOptions = useMemo(() => users.filter((user) => user.role === "TEACHER" && user.isActive), [users])
   const selectedYear = Number(month.slice(0, 4))
-  const selectedClass = useMemo(
-    () => (selectedSession ? classes.find((klass) => klass.id === selectedSession.classId) : undefined),
-    [classes, selectedSession]
-  )
-  const selectedClassStudents = selectedClass?.students.filter((student) => student.isActive) ?? []
   const selectedSessionPhotos = selectedSession ? sessionPhotosById[selectedSession.id] ?? [] : []
-  const selectedManagedClass = useMemo(
-    () => classes.find((klass) => klass.id === selectedManagedClassId),
-    [classes, selectedManagedClassId]
-  )
-  const filteredManagedClasses = useMemo(() => {
-    const query = classSearch.trim().toLowerCase()
-
-    return classes.filter((klass) => {
-      const matchesSearch = !query || [klass.code, klass.name, klass.courseName, klass.teacherName, subjectLabels[klass.subject]]
-        .filter((value): value is string => Boolean(value))
-        .some((value) => value.toLowerCase().includes(query))
-      const matchesSubject = classSubjectFilter === "ALL" || klass.subject === classSubjectFilter
-      const matchesStatus = classStatusFilter === "ALL" || (classStatusFilter === "ACTIVE" ? klass.isActive : !klass.isActive)
-
-      return matchesSearch && matchesSubject && matchesStatus
-    })
-  }, [classSearch, classStatusFilter, classSubjectFilter, classes])
-  const selectedManagedClassStudents = selectedManagedClass?.students.filter((student) => student.isActive) ?? []
-  const availableStudentsForSelectedClass = useMemo(
-    () =>
-      students.filter((student) => {
-        if (!selectedClass) return false
-        return student.courses.some((course) => course.courseSubject === selectedClass.subject && course.isActive)
-      }),
-    [selectedClass, students]
-  )
-  const availableStudentsForManagedClass = useMemo(
-    () =>
-      students.filter((student) => {
-        if (!selectedManagedClass) return false
-        return student.courses.some((course) => course.courseSubject === selectedManagedClass.subject && course.isActive)
-      }),
-    [selectedManagedClass, students]
-  )
-  const monthCells = useMemo(() => getMonthCells(month), [month])
-  const weekCells = useMemo(() => getWeekCells(weekStart), [weekStart])
-  const calendarCells = view === "week" ? weekCells : monthCells
-  const calendarFetchMonths = useMemo(
-    () => (view === "setup" ? [month] : uniqueMonthKeys(calendarCells)),
-    [calendarCells, month, view]
-  )
-  const blockedDateKeys = useMemo(
-    () => new Set(scheduleEvents.filter((event) => event.affectsScheduling).map((event) => event.date.slice(0, 10))),
-    [scheduleEvents]
-  )
-  const sessionsByDate = useMemo(
-    () =>
-      sessions.reduce<Record<string, ClassCalendarSessionItem[]>>((grouped, session) => {
-        const key = session.date.slice(0, 10)
-        if (blockedDateKeys.has(key)) return grouped
-
-        grouped[key] = [...(grouped[key] ?? []), session].sort((first, second) => first.startTime.localeCompare(second.startTime))
-        return grouped
-      }, {}),
-    [blockedDateKeys, sessions]
-  )
-  const eventsByDate = useMemo(
-    () =>
-      scheduleEvents.reduce<Record<string, ScheduleEventItem[]>>((grouped, event) => {
-        const key = event.date.slice(0, 10)
-        grouped[key] = [...(grouped[key] ?? []), event]
-        return grouped
-      }, {}),
-    [scheduleEvents]
-  )
+  const {
+    activeCourses, teacherOptions, selectedClass, selectedClassStudents, selectedManagedClass,
+    filteredManagedClasses, selectedManagedClassStudents, availableStudentsForSelectedClass, availableStudentsForManagedClass,
+    monthCells, weekCells, calendarCells, calendarFetchMonths, sessionsByDate, eventsByDate
+  } = useClassScheduleCollections({
+    courses, users, classes, students, sessions, scheduleEvents, selectedSession, selectedManagedClassId,
+    classSearch, classSubjectFilter, classStatusFilter, month, weekStart, view
+  })
 
   async function loadSchedule() {
     setIsLoading(true)
