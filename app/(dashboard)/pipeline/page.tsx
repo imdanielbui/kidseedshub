@@ -1,11 +1,11 @@
 "use client"
 
-import { Archive, ArrowDownAZ, CheckSquare, Clock, Eye, GripVertical, LayoutGrid, ListFilter, MessageSquarePlus, Pin, Plus, Rows3, Save, Search, SlidersHorizontal, UserRound, X } from "lucide-react"
+import { CheckSquare, Clock, MessageSquarePlus, Save, UserRound } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { DialogShell } from "@/components/shared/dialog-shell"
-import { LeadFormPanel, emptyLeadForm, type LeadFormState } from "@/components/shared/lead-form-panel"
+import { emptyLeadForm, type LeadFormState } from "@/components/shared/lead-form-panel"
 import {
   contactResultLabels,
   pipelineStages,
@@ -17,183 +17,31 @@ import {
   type PipelineStageKey
 } from "@/lib/contracts/crm"
 import { genderLabels, studentStatusLabels, type StudentDetail, type StudentGenderKey } from "@/lib/contracts/students"
-
-type ViewMode = "database" | "kanban"
-type PanelMode = "lead" | "filters" | "fields" | null
-type SortKey = "updatedAt" | "createdAt" | "stageChangedAt" | "daysInStage" | "parentName" | "studentName" | "code"
-type SortDirection = "asc" | "desc"
-type StageFilter = "ALL" | PipelineStageKey
-
-type ColumnKey =
-  | "code"
-  | "parentName"
-  | "studentName"
-  | "phone"
-  | "address"
-  | "gender"
-  | "stage"
-  | "classNames"
-  | "classProgress"
-  | "leadSource"
-  | "saleOwnerName"
-  | "createdByName"
-  | "createdAt"
-  | "stageChangedAt"
-  | "daysInStage"
-
-const columnLabels: Record<ColumnKey, string> = {
-  code: "Mã HS",
-  parentName: "Phụ huynh",
-  studentName: "Học viên",
-  phone: "SĐT",
-  address: "Địa chỉ",
-  gender: "Giới tính",
-  stage: "Trạng thái",
-  classNames: "Lớp học",
-  classProgress: "Tiến độ lớp",
-  leadSource: "Nguồn",
-  saleOwnerName: "Sale bởi",
-  createdByName: "Tạo bởi",
-  createdAt: "Ngày tạo",
-  stageChangedAt: "Đổi bước",
-  daysInStage: "Ngày ở bước này"
-}
-
-const defaultColumnOrder: ColumnKey[] = [
-  "code",
-  "parentName",
-  "studentName",
-  "phone",
-  "address",
-  "stage",
-  "daysInStage",
-  "classNames",
-  "classProgress",
-  "leadSource",
-  "saleOwnerName",
-  "createdByName",
-  "gender",
-  "createdAt",
-  "stageChangedAt"
-]
-
-const defaultPinnedColumns: ColumnKey[] = ["code", "studentName"]
-
-const pinnedColumnWidths: Partial<Record<ColumnKey, number>> = {
-  code: 104,
-  studentName: 220,
-  parentName: 220,
-  phone: 160,
-  address: 220,
-  stage: 160,
-  daysInStage: 170
-}
-
-type ContactForm = {
-  result: ContactResultKey
-  content: string
-}
-
-type StudentEditForm = {
-  studentName: string
-  parentName: string
-  parentPhone: string
-  parentEmail: string
-  address: string
-  gender: StudentGenderKey
-  leadSource: string
-  saleOwnerId: string
-  leadNote: string
-  healthNote: string
-}
-
-type TaskForm = {
-  title: string
-  dueDate: string
-  note: string
-}
-
-const emptyContactForm: ContactForm = {
-  result: "INTERESTED",
-  content: ""
-}
-
-const emptyStudentEditForm: StudentEditForm = {
-  studentName: "",
-  parentName: "",
-  parentPhone: "",
-  parentEmail: "",
-  address: "",
-  gender: "UNKNOWN",
-  leadSource: "",
-  saleOwnerId: "",
-  leadNote: "",
-  healthNote: ""
-}
-
-const emptyPipeline: PipelineResponse = {
-  items: [],
-  total: 0,
-  page: 1,
-  limit: 25,
-  stageCounts: { LEAD: 0, TRIAL: 0, EVALUATION: 0, CONVERTED: 0, RETENTION: 0, NURTURE: 0 },
-  staleCounts: { LEAD: 0, TRIAL: 0, EVALUATION: 0, CONVERTED: 0, RETENTION: 0, NURTURE: 0 }
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value))
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value))
-}
-
-function toLocalDateInputValue(date = new Date()) {
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-  return localDate.toISOString().slice(0, 10)
-}
-
-function createEmptyTaskForm(): TaskForm {
-  return {
-    title: "",
-    dueDate: toLocalDateInputValue(),
-    note: ""
-  }
-}
-
-function toIsoFromLocalInput(value: string) {
-  if (!value) return ""
-
-  const normalizedValue = value.includes("T") ? value : `${value}T17:00`
-  const date = new Date(normalizedValue)
-
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString()
-}
-
-function toStudentEditForm(student: StudentDetail, saleOwnerId = ""): StudentEditForm {
-  return {
-    studentName: student.name,
-    parentName: student.parentName,
-    parentPhone: student.parentPhone,
-    parentEmail: student.parentEmail ?? "",
-    address: student.address ?? "",
-    gender: student.gender,
-    leadSource: student.leadSource ?? "",
-    saleOwnerId,
-    leadNote: student.leadNote ?? "",
-    healthNote: student.healthNote ?? ""
-  }
-}
-
-function nullableTrim(value: string) {
-  const trimmed = value.trim()
-  return trimmed || null
-}
+import { PipelineControls } from "./pipeline-controls"
+import { PipelineKanbanBoard } from "./pipeline-kanban"
+import {
+  createEmptyTaskForm,
+  defaultColumnOrder,
+  defaultPinnedColumns,
+  emptyContactForm,
+  emptyPipeline,
+  emptyStudentEditForm,
+  formatDateTime,
+  nullableTrim,
+  pinnedColumnWidths,
+  toIsoFromLocalInput,
+  toStudentEditForm,
+  type ColumnKey,
+  type ContactForm,
+  type PanelMode,
+  type SortDirection,
+  type SortKey,
+  type StageFilter,
+  type StudentEditForm,
+  type TaskForm,
+  type ViewMode
+} from "./pipeline-shared"
+import { PipelineDatabaseTable } from "./pipeline-table"
 
 export default function PipelinePage() {
   const [pipeline, setPipeline] = useState<PipelineResponse>(emptyPipeline)
@@ -642,440 +490,86 @@ export default function PipelinePage() {
     })
   }
 
-  function pinnedColumnStyle(column: ColumnKey): CSSProperties | undefined {
-    if (!pinnedColumns.has(column)) return undefined
-    const width = pinnedColumnWidths[column] ?? 180
-
-    return {
-      left: pinnedColumnOffsets.get(column) ?? 0,
-      minWidth: width,
-      width
-    }
-  }
-
-  function pinnedColumnClass(column: ColumnKey, surface: "head" | "body") {
-    if (!pinnedColumns.has(column)) return ""
-    const bgClass = surface === "head" ? "bg-[#f5eeeb]" : "bg-[#fffaf7]"
-    const zClass = surface === "head" ? "z-20" : "z-10"
-    return `sticky ${zClass} ${bgClass} border-r border-brand-red/10 shadow-[8px_0_18px_rgba(88,52,42,0.08)]`
-  }
-
-  async function copyStudentCode(event: MouseEvent<HTMLButtonElement>, code: string) {
-    event.stopPropagation()
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code)
-      } else {
-        const textArea = document.createElement("textarea")
-        textArea.value = code
-        textArea.style.position = "fixed"
-        textArea.style.opacity = "0"
-        document.body.appendChild(textArea)
-        textArea.select()
-        document.execCommand("copy")
-        document.body.removeChild(textArea)
-      }
-
-      setCopiedStudentCode(code)
-      window.setTimeout(() => {
-        setCopiedStudentCode((current) => (current === code ? null : current))
-      }, 1200)
-    } catch {
-      setError("Không copy được mã học viên.")
-    }
-  }
-
-  function renderCell(card: PipelineCard, column: ColumnKey) {
-    if (column === "code") {
-      const isCopied = copiedStudentCode === card.code
-
-      return (
-        <button
-          type="button"
-          className={`-mx-1 inline-flex max-w-full rounded-full px-1.5 py-1 text-left text-xs font-semibold transition ${isCopied ? "bg-brand-red text-white" : "text-brand-red hover:bg-brand-red/10"}`}
-          title={isCopied ? "Đã copy mã học viên" : "Copy mã học viên"}
-          aria-label={`Copy mã học viên ${card.code}`}
-          onClick={(event) => void copyStudentCode(event, card.code)}
-        >
-          <span className="truncate">{card.code}</span>
-        </button>
-      )
-    }
-
-    if (column === "stage") {
-      return (
-        <select
-          className="w-full min-w-32 rounded-xl border border-brand-red/10 bg-white/60 px-3 py-2 text-xs font-semibold text-brand-ink outline-none"
-          value={card.stage}
-          disabled={savingCardId === card.id}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(event) => moveCard(card, event.target.value as PipelineStageKey)}
-        >
-          {pipelineStages.map((stage) => (
-            <option key={stage.key} value={stage.key}>
-              {stage.title}
-            </option>
-          ))}
-        </select>
-      )
-    }
-
-    if (column === "gender") return genderLabels[card.gender]
-    if (column === "classNames") return card.classNames.length ? card.classNames.join(", ") : "Chưa xếp lớp"
-    if (column === "classProgress") return card.classProgress.length ? card.classProgress.map((progress) => progress.label).join(", ") : "Chưa có lịch"
-    if (column === "createdAt" || column === "stageChangedAt") return formatDate(card[column])
-    if (column === "daysInStage") return card.isStale ? `${card.daysInStage} ngày · quá hạn` : `${card.daysInStage} ngày`
-
-    return card[column] || "-"
-  }
-
   return (
     <main className="flex h-[calc(100vh-8.25rem)] min-h-0 flex-col gap-3 overflow-hidden md:h-[calc(100vh-2.75rem)]">
-      <section className="neu-card shrink-0 rounded-3xl p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex min-w-56 flex-1 items-center gap-2 rounded-full border border-brand-red/10 bg-white/50 px-4 py-2 text-sm text-stone-600 xl:max-w-md">
-            <Search className="h-4 w-4" />
-            <input
-              className="w-full bg-transparent outline-none"
-              placeholder="Tìm mã HS, phụ huynh, SĐT, địa chỉ..."
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
-                setPage(1)
-              }}
-            />
-          </label>
-          <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "database" ? "text-brand-red" : ""}`} onClick={() => setViewMode("database")}>
-            <Rows3 className="h-4 w-4" />
-            Database
-          </button>
-          <button className={`glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold ${viewMode === "kanban" ? "text-brand-red" : ""}`} onClick={() => setViewMode("kanban")}>
-            <LayoutGrid className="h-4 w-4" />
-            Kanban
-          </button>
-          <button className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("lead")}>
-            <Plus className="h-4 w-4" />
-            Lead mới
-          </button>
-          <button className="glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("filters")}>
-            <ListFilter className="h-4 w-4" />
-            Bộ lọc
-          </button>
-          <button className="glass-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => setPanelMode("fields")}>
-            <SlidersHorizontal className="h-4 w-4" />
-            Trường
-          </button>
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600">
-          <span className="rounded-full border border-brand-red/10 bg-white/40 px-3 py-1 font-semibold text-brand-red">{pipeline.total} lead</span>
-          {visibleStageChips.map((stage) => (
-            <button
-              key={stage.key}
-              className={`rounded-full border px-3 py-1 font-semibold ${
-                stageFilter === stage.key ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/40 text-stone-600"
-              }`}
-              onClick={() => setStage(stage.key)}
-            >
-              {stage.title} {pipeline.stageCounts[stage.key] ?? 0}
-              {pipeline.staleCounts[stage.key] ? ` · ${pipeline.staleCounts[stage.key]} quá hạn` : ""}
-            </button>
-          ))}
-          {stageFilter !== "ALL" ? (
-            <button className="rounded-full border border-brand-red/10 bg-white/40 px-3 py-1 font-semibold text-stone-600" onClick={() => setStage("ALL")}>
-              Xóa lọc trạng thái
-            </button>
-          ) : null}
-        </div>
-      </section>
-
-      {panelMode ? (
-        <section className="neu-card shrink-0 rounded-3xl p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-brand-ink">
-              {panelMode === "lead" ? "Tạo lead mới" : panelMode === "filters" ? "Bộ lọc pipeline" : "Ẩn/hiện và sắp xếp trường"}
-            </h2>
-            <button className="glass-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold" onClick={() => setPanelMode(null)}>
-              <X className="h-4 w-4" />
-              Đóng
-            </button>
-          </div>
-
-          {panelMode === "lead" ? (
-            <LeadFormPanel value={form} onChange={setForm} options={options} isSubmitting={isCreating} onSubmit={createLead} />
-          ) : null}
-
-          {panelMode === "filters" ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Trạng thái
-                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={stageFilter} onChange={(event) => setStage(event.target.value as StageFilter)}>
-                  <option value="ALL">Tất cả trạng thái</option>
-                  {pipelineStages.map((stage) => (
-                    <option key={stage.key} value={stage.key}>
-                      {stage.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Sale
-                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={saleFilter} onChange={(event) => { setSaleFilter(event.target.value); setPage(1) }}>
-                  <option value="ALL">Tất cả sale</option>
-                  {options.sales.map((sale) => (
-                    <option key={sale.id} value={sale.id}>
-                      {sale.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Lớp
-                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={classFilter} onChange={(event) => { setClassFilter(event.target.value); setPage(1) }}>
-                  <option value="ALL">Tất cả lớp</option>
-                  {options.classes.map((klass) => (
-                    <option key={klass.id} value={klass.id}>
-                      {klass.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Tạo từ ngày
-                <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="date" value={createdFrom} onChange={(event) => { setCreatedFrom(event.target.value); setPage(1) }} />
-              </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Đến ngày
-                <input className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" type="date" value={createdTo} onChange={(event) => { setCreatedTo(event.target.value); setPage(1) }} />
-              </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Sắp xếp
-                <select className="mt-2 w-full rounded-2xl border border-brand-red/10 bg-white px-3 py-2 text-sm normal-case tracking-normal text-brand-ink outline-none" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setPage(1) }}>
-                  <option value="updatedAt">Cập nhật</option>
-                  <option value="createdAt">Ngày tạo</option>
-                  <option value="stageChangedAt">Đổi bước</option>
-                  <option value="daysInStage">Ngày ở bước</option>
-                  <option value="code">Mã HS</option>
-                  <option value="parentName">Phụ huynh</option>
-                  <option value="studentName">Học viên</option>
-                </select>
-              </label>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
-                <button className="glass-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" onClick={() => { setSortDirection((current) => (current === "asc" ? "desc" : "asc")); setPage(1) }}>
-                  <ArrowDownAZ className={`h-4 w-4 ${sortDirection === "desc" ? "rotate-180" : ""}`} />
-                  {sortDirection === "asc" ? "Tăng dần" : "Giảm dần"}
-                </button>
-                <button className="glass-button-secondary px-4 py-2 text-sm font-semibold" onClick={clearFilters}>
-                  Xóa lọc
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {panelMode === "fields" ? (
-            <div className="flex flex-wrap gap-2">
-              {columnOrder.map((column) => (
-                <div
-                  key={column}
-                  draggable
-                  onDragStart={() => setDraggingColumn(column)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => moveColumn(column)}
-                  className={`inline-flex items-center gap-1 rounded-full border p-1 text-xs font-semibold ${
-                    visibleColumns.has(column) ? "border-brand-red/20 bg-white text-brand-ink" : "border-stone-200 bg-white/35 text-stone-400"
-                  }`}
-                >
-                  <button type="button" className="inline-flex items-center gap-2 rounded-full px-2 py-1.5" onClick={() => toggleColumn(column)}>
-                    <GripVertical className="h-3.5 w-3.5" />
-                    <Eye className="h-3.5 w-3.5" />
-                    {columnLabels[column]}
-                  </button>
-                  <button
-                    type="button"
-                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${
-                      pinnedColumns.has(column) ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/60 text-stone-500"
-                    }`}
-                    aria-label={`Ghim ${columnLabels[column]}`}
-                    title={`Ghim ${columnLabels[column]}`}
-                    onClick={() => togglePinnedColumn(column)}
-                  >
-                    <Pin className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+      <PipelineControls
+        pipeline={pipeline}
+        options={options}
+        viewMode={viewMode}
+        panelMode={panelMode}
+        search={search}
+        stageFilter={stageFilter}
+        saleFilter={saleFilter}
+        classFilter={classFilter}
+        createdFrom={createdFrom}
+        createdTo={createdTo}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        visibleStageChips={visibleStageChips}
+        form={form}
+        isCreating={isCreating}
+        columnOrder={columnOrder}
+        visibleColumns={visibleColumns}
+        pinnedColumns={pinnedColumns}
+        setViewMode={setViewMode}
+        setPanelMode={setPanelMode}
+        setSearch={setSearch}
+        setPage={setPage}
+        setStage={setStage}
+        setSaleFilter={setSaleFilter}
+        setClassFilter={setClassFilter}
+        setCreatedFrom={setCreatedFrom}
+        setCreatedTo={setCreatedTo}
+        setSortKey={setSortKey}
+        setSortDirection={setSortDirection}
+        setForm={setForm}
+        createLead={createLead}
+        clearFilters={clearFilters}
+        setDraggingColumn={setDraggingColumn}
+        moveColumn={moveColumn}
+        toggleColumn={toggleColumn}
+        togglePinnedColumn={togglePinnedColumn}
+      />
 
       {error ? <p className="shrink-0 rounded-2xl border border-brand-red/15 bg-white/50 p-3 text-sm text-brand-red">{error}</p> : null}
 
       {viewMode === "database" ? (
-        <section className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-[#f5eeeb] text-xs uppercase tracking-wide text-stone-500">
-                <tr>
-                  {tableColumnOrder.map((column) => (
-                    <th key={column} className={`border-b border-brand-red/10 px-4 py-3 font-semibold ${pinnedColumnClass(column, "head")}`} style={pinnedColumnStyle(column)}>
-                      {columnLabels[column]}
-                    </th>
-                  ))}
-                  <th className="border-b border-brand-red/10 px-4 py-3 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td className="px-4 py-8 text-stone-500" colSpan={visibleColumnOrder.length + 1}>
-                      Đang tải pipeline...
-                    </td>
-                  </tr>
-                ) : pipeline.items.length ? (
-                  pipeline.items.map((card) => (
-                    <tr key={card.id} className="cursor-pointer border-b border-brand-red/10 transition-shadow hover:shadow-[0_8px_20px_rgba(165,36,39,0.08)]" onClick={() => void openStudentDialog(card.id)}>
-                      {tableColumnOrder.map((column) => (
-                        <td key={column} className={`max-w-64 truncate px-4 py-3 align-middle ${pinnedColumnClass(column, "body")} ${card.isStale && column === "daysInStage" ? "font-semibold text-brand-red" : "text-brand-ink"}`} style={pinnedColumnStyle(column)}>
-                          {renderCell(card, column)}
-                        </td>
-                      ))}
-                      <td className="px-4 py-3">
-                        {card.stage !== "NURTURE" ? (
-                          <button className="glass-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold" disabled={savingCardId === card.id} onClick={(event) => { event.stopPropagation(); void moveCard(card, "NURTURE") }}>
-                            <Archive className="h-3.5 w-3.5" />
-                            Nurture
-                          </button>
-                        ) : (
-                          <button className="glass-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold" disabled={savingCardId === card.id} onClick={(event) => { event.stopPropagation(); void moveCard(card, "LEAD") }}>
-                            Đưa về Lead
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td className="px-4 py-8 text-stone-500" colSpan={visibleColumnOrder.length + 1}>
-                      Không có lead phù hợp bộ lọc.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-brand-red/10 px-3 py-2 text-sm">
-            <div className="flex items-center gap-2 text-stone-600">
-              <span>
-                Trang {pipeline.page}/{totalPages}
-              </span>
-              <select className="rounded-full border border-brand-red/10 bg-white/50 px-3 py-1.5 text-sm outline-none" value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1) }}>
-                <option value={25}>25 dòng</option>
-                <option value={50}>50 dòng</option>
-                <option value={100}>100 dòng</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="glass-button-secondary px-3 py-1.5 text-xs font-semibold" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Trước</button>
-              <button className="glass-button-secondary px-3 py-1.5 text-xs font-semibold" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Sau</button>
-            </div>
-          </div>
-        </section>
+        <PipelineDatabaseTable
+          pipeline={pipeline}
+          isLoading={isLoading}
+          tableColumnOrder={tableColumnOrder}
+          visibleColumnOrder={visibleColumnOrder}
+          pinnedColumns={pinnedColumns}
+          pinnedColumnOffsets={pinnedColumnOffsets}
+          savingCardId={savingCardId}
+          copiedStudentCode={copiedStudentCode}
+          page={page}
+          limit={limit}
+          totalPages={totalPages}
+          setPage={setPage}
+          setLimit={setLimit}
+          setCopiedStudentCode={setCopiedStudentCode}
+          setError={setError}
+          openStudentDialog={openStudentDialog}
+          moveCard={moveCard}
+        />
       ) : (
-        <section className="flex min-h-0 flex-1 w-full items-start gap-3 overflow-x-auto pb-2">
-          {visibleKanbanStages.length ? visibleKanbanStages.map((stage) => {
-            const stageCards = cardsByStage[stage.key]
-            const shouldFillStage = stageCards.length >= 4 || (pipeline.stageCounts[stage.key] ?? 0) > stageCards.length
-
-            return (
-              <div
-                key={stage.key}
-                className={`neu-card min-w-[260px] flex-1 rounded-3xl transition-colors ${shouldFillStage ? "flex max-h-full min-h-0 self-stretch flex-col" : "self-start"} ${dropStage === stage.key ? "bg-white/45" : ""}`}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  setDropStage(stage.key)
-                }}
-                onDragLeave={() => setDropStage(null)}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  dropCardOnStage(stage.key)
-                }}
-              >
-                <div className="flex shrink-0 items-start justify-between gap-3 p-4">
-                  <div>
-                    <h2 className="font-semibold text-brand-ink">{stage.title}</h2>
-                    <p className="mt-1 text-xs text-stone-500">{stage.hint}</p>
-                  </div>
-                  <span className="rounded-full border border-brand-red/15 px-2 py-1 text-xs font-semibold text-brand-red">{pipeline.stageCounts[stage.key] ?? 0}</span>
-                </div>
-                <div className={`content-border space-y-3 overflow-auto p-3 ${shouldFillStage ? "min-h-0 flex-1" : "max-h-[52vh]"}`}>
-                  {stageCards.length ? (
-                    stageCards.map((card) => (
-                      <article
-                        key={card.id}
-                        draggable={savingCardId !== card.id}
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData("text/plain", card.id)
-                          setDraggingCardId(card.id)
-                        }}
-                        onDragEnd={() => {
-                          setDraggingCardId(null)
-                          setDropStage(null)
-                        }}
-                        onClick={() => void openStudentDialog(card.id)}
-                        className={`neu-list-item min-h-0 cursor-grab rounded-2xl p-3 active:cursor-grabbing ${draggingCardId === card.id ? "opacity-60" : ""}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 space-y-1">
-                            <p className="text-xs font-semibold text-brand-red">{card.code}</p>
-                            <p className="break-words text-sm font-semibold leading-snug text-brand-ink">{card.studentName}</p>
-                            <p className="break-words text-xs leading-snug text-stone-600">PH: {card.parentName}</p>
-                          </div>
-                          <span className={`shrink-0 text-xs font-semibold ${card.isStale ? "text-brand-red" : "text-stone-500"}`}>{card.daysInStage}d</span>
-                        </div>
-                        <div className="mt-3 grid gap-1.5 text-xs leading-snug text-stone-600">
-                          <p className="break-words">
-                            <span className="font-semibold text-stone-500">SĐT:</span> {card.phone}
-                          </p>
-                          {card.address ? (
-                            <p className="break-words">
-                              <span className="font-semibold text-stone-500">Địa chỉ:</span> {card.address}
-                            </p>
-                          ) : null}
-                          {card.leadSource || card.saleOwnerName ? (
-                            <div className="flex flex-wrap gap-1">
-                              {card.leadSource ? <span className="rounded-full border border-brand-red/10 bg-white/45 px-2 py-1 text-[11px] font-semibold text-stone-600">{card.leadSource}</span> : null}
-                              {card.saleOwnerName ? <span className="rounded-full border border-brand-red/10 bg-white/45 px-2 py-1 text-[11px] font-semibold text-stone-600">{card.saleOwnerName}</span> : null}
-                            </div>
-                          ) : null}
-                        </div>
-                        {card.classProgress.length ? (
-                          <div className="mt-3 flex flex-wrap gap-1">
-                            {card.classProgress.slice(0, 2).map((progress) => (
-                              <span key={progress.classId} className="rounded-full border border-brand-red/15 bg-white/45 px-2 py-1 text-[11px] font-semibold text-brand-red">
-                                {progress.label}
-                              </span>
-                            ))}
-                            {card.classProgress.length > 2 ? <span className="rounded-full border border-brand-red/15 bg-white/45 px-2 py-1 text-[11px] font-semibold text-stone-500">+{card.classProgress.length - 2}</span> : null}
-                          </div>
-                        ) : null}
-                      </article>
-                    ))
-                  ) : (
-                    <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Chưa có lead ở giai đoạn này.</p>
-                  )}
-                  {(pipeline.stageCounts[stage.key] ?? 0) > 20 ? (
-                    <button className="glass-button-secondary w-full px-4 py-2 text-xs font-semibold" onClick={() => { setViewMode("database"); setStage(stage.key) }}>
-                      Xem tất cả trong bảng
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            )
-          }) : (
-            <div className="neu-card w-full rounded-3xl p-6 text-sm text-stone-500">Không có trạng thái phù hợp bộ lọc hiện tại.</div>
-          )}
-        </section>
+        <PipelineKanbanBoard
+          pipeline={pipeline}
+          visibleKanbanStages={visibleKanbanStages}
+          cardsByStage={cardsByStage}
+          savingCardId={savingCardId}
+          draggingCardId={draggingCardId}
+          dropStage={dropStage}
+          setDraggingCardId={setDraggingCardId}
+          setDropStage={setDropStage}
+          openStudentDialog={openStudentDialog}
+          dropCardOnStage={dropCardOnStage}
+          showStageInTable={(stage) => {
+            setViewMode("database")
+            setStage(stage)
+          }}
+        />
       )}
       {isDetailLoading || selectedStudent ? (
         <DialogShell
