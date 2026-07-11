@@ -73,7 +73,7 @@ Completed:
 
 ### Phase 1 - Extract Receipt Creation Use Case
 
-Status: `todo`
+Status: `done`
 
 Goal:
 
@@ -91,6 +91,15 @@ Verification target:
 
 - Add focused tests for receipt creation rules before or during extraction.
 - Run the mandatory checklist before commit.
+
+Completed:
+
+- Moved receipt creation business rules from `POST /api/receipts` into `lib/modules/finance/application/create-receipt.ts`.
+- Moved receipt DTO mapping into `lib/modules/finance/receipt-list-item.ts`.
+- Added typed receipt creation errors for route response mapping.
+- Added focused receipt creation tests for course + extra lines, wallet credit validation, and multi-student rejection.
+- Verified with repo audit, typecheck, lint, tests, build, and GitNexus staged change detection.
+- Completed commit: `17ef9d7 refactor: extract receipt creation use case`.
 
 ### Phase 2 - Extract Student Detail Query And Mapper
 
@@ -175,21 +184,31 @@ If a command is skipped, record the reason and residual risk in this file before
 
 ## Handoff For Next AI
 
-Current phase: Phase 1 - Extract Receipt Creation Use Case.
+Current phase: Phase 2 - Extract Student Detail Query And Mapper.
 
-Last completed commit before this tracker: `c93b3d6 chore: refresh gitnexus context`.
+Last completed refactor commit: `17ef9d7 refactor: extract receipt creation use case`.
 
-Files changed in current tracker slice:
+Files changed in last completed refactor slice:
 
-- `docs/specs/clean-architecture-refactor-plan.md`
+- `app/api/receipts/route.ts`
+- `lib/modules/finance/application/create-receipt.ts`
+- `lib/modules/finance/application/receipt-discounts.ts`
+- `lib/modules/finance/application/receipt-errors.ts`
+- `lib/modules/finance/receipt-list-item.ts`
+- `tests/create-receipt.test.ts`
 
-Verification result for current tracker slice:
+Verification result for last completed refactor slice:
 
-- Pending until this file is committed.
+- `npm run repo:audit`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run test`: passed.
+- `AUTH_SECRET=local-build-secret npm run build`: passed.
+- `npx gitnexus detect_changes --scope staged`: medium risk, expected `POST /api/receipts` flow impact only.
 
 Next exact task:
 
 1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
-2. Run GitNexus impact for `POST /api/receipts` / `app/api/receipts/route.ts`.
-3. Add tests around current receipt creation behavior.
-4. Extract receipt creation into a finance application use-case without changing API behavior.
+2. Run GitNexus impact for `GET /api/students/[id]` / `app/api/students/[id]/route.ts`.
+3. Identify current student detail include/query shape and mapper output.
+4. Extract student detail query and mapper without changing `StudentDetail` response shape.
