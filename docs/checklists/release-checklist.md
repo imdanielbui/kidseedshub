@@ -16,6 +16,13 @@
 - Demo seed is used only for isolated demo databases with `npm run prisma:seed:demo`.
 - Trial data uses a dedicated staging database and must not share future production secrets or database URLs.
 - Migrations/data changes approved.
+- GitHub CI passed on the release branch or PR:
+  - repo bloat audit
+  - typecheck
+  - lint
+  - automated tests
+  - Prisma schema validation
+  - production build
 - Preflight passed:
   - `npm run release:preflight`
 - Tests passed or the missing test-suite gap is documented in the release note.
