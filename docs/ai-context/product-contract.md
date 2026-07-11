@@ -38,6 +38,15 @@ Before marking an operations module ready for customer use, check the module aga
 - Preserve auditability for finance, attendance, assessment, parent portal, and permission changes.
 - Ask before schema migrations, seed changes, production data changes, auth/session changes, or role/permission model changes.
 
+## Architecture Rules
+
+- New data workflows must separate presentation, application/business rules, validation/contracts, and infrastructure/data access.
+- Route handlers should only read request, validate input, check auth/permission, call a use-case/helper, and map result to `ApiResponse`.
+- React components should render and coordinate UI state; move complex mutation workflows into hooks or application helpers.
+- Keep Prisma/database client out of domain/presentation code when the logic is non-trivial.
+- Use `lib/backend/`, `lib/contracts/`, `lib/validations/`, and `lib/modules/<domain>/` as the preferred boundaries.
+- Do not create repository interfaces, factories, or classes unless they reduce coupling, improve testing, or support a real alternate implementation.
+
 ## Workflow Rules
 
 - Lead workflows must connect CRM action to next task/contact/status.

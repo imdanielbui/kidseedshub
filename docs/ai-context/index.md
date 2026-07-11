@@ -5,7 +5,7 @@ This folder is the short operational contract for agents working on Kid Seeds Hu
 ## Required Read Order
 
 1. `AGENTS.md` for global safety rules and GitNexus requirements.
-2. `docs/ai-context/product-contract.md` for ship-ready product rules.
+2. `docs/ai-context/product-contract.md` for ship-ready product, data, and architecture guardrails.
 3. `docs/ai-context/ui-contract.md` for layout, dialog, form, and state rules.
 4. `docs/ai-context/context-map.md` to identify the smallest relevant code area and files that must not be read by default.
 5. The relevant workflow file under `docs/ai-context/workflows/`.
