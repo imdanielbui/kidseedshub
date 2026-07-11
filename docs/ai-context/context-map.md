@@ -19,6 +19,7 @@ Do not read generated artifacts or historical material by default. Use targeted 
 - Global safety and agent rules: `AGENTS.md`.
 - Product/data/privacy contract: `docs/ai-context/product-contract.md`.
 - UI/dialog/table/form rules: `docs/ai-context/ui-contract.md`.
+- Detailed agent role catalog: `docs/ai-context/agent-routing.md`.
 - CRM, pipeline, student profile, contact logs, tasks: `docs/ai-context/workflows/crm-student-workflow.md`.
 - Classes, attendance, assessments, finance, receipts, parent portal: `docs/ai-context/workflows/operations-workflow.md`.
 - Large roadmap reference only: `docs/specs/kidseedshub-full-product-plan.md`.
