@@ -125,7 +125,7 @@ Completed:
 
 ### Phase 3 - Extract Student Detail Client Workflows
 
-Status: `in_progress`
+Status: `done`
 
 Goal:
 
@@ -142,11 +142,13 @@ Progress checkpoint:
 - Extracted profile form state, profile synchronization, and profile PATCH orchestration into `student-detail-profile-state.ts`.
 - Kept student data loading focused on API reads; the client coordinates profile form synchronization from the loaded `StudentDetail` value.
 - Extracted enrollment create/edit/cancel and class/course transfer mutation orchestration into `student-detail-enrollment-actions.ts`.
-- Remaining Phase 3 work: receipt and parent-account client actions.
+- Extracted receipt confirmation, draft-line, extra-line, wallet-credit, and refresh orchestration into `student-detail-receipt-actions.ts`.
+- Extracted parent-account mutation orchestration into `student-detail-parent-account-actions.ts`.
+- Verified with repo audit, typecheck, lint, tests, build, and GitNexus staged change detection.
 
 ### Phase 4 - Extract Finance Workspace Hooks And Actions
 
-Status: `todo`
+Status: `in_progress`
 
 Goal:
 
@@ -198,9 +200,9 @@ If a command is skipped, record the reason and residual risk in this file before
 
 ## Handoff For Next AI
 
-Current phase: Phase 3 - Extract Student Detail Client Workflows.
+Current phase: Phase 4 - Extract Finance Workspace Hooks And Actions.
 
-Last completed refactor commit: `24cbfe4 refactor: extract student detail query and mapper`.
+Last completed refactor commit: pending `refactor: extract student receipt client actions`.
 
 Files changed in last completed refactor slice:
 
@@ -210,9 +212,8 @@ Files changed in last completed refactor slice:
 Current in-progress files:
 
 - `app/(dashboard)/students/[id]/student-detail-client.tsx`
-- `app/(dashboard)/students/[id]/student-detail-data.ts`
-- `app/(dashboard)/students/[id]/student-detail-profile-state.ts`
-- `app/(dashboard)/students/[id]/student-detail-enrollment-actions.ts`
+- `app/(dashboard)/students/[id]/student-detail-receipt-actions.ts`
+- `app/(dashboard)/students/[id]/student-detail-parent-account-actions.ts`
 
 Verification result for last completed refactor slice:
 
@@ -226,6 +227,6 @@ Verification result for last completed refactor slice:
 Next exact task:
 
 1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
-2. Run GitNexus impact for the large student detail client and its mutation helpers.
-3. Extract receipt and parent-account UI mutation orchestration into focused hooks, preserving the current API payloads and refresh behavior.
-4. Complete Phase 3 only after the Student Detail client remains a UI composition container with no durable business rules or direct mutation workflows.
+2. Run GitNexus impact for the finance workspace page and its data-loading/action helpers.
+3. Identify role-aware loading, receipt/expense/payroll/reminder mutations, and shared state boundaries.
+4. Extract focused finance hooks/actions without duplicating receipt calculation rules or causing Sale to call Admin-only APIs.

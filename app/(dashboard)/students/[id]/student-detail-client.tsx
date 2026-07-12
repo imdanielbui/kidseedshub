@@ -1,30 +1,27 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import type { PaymentMethodKey, ReceiptListItem } from "@/lib/contracts/finance"
-import { type ParentAccountInfo, type StudentDetail } from "@/lib/contracts/students"
+import type { PaymentMethodKey } from "@/lib/contracts/finance"
 import {
   calculateClassJoinPreview,
-  getBillingPeriodForMonth,
   getCurrentMonth,
-  toReceiptDraftLine,
   type DetailTab,
   type EnrollmentEditDraft,
   type EnrollmentTransferDraft,
   type LearningDetailTarget,
-  type ParentAccountAction,
   type ReceiptBillingMode,
   type ReceiptDraftLine,
   type ReceiptExtraDraftLine
 } from "./student-detail-utils"
-import { formatMoneyInput } from "./student-detail-money"
 import { StudentDetailMissingState, StudentDetailWorkspace } from "./student-detail-workspace"
 import { toNonNegativeIntegerInput, useStudentReceiptState } from "./student-detail-receipt-state"
 import { useStudentDetailData } from "./student-detail-data"
 import { useStudentEnrollmentActions } from "./student-detail-enrollment-actions"
+import { useStudentReceiptActions } from "./student-detail-receipt-actions"
 import { useStudentEngagementState } from "./student-detail-engagement-state"
 import { formatCurrency, formatDate, formatWeekday } from "./student-detail-format"
 import { useStudentProfileState } from "./student-detail-profile-state"
+import { useStudentParentAccountActions } from "./student-detail-parent-account-actions"
 
 export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [activeTab, setActiveTab] = useState<DetailTab>("overview")
@@ -278,171 +275,55 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     transferDraft
   })
 
-  async function submitReceipt(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (receiptValidationErrors.length) {
-      setError(receiptValidationErrors[0])
-      return
-    }
-
-    setError(null)
-    setIsConfirmingPayment(true)
-  }
-
-	  async function confirmReceiptPayment() {
-	    setIsSubmittingReceipt(true)
-	    setError(null)
-	    const billingPeriod = isReceiptMonthlyBilling ? getBillingPeriodForMonth(activeReceiptBillingMonth) : null
-
-	    try {
-	      const response = await fetch("/api/receipts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          studentId,
-          amount: hasManualReceiptAmount ? actualReceiptAmount : undefined,
-          lines: receiptLineSummaries.map((summary) => ({
-            enrollmentId: summary.line.enrollmentId,
-            billableSessions: summary.billableSessions,
-	            freeTrialSessions: summary.freeTrialSessions,
-	            paidSessionsBeforeReceipt: summary.paidSessionsBeforeReceipt,
-	            discountInput: summary.line.discountInput.trim() || undefined,
-	            extraDiscountInput: summary.line.extraDiscountInput.trim() || undefined,
-	            billingPeriodStart: billingPeriod?.startIso,
-	            billingPeriodEnd: billingPeriod?.endIso,
-	            billingLabel: billingPeriod?.label
-	          })),
-          extraLines: receiptExtraLineSummaries.map((summary) => ({
-            type: summary.line.type,
-            description: summary.line.description.trim(),
-            quantity: summary.quantity,
-            unitPrice: summary.unitPrice,
-            note: summary.line.note.trim() || undefined
-          })),
-          walletCreditAmount: walletCreditAmount > 0 ? walletCreditAmount : undefined,
-          method: receiptMethod,
-          note: receiptNote.trim() || undefined
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<ReceiptListItem>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không tạo được phiếu thu.")
-        return
-      }
-
-      setReceiptAmount("")
-      setWalletCreditInput("")
-      setIsWalletCreditManual(false)
-      setIsReceiptAmountOverride(false)
-      setReceiptBillingMode("COURSE")
-      setReceiptNote("")
-      setReceiptExtraLines([])
-      setIsConfirmingPayment(false)
-      setLastReceipt(payload.data)
-      await loadStudent()
-      await loadReceipts()
-      await loadFinanceLedger()
-    } catch {
-      setError("Không tạo được phiếu thu.")
-    } finally {
-      setIsSubmittingReceipt(false)
-    }
-  }
-
-  async function updateParentAccount(action: ParentAccountAction) {
-    setIsUpdatingParentAccount(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/students/${studentId}/parent-account`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action })
-      })
-      const payload = (await response.json()) as ApiResponse<ParentAccountInfo>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không cập nhật được tài khoản phụ huynh.")
-        return
-      }
-
-      setStudent((current) => current ? { ...current, parentAccount: payload.data as ParentAccountInfo } : current)
-      setTemporaryParentPassword(payload.data.temporaryPassword ?? null)
-    } catch {
-      setError("Không cập nhật được tài khoản phụ huynh.")
-    } finally {
-      setIsUpdatingParentAccount(false)
-    }
-  }
-
-  function toggleReceiptLine(course: StudentDetail["courses"][number]) {
-    setReceiptLines((current) => {
-      if (current.some((line) => line.enrollmentId === course.enrollmentId)) {
-        return current.filter((line) => line.enrollmentId !== course.enrollmentId)
-      }
-
-      return [...current, toReceiptDraftLine(course)]
-    })
-    setReceiptAmount("")
-    setIsReceiptAmountOverride(false)
-    setIsWalletCreditManual(false)
-  }
-
-  function updateReceiptLine(enrollmentId: string, patch: Partial<ReceiptDraftLine>) {
-    setReceiptLines((current) => current.map((line) => line.enrollmentId === enrollmentId ? { ...line, ...patch } : line))
-    setReceiptAmount("")
-    setIsReceiptAmountOverride(false)
-    setIsWalletCreditManual(false)
-  }
-
-  function addReceiptExtraLine() {
-    setReceiptExtraLines((current) => [
-      ...current,
-      {
-        id: `extra-${Date.now()}`,
-        type: "TUTORING",
-        description: "Phụ đạo theo giờ",
-        quantity: "1",
-        unitPrice: "",
-        note: ""
-      }
-    ])
-    setReceiptAmount("")
-    setIsReceiptAmountOverride(false)
-    setIsWalletCreditManual(false)
-  }
-
-  function updateReceiptExtraLine(id: string, patch: Partial<ReceiptExtraDraftLine>) {
-    setReceiptExtraLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line))
-    setReceiptAmount("")
-    setIsReceiptAmountOverride(false)
-    setIsWalletCreditManual(false)
-  }
-
-  function removeReceiptExtraLine(id: string) {
-    setReceiptExtraLines((current) => current.filter((line) => line.id !== id))
-    setReceiptAmount("")
-    setIsReceiptAmountOverride(false)
-    setIsWalletCreditManual(false)
-  }
-
-  function confirmBillableOverride() {
-    if (!pendingBillableEnrollmentId) return
-
-    const summary = receiptLineSummaries.find((line) => line.line.enrollmentId === pendingBillableEnrollmentId)
-    updateReceiptLine(pendingBillableEnrollmentId, {
-      isBillableOverride: true,
-      billableSessions: String(summary?.billableSessions ?? 0)
-    })
-    setPendingBillableEnrollmentId(null)
-  }
-
-  function confirmReceiptAmountOverride() {
-    setReceiptAmount(formatMoneyInput(Math.round(payableAmount)))
-    setIsReceiptAmountOverride(true)
-    setIsConfirmingReceiptAmount(false)
-  }
+  const {
+    addReceiptExtraLine,
+    confirmBillableOverride,
+    confirmReceiptAmountOverride,
+    confirmReceiptPayment,
+    removeReceiptExtraLine,
+    submitReceipt,
+    toggleReceiptLine,
+    updateReceiptExtraLine,
+    updateReceiptLine
+  } = useStudentReceiptActions({
+    activeReceiptBillingMonth,
+    actualReceiptAmount,
+    hasManualReceiptAmount,
+    isReceiptMonthlyBilling,
+    loadFinanceLedger,
+    loadReceipts,
+    loadStudent,
+    payableAmount,
+    pendingBillableEnrollmentId,
+    receiptExtraLineSummaries,
+    receiptLineSummaries,
+    receiptMethod,
+    receiptNote,
+    receiptValidationErrors,
+    setError,
+    setIsConfirmingPayment,
+    setIsConfirmingReceiptAmount,
+    setIsReceiptAmountOverride,
+    setIsSubmittingReceipt,
+    setIsWalletCreditManual,
+    setLastReceipt,
+    setPendingBillableEnrollmentId,
+    setReceiptAmount,
+    setReceiptBillingMode,
+    setReceiptExtraLines,
+    setReceiptLines,
+    setReceiptNote,
+    setWalletCreditInput,
+    studentId,
+    walletCreditAmount
+  })
+  const { updateParentAccount } = useStudentParentAccountActions({
+    setError,
+    setIsUpdatingParentAccount,
+    setStudent,
+    setTemporaryParentPassword,
+    studentId
+  })
 
   if (isLoading) {
     return <p className="neu-card rounded-3xl p-6 text-sm text-stone-500">Đang tải hồ sơ học viên...</p>
