@@ -164,7 +164,8 @@ Progress checkpoint:
 
 - Moved role-aware finance data loading into `finance-data.ts`.
 - Sale still loads only allowed receipts, students/classes, templates, and reminders; summary, expenses, and payroll requests remain Admin-only.
-- Remaining Phase 4 work: move receipt/expense/reminder/payroll command handlers out of the page.
+- Moved receipt, expense, and tuition-reminder command orchestration into `finance-actions.ts`.
+- Remaining Phase 4 work: move payroll command handlers out of the page.
 
 ### Phase 5 - Shared API Auth And Error Helpers
 
