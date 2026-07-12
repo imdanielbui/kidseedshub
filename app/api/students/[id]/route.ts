@@ -1,9 +1,7 @@
-import { Prisma } from "@prisma/client"
-import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
+import { isPrismaErrorCode, requireRoutePermission } from "@/lib/backend/api-route"
 import { activateParentAccountForStatus } from "@/lib/backend/parent-account"
 import { findStudentDetail, studentDetailInclude, toStudentDetail } from "@/lib/modules/students/student-detail"
-import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { studentUpdateSchema } from "@/lib/validations/student"
 
@@ -12,15 +10,12 @@ type RouteContext = {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await auth()
-
-  if (!session) {
-    return fail({ code: "UNAUTHORIZED", message: "Bạn cần đăng nhập." }, { status: 401 })
-  }
-
-  if (!can(session.user.role, "students:view_all") && !can(session.user.role, "students:view_class")) {
-    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền xem học viên." }, { status: 403 })
-  }
+  const authorization = await requireRoutePermission({
+    permissions: ["students:view_all", "students:view_class"],
+    forbiddenMessage: "Bạn không có quyền xem học viên."
+  })
+  if (authorization instanceof Response) return authorization
+  const session = authorization
 
   const { id } = await context.params
   const student = await findStudentDetail(id)
@@ -37,15 +32,12 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await auth()
-
-  if (!session) {
-    return fail({ code: "UNAUTHORIZED", message: "Bạn cần đăng nhập." }, { status: 401 })
-  }
-
-  if (!can(session.user.role, "students:edit")) {
-    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền cập nhật học viên." }, { status: 403 })
-  }
+  const authorization = await requireRoutePermission({
+    permissions: ["students:edit"],
+    forbiddenMessage: "Bạn không có quyền cập nhật học viên."
+  })
+  if (authorization instanceof Response) return authorization
+  const session = authorization
 
   const body = await request.json()
   const parsed = studentUpdateSchema.safeParse(body)
@@ -109,7 +101,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return ok(toStudentDetail(student, session.user.role))
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (isPrismaErrorCode(error, "P2002")) {
       return fail({ code: "DUPLICATE_PARENT", message: "Số điện thoại hoặc email phụ huynh đã tồn tại." }, { status: 409 })
     }
 

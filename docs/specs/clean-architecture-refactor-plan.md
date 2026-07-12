@@ -170,7 +170,7 @@ Progress checkpoint:
 
 ### Phase 5 - Shared API Auth And Error Helpers
 
-Status: `in_progress`
+Status: `done`
 
 Goal:
 
@@ -181,6 +181,13 @@ Constraints:
 
 - Do not mass-rewrite all routes.
 - Unauthorized/forbidden response code, message, and status must stay compatible.
+
+Completed:
+
+- Added `lib/backend/api-route.ts` with focused session/permission and Prisma error-code helpers.
+- Applied the helpers only to receipt and student-detail routes already touched by this refactor.
+- Preserved existing unauthorized, forbidden, duplicate-parent, and receipt response messages/statuses.
+- Verified with repo audit, typecheck, lint, tests, build, and GitNexus staged change detection.
 
 ## Mandatory Checklist After Each Phase
 
@@ -208,21 +215,19 @@ If a command is skipped, record the reason and residual risk in this file before
 
 ## Handoff For Next AI
 
-Current phase: Phase 5 - Shared API Auth And Error Helpers.
+Current phase: Complete.
 
-Last completed refactor commit: pending `refactor: extract finance payroll actions`.
+Last completed refactor commit: pending `refactor: add shared api route helpers`.
 
 Files changed in last completed refactor slice:
 
+- `app/api/receipts/route.ts`
 - `app/api/students/[id]/route.ts`
-- `lib/modules/students/student-detail.ts`
+- `lib/backend/api-route.ts`
 
 Current in-progress files:
 
-- `app/(dashboard)/finance/page.tsx`
-- `app/(dashboard)/finance/finance-data.ts`
-- `app/(dashboard)/finance/finance-actions.ts`
-- `app/(dashboard)/finance/finance-payroll-actions.ts`
+- None.
 
 Verification result for last completed refactor slice:
 
@@ -235,7 +240,5 @@ Verification result for last completed refactor slice:
 
 Next exact task:
 
-1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
-2. Run GitNexus impact for auth/permission checks and application error mapping in routes already refactored.
-3. Add focused shared helpers without changing unauthorized/forbidden response messages or status codes.
-4. Apply helpers only to receipt and student detail routes, then complete the plan after the mandatory checklist.
+1. Treat this refactor plan as complete.
+2. For future work, start from the matching workflow contract and run impact analysis before changing the extracted boundaries.

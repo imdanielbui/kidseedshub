@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
+import { requireRoutePermission } from "@/lib/backend/api-route"
 import { parseMonth } from "@/lib/backend/date"
 import { billingPeriodWhere } from "@/lib/backend/receipt-billing"
 import { createReceipt } from "@/lib/modules/finance/application/create-receipt"
@@ -10,15 +10,12 @@ import { prisma } from "@/lib/prisma"
 import { receiptCreateSchema, receiptListQuerySchema } from "@/lib/validations/finance"
 
 export async function GET(request: Request) {
-  const session = await auth()
-
-  if (!session) {
-    return fail({ code: "UNAUTHORIZED", message: "Bạn cần đăng nhập." }, { status: 401 })
-  }
-
-  if (!can(session.user.role, "finance:view_summary") && !can(session.user.role, "finance:view_own")) {
-    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền xem phiếu thu." }, { status: 403 })
-  }
+  const authorization = await requireRoutePermission({
+    permissions: ["finance:view_summary", "finance:view_own"],
+    forbiddenMessage: "Bạn không có quyền xem phiếu thu."
+  })
+  if (authorization instanceof Response) return authorization
+  const session = authorization
 
   const { searchParams } = new URL(request.url)
   const parsed = receiptListQuerySchema.safeParse(Object.fromEntries(searchParams))
@@ -51,15 +48,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth()
-
-  if (!session) {
-    return fail({ code: "UNAUTHORIZED", message: "Bạn cần đăng nhập." }, { status: 401 })
-  }
-
-  if (!can(session.user.role, "receipts:create")) {
-    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền tạo phiếu thu." }, { status: 403 })
-  }
+  const authorization = await requireRoutePermission({
+    permissions: ["receipts:create"],
+    forbiddenMessage: "Bạn không có quyền tạo phiếu thu."
+  })
+  if (authorization instanceof Response) return authorization
+  const session = authorization
 
   const body = await request.json()
   const parsed = receiptCreateSchema.safeParse(body)
