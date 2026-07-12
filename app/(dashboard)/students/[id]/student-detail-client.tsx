@@ -1,11 +1,10 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
-import type { ApiResponse } from "@/lib/api-response"
+import { useEffect, useMemo, useState } from "react"
 import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
 import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import type { PaymentMethodKey, ReceiptListItem } from "@/lib/contracts/finance"
-import { type ParentAccountInfo, type StudentDetail, type StudentStatusKey } from "@/lib/contracts/students"
+import { type ParentAccountInfo, type StudentDetail } from "@/lib/contracts/students"
 import {
   calculateClassJoinPreview,
   getBillingPeriodForMonth,
@@ -26,19 +25,10 @@ import { toNonNegativeIntegerInput, toNonNegativeNumber, useStudentReceiptState 
 import { useStudentDetailData } from "./student-detail-data"
 import { useStudentEngagementState } from "./student-detail-engagement-state"
 import { formatCurrency, formatDate, formatWeekday } from "./student-detail-format"
+import { useStudentProfileState } from "./student-detail-profile-state"
 
 export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [activeTab, setActiveTab] = useState<DetailTab>("overview")
-  const [profileName, setProfileName] = useState("")
-  const [profileBirthDate, setProfileBirthDate] = useState("")
-  const [profileStatus, setProfileStatus] = useState<StudentStatusKey>("LEAD")
-  const [profileParentName, setProfileParentName] = useState("")
-  const [profileParentPhone, setProfileParentPhone] = useState("")
-  const [profileParentEmail, setProfileParentEmail] = useState("")
-  const [profileAddress, setProfileAddress] = useState("")
-  const [profileLeadSource, setProfileLeadSource] = useState("")
-  const [profileLeadNote, setProfileLeadNote] = useState("")
-  const [profileHealthNote, setProfileHealthNote] = useState("")
   const [enrollmentCourseId, setEnrollmentCourseId] = useState("")
   const [enrollmentClassId, setEnrollmentClassId] = useState("")
   const [enrollmentSessions, setEnrollmentSessions] = useState("0")
@@ -62,26 +52,12 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   const [walletCreditInput, setWalletCreditInput] = useState("")
   const [isWalletCreditManual, setIsWalletCreditManual] = useState(false)
   const [temporaryParentPassword, setTemporaryParentPassword] = useState<string | null>(null)
-  const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isSubmittingEnrollment, setIsSubmittingEnrollment] = useState(false)
   const [isUpdatingEnrollment, setIsUpdatingEnrollment] = useState(false)
   const [isDeletingEnrollment, setIsDeletingEnrollment] = useState(false)
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false)
   const [isSubmittingReceipt, setIsSubmittingReceipt] = useState(false)
   const [isUpdatingParentAccount, setIsUpdatingParentAccount] = useState(false)
-
-  const syncProfileForm = useCallback((nextStudent: StudentDetail) => {
-    setProfileName(nextStudent.name)
-    setProfileBirthDate(nextStudent.birthDate?.slice(0, 10) ?? "")
-    setProfileStatus(nextStudent.status)
-    setProfileParentName(nextStudent.parentName)
-    setProfileParentPhone(nextStudent.parentPhone)
-    setProfileParentEmail(nextStudent.parentEmail ?? "")
-    setProfileAddress(nextStudent.address ?? "")
-    setProfileLeadSource(nextStudent.leadSource ?? "")
-    setProfileLeadNote(nextStudent.leadNote ?? "")
-    setProfileHealthNote(nextStudent.healthNote ?? "")
-  }, [])
 
   const {
     classes,
@@ -104,9 +80,41 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
   } = useStudentDetailData({
     setEnrollmentCourseId,
     setReceiptLines,
-    studentId,
-    syncProfileForm
+    studentId
   })
+  const {
+    isSavingProfile,
+    profileAddress,
+    profileBirthDate,
+    profileHealthNote,
+    profileLeadNote,
+    profileLeadSource,
+    profileName,
+    profileParentEmail,
+    profileParentName,
+    profileParentPhone,
+    profileStatus,
+    setProfileAddress,
+    setProfileBirthDate,
+    setProfileHealthNote,
+    setProfileLeadNote,
+    setProfileLeadSource,
+    setProfileName,
+    setProfileParentEmail,
+    setProfileParentName,
+    setProfileParentPhone,
+    setProfileStatus,
+    submitProfile,
+    syncProfileForm
+  } = useStudentProfileState({
+    setError,
+    setPhotoCaptionDrafts,
+    setStudent,
+    studentId
+  })
+  useEffect(() => {
+    if (student) syncProfileForm(student)
+  }, [student, syncProfileForm])
   const {
     content,
     deleteStudentPhoto,
@@ -236,47 +244,6 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     studentWallet,
     walletCreditInput
   })
-
-  async function submitProfile(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSavingProfile(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/students/${studentId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: profileName.trim(),
-          birthDate: profileBirthDate ? new Date(`${profileBirthDate}T00:00:00`).toISOString() : null,
-          status: profileStatus,
-          address: profileAddress.trim() || null,
-          leadSource: profileLeadSource.trim() || null,
-          leadNote: profileLeadNote.trim() || null,
-          healthNote: profileHealthNote.trim() || null,
-          parent: {
-            name: profileParentName.trim(),
-            phone: profileParentPhone.trim(),
-            email: profileParentEmail.trim() || null
-          }
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<StudentDetail>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không cập nhật được hồ sơ học viên.")
-        return
-      }
-
-      setStudent(payload.data)
-      setPhotoCaptionDrafts(Object.fromEntries(payload.data.photos.map((photo) => [photo.id, photo.caption ?? ""])))
-      syncProfileForm(payload.data)
-    } catch {
-      setError("Không cập nhật được hồ sơ học viên.")
-    } finally {
-      setIsSavingProfile(false)
-    }
-  }
 
   async function submitEnrollment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

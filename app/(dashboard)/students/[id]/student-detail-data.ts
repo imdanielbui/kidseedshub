@@ -14,13 +14,11 @@ import {
 export function useStudentDetailData({
   setEnrollmentCourseId,
   setReceiptLines,
-  studentId,
-  syncProfileForm
+  studentId
 }: {
   setEnrollmentCourseId: Dispatch<SetStateAction<string>>
   setReceiptLines: Dispatch<SetStateAction<ReceiptDraftLine[]>>
   studentId: string
-  syncProfileForm: (student: StudentDetail) => void
 }) {
   const [student, setStudent] = useState<StudentDetail | null>(null)
   const [courses, setCourses] = useState<CourseListItem[]>([])
@@ -48,7 +46,6 @@ export function useStudentDetailData({
       const nextStudent = payload.data
       setStudent(nextStudent)
       setPhotoCaptionDrafts(Object.fromEntries(nextStudent.photos.map((photo) => [photo.id, photo.caption ?? ""])))
-      syncProfileForm(nextStudent)
       setReceiptLines((current) => current.length ? current : activeStudentCourses(nextStudent).slice(0, 1).map(toReceiptDraftLine))
     } catch {
       setError("Không tải được hồ sơ học viên.")
@@ -113,7 +110,6 @@ export function useStudentDetailData({
         const nextStudent = studentPayload.data
         setStudent(nextStudent)
         setPhotoCaptionDrafts(Object.fromEntries(nextStudent.photos.map((photo) => [photo.id, photo.caption ?? ""])))
-        syncProfileForm(nextStudent)
         setReceiptLines((current) => current.length ? current : activeStudentCourses(nextStudent).slice(0, 1).map(toReceiptDraftLine))
 
         if (coursesPayload.success && coursesPayload.data) {
@@ -144,7 +140,7 @@ export function useStudentDetailData({
     return () => {
       isMounted = false
     }
-  }, [setEnrollmentCourseId, setReceiptLines, studentId, syncProfileForm])
+  }, [setEnrollmentCourseId, setReceiptLines, studentId])
 
   return {
     classes,

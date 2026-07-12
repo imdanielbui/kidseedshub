@@ -137,6 +137,12 @@ Constraints:
 - Do not move durable business rules into React hooks.
 - Hooks may coordinate UI state and API calls only.
 
+Progress checkpoint:
+
+- Extracted profile form state, profile synchronization, and profile PATCH orchestration into `student-detail-profile-state.ts`.
+- Kept student data loading focused on API reads; the client coordinates profile form synchronization from the loaded `StudentDetail` value.
+- Remaining Phase 3 work: enrollment/transfer, receipt, and parent-account client actions.
+
 ### Phase 4 - Extract Finance Workspace Hooks And Actions
 
 Status: `todo`
@@ -193,12 +199,18 @@ If a command is skipped, record the reason and residual risk in this file before
 
 Current phase: Phase 3 - Extract Student Detail Client Workflows.
 
-Last completed refactor commit: pending `refactor: extract student detail query and mapper`.
+Last completed refactor commit: `24cbfe4 refactor: extract student detail query and mapper`.
 
 Files changed in last completed refactor slice:
 
 - `app/api/students/[id]/route.ts`
 - `lib/modules/students/student-detail.ts`
+
+Current in-progress files:
+
+- `app/(dashboard)/students/[id]/student-detail-client.tsx`
+- `app/(dashboard)/students/[id]/student-detail-data.ts`
+- `app/(dashboard)/students/[id]/student-detail-profile-state.ts`
 
 Verification result for last completed refactor slice:
 
@@ -213,5 +225,5 @@ Next exact task:
 
 1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
 2. Run GitNexus impact for the large student detail client and its mutation helpers.
-3. Identify UI-only state and API mutation orchestration for profile, enrollment, transfer, receipt, and parent account workflows.
-4. Extract focused client hooks/actions without moving durable business rules out of backend APIs or changing UI text/contracts.
+3. Extract enrollment and transfer UI mutation orchestration into a focused hook, preserving the current API payloads and refresh behavior.
+4. Keep receipt and parent-account actions in the client until their focused slices are ready; do not move durable business rules out of backend APIs or change UI text/contracts.
