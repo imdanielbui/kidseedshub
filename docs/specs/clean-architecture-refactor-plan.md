@@ -148,7 +148,7 @@ Progress checkpoint:
 
 ### Phase 4 - Extract Finance Workspace Hooks And Actions
 
-Status: `in_progress`
+Status: `done`
 
 Goal:
 
@@ -165,11 +165,12 @@ Progress checkpoint:
 - Moved role-aware finance data loading into `finance-data.ts`.
 - Sale still loads only allowed receipts, students/classes, templates, and reminders; summary, expenses, and payroll requests remain Admin-only.
 - Moved receipt, expense, and tuition-reminder command orchestration into `finance-actions.ts`.
-- Remaining Phase 4 work: move payroll command handlers out of the page.
+- Moved payroll create, state transition, line adjustment, validation, and refresh orchestration into `finance-payroll-actions.ts`.
+- Verified with repo audit, typecheck, lint, tests, build, and GitNexus staged change detection.
 
 ### Phase 5 - Shared API Auth And Error Helpers
 
-Status: `todo`
+Status: `in_progress`
 
 Goal:
 
@@ -207,9 +208,9 @@ If a command is skipped, record the reason and residual risk in this file before
 
 ## Handoff For Next AI
 
-Current phase: Phase 4 - Extract Finance Workspace Hooks And Actions.
+Current phase: Phase 5 - Shared API Auth And Error Helpers.
 
-Last completed refactor commit: pending `refactor: extract student receipt client actions`.
+Last completed refactor commit: pending `refactor: extract finance payroll actions`.
 
 Files changed in last completed refactor slice:
 
@@ -218,9 +219,10 @@ Files changed in last completed refactor slice:
 
 Current in-progress files:
 
-- `app/(dashboard)/students/[id]/student-detail-client.tsx`
-- `app/(dashboard)/students/[id]/student-detail-receipt-actions.ts`
-- `app/(dashboard)/students/[id]/student-detail-parent-account-actions.ts`
+- `app/(dashboard)/finance/page.tsx`
+- `app/(dashboard)/finance/finance-data.ts`
+- `app/(dashboard)/finance/finance-actions.ts`
+- `app/(dashboard)/finance/finance-payroll-actions.ts`
 
 Verification result for last completed refactor slice:
 
@@ -234,6 +236,6 @@ Verification result for last completed refactor slice:
 Next exact task:
 
 1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
-2. Run GitNexus impact for the finance workspace page and its data-loading/action helpers.
-3. Identify role-aware loading, receipt/expense/payroll/reminder mutations, and shared state boundaries.
-4. Extract focused finance hooks/actions without duplicating receipt calculation rules or causing Sale to call Admin-only APIs.
+2. Run GitNexus impact for auth/permission checks and application error mapping in routes already refactored.
+3. Add focused shared helpers without changing unauthorized/forbidden response messages or status codes.
+4. Apply helpers only to receipt and student detail routes, then complete the plan after the mandatory checklist.
