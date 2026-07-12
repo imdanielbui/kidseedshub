@@ -160,6 +160,12 @@ Constraints:
 - Keep the tab UI and public API behavior unchanged.
 - Do not duplicate receipt calculation rules in UI.
 
+Progress checkpoint:
+
+- Moved role-aware finance data loading into `finance-data.ts`.
+- Sale still loads only allowed receipts, students/classes, templates, and reminders; summary, expenses, and payroll requests remain Admin-only.
+- Remaining Phase 4 work: move receipt/expense/reminder/payroll command handlers out of the page.
+
 ### Phase 5 - Shared API Auth And Error Helpers
 
 Status: `todo`

@@ -1,14 +1,13 @@
 "use client"
 
 import { BarChart3, BellRing, Download, FileText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useMemo, useState, type FormEvent } from "react"
 import type { ApiResponse } from "@/lib/api-response"
-import type { ExpenseListItem, FinanceSummary, ReceiptListItem } from "@/lib/contracts/finance"
+import type { ExpenseListItem, ReceiptListItem } from "@/lib/contracts/finance"
 import type { PayrollLineItem, PayrollRunItem } from "@/lib/contracts/payroll"
-import type { QueuedTuitionReminder, TuitionReminderItem, ZaloTemplateItem } from "@/lib/contracts/reminders"
-import type { StudentListItem } from "@/lib/contracts/students"
-import type { ClassListItem } from "@/lib/contracts/courses"
+import type { QueuedTuitionReminder, TuitionReminderItem } from "@/lib/contracts/reminders"
 import { PermissionState } from "./finance-presentational"
+import { useFinanceData } from "./finance-data"
 import { ExpenseDialog, ReceiptDialog } from "./finance-dialogs"
 import { ExpensesTab, OverviewTab, PayrollTab, ReceiptsTab, RemindersTab } from "./finance-tabs"
 import {
@@ -29,46 +28,32 @@ import {
   getYearPart,
   type ExpenseFormState,
   type FinanceDialog,
-  type FinanceRole,
   type FinanceTab,
   type PayrollLineEditState,
   type ReceiptBillingMode,
   type ReceiptFormState,
-  type SessionPayload
 } from "./finance-utils"
 
 export default function FinancePage() {
   const [month, setMonth] = useState(getCurrentMonth)
   const [activeTab, setActiveTab] = useState<FinanceTab>("overview")
   const [activeDialog, setActiveDialog] = useState<FinanceDialog>(null)
-  const [sessionRole, setSessionRole] = useState<FinanceRole | null>(null)
-  const [isLoadingSession, setIsLoadingSession] = useState(true)
-  const [summary, setSummary] = useState<FinanceSummary | null>(null)
-  const [receipts, setReceipts] = useState<ReceiptListItem[]>([])
-  const [expenses, setExpenses] = useState<ExpenseListItem[]>([])
-	  const [payrollRuns, setPayrollRuns] = useState<PayrollRunItem[]>([])
-	  const [students, setStudents] = useState<StudentListItem[]>([])
-	  const [classes, setClasses] = useState<ClassListItem[]>([])
-	  const [templates, setTemplates] = useState<ZaloTemplateItem[]>([])
-  const [reminders, setReminders] = useState<TuitionReminderItem[]>([])
   const [receiptForm, setReceiptForm] = useState<ReceiptFormState>(emptyReceiptForm)
   const [expenseForm, setExpenseForm] = useState<ExpenseFormState>(emptyExpenseForm)
   const [selectedTemplateId, setSelectedTemplateId] = useState("TUITION_LOW_SESSIONS")
   const [refreshKey, setRefreshKey] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingReceipt, setIsSubmittingReceipt] = useState(false)
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false)
   const [isCreatingPayroll, setIsCreatingPayroll] = useState(false)
   const [payrollActionId, setPayrollActionId] = useState("")
   const [payrollLineEdits, setPayrollLineEdits] = useState<Record<string, PayrollLineEditState>>({})
   const [queueingEnrollmentId, setQueueingEnrollmentId] = useState("")
-  const [error, setError] = useState<string | null>(null)
-
-  const isAdmin = sessionRole === "ADMIN"
-  const isSale = sessionRole === "SALE"
-  const canUseFinance = isAdmin || isSale
-  const canCreateReceipt = isAdmin || isSale
-  const canManageReminders = isAdmin || isSale
+  const financeData = useFinanceData({ month, refreshKey, selectedTemplateId })
+  const {
+    canCreateReceipt, canManageReminders, canUseFinance, classes, error, expenses, isAdmin,
+    isLoading, isLoadingSession, payrollRuns, receipts, reminders, setError,
+    students, summary, templates
+  } = financeData
   const selectedMonthPart = getMonthPart(month)
   const selectedYearPart = getYearPart(month)
   const yearOptions = useMemo(() => buildYearOptions(selectedYearPart), [selectedYearPart])
@@ -84,134 +69,7 @@ export default function FinancePage() {
     [canManageReminders, canUseFinance, isAdmin]
   )
 
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadSessionRole() {
-      setIsLoadingSession(true)
-
-      try {
-        const response = await fetch("/api/auth/session", { cache: "no-store" })
-        const payload = (await response.json()) as SessionPayload
-
-        if (!isMounted) return
-
-        setSessionRole(payload?.user?.role ?? null)
-      } catch {
-        if (isMounted) setSessionRole(null)
-      } finally {
-        if (isMounted) setIsLoadingSession(false)
-      }
-    }
-
-    loadSessionRole()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
   const selectedTab = availableTabs.some((tab) => tab.id === activeTab) ? activeTab : availableTabs[0]?.id
-
-  useEffect(() => {
-    if (isLoadingSession) return
-
-    let isMounted = true
-
-    async function loadFinance() {
-      if (!canUseFinance) {
-        setSummary(null)
-        setReceipts([])
-        setExpenses([])
-        setPayrollRuns([])
-        setTemplates([])
-        setReminders([])
-        setIsLoading(false)
-        return
-      }
-
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const summaryRequest = isAdmin ? fetch(`/api/finance/summary?month=${month}`, { cache: "no-store" }) : null
-        const receiptsRequest = fetch(`/api/receipts?month=${month}`, { cache: "no-store" })
-        const expensesRequest = isAdmin ? fetch(`/api/expenses?month=${month}`, { cache: "no-store" }) : null
-        const payrollRequest = isAdmin ? fetch(`/api/payroll-runs?month=${month}`, { cache: "no-store" }) : null
-        const templatesRequest = canManageReminders ? fetch("/api/message-templates", { cache: "no-store" }) : null
-	        const remindersRequest = canManageReminders ? fetch(`/api/tuition-reminders?templateId=${selectedTemplateId}&billingMonth=${month}`, { cache: "no-store" }) : null
-
-        const [summaryResult, receiptsResult, expensesResult, payrollResult, templatesResult, remindersResult] = await Promise.all([
-          summaryRequest ? summaryRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<FinanceSummary> })) : Promise.resolve(null),
-          receiptsRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<ReceiptListItem[]> })),
-          expensesRequest ? expensesRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<ExpenseListItem[]> })) : Promise.resolve(null),
-          payrollRequest ? payrollRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<PayrollRunItem[]> })) : Promise.resolve(null),
-          templatesRequest ? templatesRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<ZaloTemplateItem[]> })) : Promise.resolve(null),
-          remindersRequest ? remindersRequest.then(async (response) => ({ response, payload: await response.json() as ApiResponse<TuitionReminderItem[]> })) : Promise.resolve(null)
-        ])
-
-        if (!isMounted) return
-
-        setSummary(summaryResult?.response.ok && summaryResult.payload.success && summaryResult.payload.data ? summaryResult.payload.data : null)
-        setReceipts(receiptsResult.response.ok && receiptsResult.payload.success && receiptsResult.payload.data ? receiptsResult.payload.data : [])
-        setExpenses(expensesResult?.response.ok && expensesResult.payload.success && expensesResult.payload.data ? expensesResult.payload.data : [])
-        setPayrollRuns(payrollResult?.response.ok && payrollResult.payload.success && payrollResult.payload.data ? payrollResult.payload.data : [])
-        setTemplates(templatesResult?.response.ok && templatesResult.payload.success && templatesResult.payload.data ? templatesResult.payload.data : [])
-        setReminders(remindersResult?.response.ok && remindersResult.payload.success && remindersResult.payload.data ? remindersResult.payload.data : [])
-
-        const firstError = [summaryResult, receiptsResult, expensesResult, payrollResult, templatesResult, remindersResult]
-          .map((result) => result?.payload.error)
-          .find(Boolean)
-        if (firstError) setError(firstError.message)
-      } catch {
-        if (isMounted) setError("Không tải được dữ liệu tài chính.")
-      } finally {
-        if (isMounted) setIsLoading(false)
-      }
-    }
-
-    loadFinance()
-
-    return () => {
-      isMounted = false
-    }
-  }, [canManageReminders, canUseFinance, isAdmin, isLoadingSession, month, refreshKey, selectedTemplateId])
-
-  useEffect(() => {
-    if (!canCreateReceipt) return
-
-    let isMounted = true
-
-	async function loadStudents() {
-	  try {
-	    const [studentsResponse, classesResponse] = await Promise.all([
-	      fetch("/api/students?limit=100", { cache: "no-store" }),
-	      fetch("/api/classes?active=true&summary=true", { cache: "no-store" })
-	    ])
-	    const studentsPayload = (await studentsResponse.json()) as ApiResponse<StudentListItem[]>
-	    const classesPayload = (await classesResponse.json()) as ApiResponse<ClassListItem[]>
-
-	    if (isMounted && studentsResponse.ok && studentsPayload.success && studentsPayload.data) {
-	      setStudents(studentsPayload.data)
-	    }
-
-	    if (isMounted && classesResponse.ok && classesPayload.success && classesPayload.data) {
-	      setClasses(classesPayload.data)
-	    }
-	  } catch {
-	    if (isMounted) {
-	      setStudents([])
-	      setClasses([])
-	    }
-	  }
-	}
-
-    loadStudents()
-
-    return () => {
-      isMounted = false
-    }
-  }, [canCreateReceipt])
 
   const adminSummaryCards = useMemo(
     () => [
