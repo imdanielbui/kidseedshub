@@ -141,7 +141,8 @@ Progress checkpoint:
 
 - Extracted profile form state, profile synchronization, and profile PATCH orchestration into `student-detail-profile-state.ts`.
 - Kept student data loading focused on API reads; the client coordinates profile form synchronization from the loaded `StudentDetail` value.
-- Remaining Phase 3 work: enrollment/transfer, receipt, and parent-account client actions.
+- Extracted enrollment create/edit/cancel and class/course transfer mutation orchestration into `student-detail-enrollment-actions.ts`.
+- Remaining Phase 3 work: receipt and parent-account client actions.
 
 ### Phase 4 - Extract Finance Workspace Hooks And Actions
 
@@ -211,6 +212,7 @@ Current in-progress files:
 - `app/(dashboard)/students/[id]/student-detail-client.tsx`
 - `app/(dashboard)/students/[id]/student-detail-data.ts`
 - `app/(dashboard)/students/[id]/student-detail-profile-state.ts`
+- `app/(dashboard)/students/[id]/student-detail-enrollment-actions.ts`
 
 Verification result for last completed refactor slice:
 
@@ -225,5 +227,5 @@ Next exact task:
 
 1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
 2. Run GitNexus impact for the large student detail client and its mutation helpers.
-3. Extract enrollment and transfer UI mutation orchestration into a focused hook, preserving the current API payloads and refresh behavior.
-4. Keep receipt and parent-account actions in the client until their focused slices are ready; do not move durable business rules out of backend APIs or change UI text/contracts.
+3. Extract receipt and parent-account UI mutation orchestration into focused hooks, preserving the current API payloads and refresh behavior.
+4. Complete Phase 3 only after the Student Detail client remains a UI composition container with no durable business rules or direct mutation workflows.

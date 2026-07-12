@@ -1,8 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import type { EnrollmentTransferResult } from "@/lib/contracts/enrollment-transfers"
-import type { EnrollmentDeleteResult } from "@/lib/contracts/enrollments"
 import type { PaymentMethodKey, ReceiptListItem } from "@/lib/contracts/finance"
 import { type ParentAccountInfo, type StudentDetail } from "@/lib/contracts/students"
 import {
@@ -21,8 +19,9 @@ import {
 } from "./student-detail-utils"
 import { formatMoneyInput } from "./student-detail-money"
 import { StudentDetailMissingState, StudentDetailWorkspace } from "./student-detail-workspace"
-import { toNonNegativeIntegerInput, toNonNegativeNumber, useStudentReceiptState } from "./student-detail-receipt-state"
+import { toNonNegativeIntegerInput, useStudentReceiptState } from "./student-detail-receipt-state"
 import { useStudentDetailData } from "./student-detail-data"
+import { useStudentEnrollmentActions } from "./student-detail-enrollment-actions"
 import { useStudentEngagementState } from "./student-detail-engagement-state"
 import { formatCurrency, formatDate, formatWeekday } from "./student-detail-format"
 import { useStudentProfileState } from "./student-detail-profile-state"
@@ -244,179 +243,40 @@ export function StudentDetailClient({ studentId }: { studentId: string }) {
     studentWallet,
     walletCreditInput
   })
-
-  async function submitEnrollment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSubmittingEnrollment(true)
-    setError(null)
-
-    try {
-      const response = await fetch("/api/enrollments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          studentId,
-          courseId: enrollmentCourseId,
-          classId: enrollmentClassId || undefined,
-          sessionsBought: toNonNegativeNumber(enrollmentSessions),
-          totalCourseSessionsAtJoin: selectedEnrollmentCourse?.totalSessions,
-          freeTrialSessions: toNonNegativeNumber(enrollmentFreeTrialSessions),
-          startDate: new Date(`${enrollmentStartDate}T00:00:00`).toISOString()
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<unknown>
-
-      if (!response.ok || !payload.success) {
-        setError(payload.error?.message ?? "Không ghi danh được khóa học.")
-        return
-      }
-
-      setEnrollmentClassId("")
-      setEnrollmentSessions("0")
-      setEnrollmentFreeTrialSessions("0")
-      await loadStudent()
-    } catch {
-      setError("Không ghi danh được khóa học.")
-    } finally {
-      setIsSubmittingEnrollment(false)
-    }
-  }
-
-  async function submitEnrollmentEdit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!editingEnrollment) return
-
-    const sessionsBought = toNonNegativeNumber(editingEnrollment.sessionsBought)
-    const sessionsUsed = toNonNegativeNumber(editingEnrollment.sessionsUsed)
-
-    if (sessionsUsed > sessionsBought) {
-      setError("Số buổi đã học không được lớn hơn số buổi đã cấp.")
-      return
-    }
-
-    setIsUpdatingEnrollment(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/enrollments/${editingEnrollment.enrollmentId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          classId: editingEnrollment.classId || null,
-          sessionsBought,
-          sessionsUsed,
-          freeTrialSessions: toNonNegativeNumber(editingEnrollment.freeTrialSessions),
-          startDate: editingEnrollment.startDate ? new Date(`${editingEnrollment.startDate}T00:00:00`).toISOString() : null,
-          isActive: editingEnrollment.isActive
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<unknown>
-
-      if (!response.ok || !payload.success) {
-        setError(payload.error?.message ?? "Không cập nhật được khóa đã đăng ký.")
-        return
-      }
-
-      setEditingEnrollment(null)
-      setReceiptLines([])
-      setReceiptAmount("")
-      setIsReceiptAmountOverride(false)
-      await loadStudent()
-    } catch {
-      setError("Không cập nhật được khóa đã đăng ký.")
-    } finally {
-      setIsUpdatingEnrollment(false)
-    }
-  }
-
-  async function deleteOrCancelEnrollment() {
-    if (!editingEnrollment) return
-
-    setIsDeletingEnrollment(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/enrollments/${editingEnrollment.enrollmentId}`, {
-        method: "DELETE"
-      })
-      const payload = (await response.json()) as ApiResponse<EnrollmentDeleteResult>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không xóa hoặc hủy được ghi danh.")
-        return
-      }
-
-      setEditingEnrollment(null)
-      setIsConfirmingEnrollmentDelete(false)
-      setReceiptLines([])
-      setReceiptAmount("")
-      setIsReceiptAmountOverride(false)
-      await loadStudent()
-    } catch {
-      setError("Không xóa hoặc hủy được ghi danh.")
-    } finally {
-      setIsDeletingEnrollment(false)
-    }
-  }
-
-  function openTransferDialog(course: StudentDetail["courses"][number]) {
-    setTransferDraft({
-      fromEnrollmentId: course.enrollmentId,
-      toCourseId: course.courseId,
-      toClassId: "",
-      startDate: new Date().toISOString().slice(0, 10),
-      reason: ""
-    })
-  }
-
-  async function submitTransfer(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!transferDraft) return
-
-    if (!transferDraft.reason.trim()) {
-      setError("Cần nhập lý do chuyển lớp/khóa.")
-      return
-    }
-
-    setIsSubmittingTransfer(true)
-    setError(null)
-
-    try {
-      const response = await fetch("/api/enrollment-transfers", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          fromEnrollmentId: transferDraft.fromEnrollmentId,
-          toCourseId: transferDraft.toCourseId,
-          toClassId: transferDraft.toClassId || undefined,
-          startDate: transferDraft.startDate ? new Date(`${transferDraft.startDate}T00:00:00`).toISOString() : undefined,
-          reason: transferDraft.reason.trim()
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<EnrollmentTransferResult>
-
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không chuyển lớp/khóa được.")
-        return
-      }
-
-      setTransferDraft(null)
-      setReceiptAmount("")
-      setIsReceiptAmountOverride(false)
-      setIsWalletCreditManual(false)
-
-      if (payload.data.isCourseTransfer) {
-        setReceiptLines([toReceiptDraftLine(payload.data.enrollment)])
-      }
-
-      await loadStudent()
-      await loadFinanceLedger()
-    } catch {
-      setError("Không chuyển lớp/khóa được.")
-    } finally {
-      setIsSubmittingTransfer(false)
-    }
-  }
+  const {
+    deleteOrCancelEnrollment,
+    openTransferDialog,
+    submitEnrollment,
+    submitEnrollmentEdit,
+    submitTransfer
+  } = useStudentEnrollmentActions({
+    editingEnrollment,
+    enrollmentClassId,
+    enrollmentCourseId,
+    enrollmentFreeTrialSessions,
+    enrollmentSessions,
+    enrollmentStartDate,
+    loadFinanceLedger,
+    loadStudent,
+    selectedEnrollmentCourse,
+    setEditingEnrollment,
+    setEnrollmentClassId,
+    setEnrollmentFreeTrialSessions,
+    setEnrollmentSessions,
+    setError,
+    setIsConfirmingEnrollmentDelete,
+    setIsDeletingEnrollment,
+    setIsReceiptAmountOverride,
+    setIsSubmittingEnrollment,
+    setIsSubmittingTransfer,
+    setIsUpdatingEnrollment,
+    setIsWalletCreditManual,
+    setReceiptAmount,
+    setReceiptLines,
+    setTransferDraft,
+    studentId,
+    transferDraft
+  })
 
   async function submitReceipt(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
