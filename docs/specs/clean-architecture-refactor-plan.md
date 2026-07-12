@@ -103,7 +103,7 @@ Completed:
 
 ### Phase 2 - Extract Student Detail Query And Mapper
 
-Status: `todo`
+Status: `done`
 
 Goal:
 
@@ -116,9 +116,16 @@ Constraints:
 - Preserve parent account, photos, learning timeline, assessment progress, tasks, and contact logs.
 - No API response shape change.
 
+Completed:
+
+- Moved the Student Detail Prisma include shape, query, and response mapping into `lib/modules/students/student-detail.ts`.
+- Kept `GET /api/students/[id]` limited to auth, permission, teacher ownership, query invocation, and response mapping.
+- Kept `PATCH /api/students/[id]` on the same include and mapper so its existing `StudentDetail` response remains identical.
+- Verified with repo audit, typecheck, lint, tests, build, and GitNexus staged change detection.
+
 ### Phase 3 - Extract Student Detail Client Workflows
 
-Status: `todo`
+Status: `in_progress`
 
 Goal:
 
@@ -184,31 +191,27 @@ If a command is skipped, record the reason and residual risk in this file before
 
 ## Handoff For Next AI
 
-Current phase: Phase 2 - Extract Student Detail Query And Mapper.
+Current phase: Phase 3 - Extract Student Detail Client Workflows.
 
-Last completed refactor commit: `17ef9d7 refactor: extract receipt creation use case`.
+Last completed refactor commit: pending `refactor: extract student detail query and mapper`.
 
 Files changed in last completed refactor slice:
 
-- `app/api/receipts/route.ts`
-- `lib/modules/finance/application/create-receipt.ts`
-- `lib/modules/finance/application/receipt-discounts.ts`
-- `lib/modules/finance/application/receipt-errors.ts`
-- `lib/modules/finance/receipt-list-item.ts`
-- `tests/create-receipt.test.ts`
+- `app/api/students/[id]/route.ts`
+- `lib/modules/students/student-detail.ts`
 
 Verification result for last completed refactor slice:
 
 - `npm run repo:audit`: passed.
 - `npm run typecheck`: passed.
 - `npm run lint`: passed.
-- `npm run test`: passed.
+- `npm run test`: passed (26 tests).
 - `AUTH_SECRET=local-build-secret npm run build`: passed.
-- `npx gitnexus detect_changes --scope staged`: medium risk, expected `POST /api/receipts` flow impact only.
+- `npx gitnexus detect_changes --scope staged`: pending before commit.
 
 Next exact task:
 
 1. Read `AGENTS.md`, `docs/ai-context/index.md`, `docs/ai-context/product-contract.md`, and this file.
-2. Run GitNexus impact for `GET /api/students/[id]` / `app/api/students/[id]/route.ts`.
-3. Identify current student detail include/query shape and mapper output.
-4. Extract student detail query and mapper without changing `StudentDetail` response shape.
+2. Run GitNexus impact for the large student detail client and its mutation helpers.
+3. Identify UI-only state and API mutation orchestration for profile, enrollment, transfer, receipt, and parent account workflows.
+4. Extract focused client hooks/actions without moving durable business rules out of backend APIs or changing UI text/contracts.
