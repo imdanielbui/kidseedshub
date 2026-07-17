@@ -47,10 +47,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen pb-20 text-brand-ink md:pb-0">
       <aside className={`fixed inset-y-0 left-0 hidden p-4 transition-[width] duration-300 md:block ${isCollapsed ? "w-28" : "w-[17rem]"}`}>
         <div className={`neu-panel flex h-full flex-col rounded-3xl ${isCollapsed ? "items-center px-3 py-4" : "p-4"}`}>
-          <div className={`${isCollapsed ? "mb-4" : "mb-6"} flex items-center justify-center`}>
+          <div className={`${isCollapsed ? "mb-4" : "mb-6"} flex w-full items-center justify-center`}>
             <BrandLogo
               className="flex w-full justify-center"
-              imageClassName={isCollapsed ? "h-11 w-14 object-contain" : "h-16 w-auto max-w-[180px] object-contain"}
+              imageClassName={isCollapsed ? "mx-auto block h-11 w-14 object-contain" : "mx-auto block h-16 w-auto max-w-[180px] object-contain"}
             />
           </div>
           <button
