@@ -707,6 +707,7 @@ export default function PipelinePage() {
                             <p className="text-xs text-stone-500">{formatDateTime(log.createdAt)}</p>
                           </div>
                           <p className="mt-1 line-clamp-2 text-sm text-brand-ink">{log.content}</p>
+                          <p className="mt-2 inline-flex items-center gap-1 text-xs text-stone-500"><UserRound className="h-3.5 w-3.5" />Người liên hệ: {log.loggedByName}</p>
                         </div>
                       )) : <p className="rounded-2xl border border-brand-red/10 p-3 text-sm text-stone-500">Chưa có lịch sử liên hệ.</p>}
                     </div>
