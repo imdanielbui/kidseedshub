@@ -4,6 +4,7 @@ import { type ChangeEvent, FormEvent, useEffect, useRef, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import { ClassScheduleToolbar } from "./class-schedule-toolbar"
 import { ClassSetupWorkspace } from "./class-setup-workspace"
+import { ClassTimelineDialog } from "./class-timeline-dialog"
 import { ManagedClassDialog } from "./managed-class-dialog"
 import { MonthCalendarView, WeekCalendarView } from "./class-calendar-views"
 import { ScheduleEventDialog } from "./schedule-event-dialog"
@@ -36,6 +37,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<ClassCalendarSessionItem | null>(null)
   const [selectedManagedClassId, setSelectedManagedClassId] = useState<string | null>(null)
+  const [selectedTimelineClassId, setSelectedTimelineClassId] = useState<string | null>(null)
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false)
   const [classSearch, setClassSearch] = useState("")
   const [classSubjectFilter, setClassSubjectFilter] = useState<ClassSubjectFilter>("ALL")
@@ -698,6 +700,7 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
           classStatusFilter={classStatusFilter}
           setClassStatusFilter={setClassStatusFilter}
           setSelectedManagedClassId={setSelectedManagedClassId}
+          setSelectedTimelineClassId={setSelectedTimelineClassId}
           form={form}
           setForm={setForm}
           teacherOptions={teacherOptions}
@@ -774,6 +777,14 @@ export function ClassScheduleBoard({ view = "calendar" }: ClassScheduleBoardProp
           onClose={() => setSelectedManagedClassId(null)}
           patchClass={patchClass}
           updateClassStudents={updateClassStudents}
+        />
+      ) : null}
+
+      {selectedTimelineClassId ? (
+        <ClassTimelineDialog
+          classId={selectedTimelineClassId}
+          panelClassName={dialogPanelClassName}
+          onClose={() => setSelectedTimelineClassId(null)}
         />
       ) : null}
     </section>

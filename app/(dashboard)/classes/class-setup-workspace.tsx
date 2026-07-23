@@ -1,6 +1,6 @@
 "use client"
 
-import { CalendarDays, Plus, RefreshCcw, Search, Trash2 } from "lucide-react"
+import { CalendarDays, ChartNoAxesCombined, Plus, RefreshCcw, Search, Trash2 } from "lucide-react"
 import type { Dispatch, FormEvent, SetStateAction } from "react"
 import { subjectLabels } from "@/lib/contracts/assessment"
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
@@ -46,6 +46,7 @@ type ClassSetupWorkspaceProps = {
   classStatusFilter: ClassStatusFilter
   setClassStatusFilter: Dispatch<SetStateAction<ClassStatusFilter>>
   setSelectedManagedClassId: Dispatch<SetStateAction<string | null>>
+  setSelectedTimelineClassId: Dispatch<SetStateAction<string | null>>
   form: ClassFormState
   setForm: Dispatch<SetStateAction<ClassFormState>>
   teacherOptions: UserListItem[]
@@ -77,6 +78,7 @@ export function ClassSetupWorkspace({
   classStatusFilter,
   setClassStatusFilter,
   setSelectedManagedClassId,
+  setSelectedTimelineClassId,
   form,
   setForm,
   teacherOptions,
@@ -141,6 +143,7 @@ export function ClassSetupWorkspace({
           classStatusFilter={classStatusFilter}
           setClassStatusFilter={setClassStatusFilter}
           setSelectedManagedClassId={setSelectedManagedClassId}
+          setSelectedTimelineClassId={setSelectedTimelineClassId}
         />
       ) : null}
 
@@ -183,7 +186,8 @@ function ManageClassesPanel({
   setClassSubjectFilter,
   classStatusFilter,
   setClassStatusFilter,
-  setSelectedManagedClassId
+  setSelectedManagedClassId,
+  setSelectedTimelineClassId
 }: Pick<
   ClassSetupWorkspaceProps,
   | "filteredManagedClasses"
@@ -195,6 +199,7 @@ function ManageClassesPanel({
   | "classStatusFilter"
   | "setClassStatusFilter"
   | "setSelectedManagedClassId"
+  | "setSelectedTimelineClassId"
 >) {
   return (
     <div className="content-border p-5">
@@ -241,33 +246,41 @@ function ManageClassesPanel({
           const activeStudents = klass.students.filter((student) => student.isActive).length
 
           return (
-            <button
+            <article
               key={klass.id}
-              type="button"
-              className="neu-list-item rounded-2xl p-4 text-left transition hover:shadow-md"
-              onClick={() => setSelectedManagedClassId(klass.id)}
+              className="neu-list-item rounded-2xl p-4"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-brand-ink">{klass.name}</p>
-                  {klass.code ? <p className="mt-1 truncate text-xs font-semibold text-brand-red">{klass.code}</p> : null}
-                  <p className="mt-1 truncate text-xs text-stone-500">
-                    Khóa: {klass.courseName} - {subjectLabels[klass.subject]}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-stone-500">
-                    GV {klass.teacherName}
-                  </p>
+              <button type="button" className="w-full text-left" onClick={() => setSelectedManagedClassId(klass.id)}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-brand-ink">{klass.name}</p>
+                    {klass.code ? <p className="mt-1 truncate text-xs font-semibold text-brand-red">{klass.code}</p> : null}
+                    <p className="mt-1 truncate text-xs text-stone-500">
+                      Khóa: {klass.courseName} - {subjectLabels[klass.subject]}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-stone-500">
+                      GV {klass.teacherName}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${klass.isActive ? "border-emerald-500/25 text-emerald-700" : "border-stone-300 text-stone-500"}`}>
+                    {klass.isActive ? "Đang mở" : "Tạm tắt"}
+                  </span>
                 </div>
-                <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${klass.isActive ? "border-emerald-500/25 text-emerald-700" : "border-stone-300 text-stone-500"}`}>
-                  {klass.isActive ? "Đang mở" : "Tạm tắt"}
-                </span>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-stone-600">
-                <span className="rounded-xl border border-brand-red/10 px-2 py-1.5">{activeStudents} học sinh</span>
-                <span className="rounded-xl border border-brand-red/10 px-2 py-1.5">{klass.generatedSessionCount} buổi</span>
-                <span className="truncate rounded-xl border border-brand-red/10 px-2 py-1.5">{klass.startTime}-{klass.endTime}</span>
-              </div>
-            </button>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-stone-600">
+                  <span className="rounded-xl border border-brand-red/10 px-2 py-1.5">{activeStudents} học sinh</span>
+                  <span className="rounded-xl border border-brand-red/10 px-2 py-1.5">{klass.generatedSessionCount} buổi</span>
+                  <span className="truncate rounded-xl border border-brand-red/10 px-2 py-1.5">{klass.startTime}-{klass.endTime}</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-brand-red/15 bg-white/55 px-3 py-2 text-xs font-semibold text-brand-red transition hover:bg-white"
+                onClick={() => setSelectedTimelineClassId(klass.id)}
+              >
+                <ChartNoAxesCombined className="h-3.5 w-3.5" />
+                Tiến độ lớp
+              </button>
+            </article>
           )
         }) : (
           <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">
