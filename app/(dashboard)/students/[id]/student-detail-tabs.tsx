@@ -14,6 +14,7 @@ import {
   type ParentAccountAction
 } from "./student-detail-utils"
 import { DetailInput, EmptyState, FormFooter, InfoCard, InfoPill, ListCard, SectionHeader } from "./student-detail-presentational"
+import { formatAge } from "./student-detail-format"
 
 export function StudentOverviewTab({
   student,
@@ -76,6 +77,7 @@ export function StudentOverviewTab({
           <label className="block text-sm font-semibold text-stone-700">
             Ngày sinh
             <input className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" type="date" value={profileBirthDate} onChange={(event) => setProfileBirthDate(event.target.value)} />
+            <span className="mt-2 block text-xs font-medium text-stone-500">Độ tuổi hiện tại: {formatAge(profileBirthDate)}</span>
           </label>
           <label className="block text-sm font-semibold text-stone-700">
             Trạng thái
