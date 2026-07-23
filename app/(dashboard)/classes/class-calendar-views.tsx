@@ -5,13 +5,13 @@ import type { ClassCalendarSessionItem } from "@/lib/contracts/courses"
 import type { ScheduleEventItem } from "@/lib/contracts/schedule-events"
 import {
   defaultDate,
-  formatWeekdayDate,
   monthTitle,
   sessionTone,
   toDateKey,
   weekdayColumns,
   weekTitle
 } from "./class-schedule-utils"
+import { WeeklyTimeGrid } from "./weekly-time-grid"
 
 type CalendarViewProps = {
   month: string
@@ -128,63 +128,17 @@ export function WeekCalendarView({
         </div>
         <ClassScheduleLegend />
       </div>
-      <div className="grid gap-3 lg:grid-cols-7">
-        {weekCells.map((date) => {
-          const key = toDateKey(date)
-          const daySessions = sessionsByDate[key] ?? []
-          const dayEvents = eventsByDate[key] ?? []
-          const weekday = weekdayColumns.find((day) => day.value === date.getDay())
-          const isToday = key === defaultDate
-          const isBlocked = dayEvents.some((event) => event.affectsScheduling)
-
-          return (
-            <div
-              key={key}
-              className={`rounded-3xl border border-brand-red/10 p-3 transition-colors lg:min-h-[28rem] ${
-                isToday ? "bg-brand-red/5" : "bg-white/25"
-              } ${isBlocked ? "bg-brand-red/10" : ""}`}
-              onDragOver={(event) => {
-                if (!canManageSchedule || isBlocked) return
-                event.preventDefault()
-              }}
-              onDrop={(event) => {
-                if (isBlocked) return
-                event.preventDefault()
-                dropSessionOnDate(date)
-              }}
-            >
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-red">{weekday?.short ?? ""}</p>
-                  <p className="mt-1 text-lg font-semibold text-brand-ink">{formatWeekdayDate(date)}</p>
-                </div>
-                <span className="rounded-2xl border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-stone-600">
-                  {daySessions.length} buổi
-                </span>
-              </div>
-              <div className="space-y-2">
-                {dayEvents.map((event) => (
-                  <ScheduleEventBadge key={event.id} event={event} />
-                ))}
-                {isLoading ? <p className="rounded-2xl border border-brand-red/10 p-2 text-xs text-stone-400">Đang tải...</p> : null}
-                {daySessions.map((session) => (
-                  <CalendarSessionButton
-                    key={session.id}
-                    session={session}
-                    canDrag={canManageSchedule && !isBlocked}
-                    isDragging={draggingSessionId === session.id}
-                    setDraggingSessionId={setDraggingSessionId}
-                    setSelectedSession={setSelectedSession}
-                  />
-                ))}
-                {!isLoading && !dayEvents.length && !daySessions.length ? (
-                  <p className="rounded-2xl border border-brand-red/10 p-3 text-xs text-stone-500">Không có lịch.</p>
-                ) : null}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      <WeeklyTimeGrid
+        weekCells={weekCells}
+        sessionsByDate={sessionsByDate}
+        eventsByDate={eventsByDate}
+        isLoading={isLoading}
+        canManageSchedule={canManageSchedule}
+        draggingSessionId={draggingSessionId}
+        setDraggingSessionId={setDraggingSessionId}
+        setSelectedSession={setSelectedSession}
+        dropSessionOnDate={dropSessionOnDate}
+      />
     </div>
   )
 }

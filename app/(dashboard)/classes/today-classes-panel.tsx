@@ -11,6 +11,7 @@ import {
   type TodayClassItem,
   type TodayClassStudent
 } from "@/lib/contracts/classes"
+import { TodayClassTimeline } from "./today-class-timeline"
 
 const attendanceActions: Array<{
   status: AttendanceStatusKey
@@ -124,34 +125,12 @@ export function TodayClassesPanel({
               {attendanceSummary.marked}/{attendanceSummary.total}
             </span>
           </div>
-          <div className="space-y-2">
-            {classes.map((klass) => {
-              const markedCount = klass.students.filter((student) => student.attendanceStatus).length
-              const isActive = klass.id === selectedClass.id
-
-              return (
-                <button
-                  key={klass.id}
-                  type="button"
-                  className={`neu-list-item w-full rounded-2xl p-3 text-left transition hover:shadow-md ${
-                    isActive ? "border-brand-red/30 text-brand-red" : "text-stone-700"
-                  }`}
-                  onClick={() => {
-                    setSelectedClassId(klass.id)
-                    setExpandedStudentId(null)
-                  }}
-                >
-                  <span className="block truncate text-sm font-semibold">{klass.name}</span>
-                  <span className="mt-1 flex items-center justify-between gap-2 text-xs text-stone-500">
-                    <span className="truncate">
-                      {klass.startTime}-{klass.endTime}
-                    </span>
-                    <span>{markedCount}/{klass.students.length}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          <TodayClassTimeline
+            classes={classes}
+            selectedClassId={selectedClass.id}
+            setSelectedClassId={setSelectedClassId}
+            setExpandedStudentId={setExpandedStudentId}
+          />
         </aside>
 
         <div className="min-w-0 p-4">
