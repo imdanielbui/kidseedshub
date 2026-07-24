@@ -1,5 +1,6 @@
 "use client"
 
+import { CalendarCheck2, CircleAlert, CircleCheck, UsersRound } from "lucide-react"
 import type { Dispatch, SetStateAction } from "react"
 import type { ClassCalendarSessionItem } from "@/lib/contracts/courses"
 import type { ScheduleEventItem } from "@/lib/contracts/schedule-events"
@@ -119,15 +120,28 @@ export function WeekCalendarView({
   setSelectedSession,
   dropSessionOnDate
 }: WeekViewProps) {
+  const weeklySessions = weekCells.flatMap((date) => sessionsByDate[toDateKey(date)] ?? [])
+  const completedSessions = weeklySessions.filter((session) => session.status === "COMPLETED").length
+  const expectedStudents = weeklySessions.reduce((total, session) => total + session.studentCount, 0)
+  const pendingPastSessions = weeklySessions.filter((session) => session.status === "SCHEDULED" && session.date <= defaultDate).length
+
   return (
-    <div className="content-border mt-5 p-3">
-      <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="content-border mt-5 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-xl font-semibold capitalize text-brand-ink">{weekTitle(weekStart)}</h3>
-          <p className="mt-1 text-xs font-semibold text-stone-500">{sessionsLength} buổi trong vùng lịch đang tải</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-red">Vận hành tuần</p>
+          <h3 className="mt-1 text-xl font-semibold capitalize text-brand-ink">{weekTitle(weekStart)}</h3>
+          <p className="mt-1 text-xs text-stone-500">Theo dõi lịch lớp, tiến độ buổi học và khối lượng vận hành theo khung giờ.</p>
         </div>
         <ClassScheduleLegend />
       </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <WeeklyMetric icon={<CalendarCheck2 className="h-4 w-4" />} label="Buổi trong tuần" value={`${sessionsLength}`} detail="Đã sinh lịch" />
+        <WeeklyMetric icon={<UsersRound className="h-4 w-4" />} label="Lượt học viên dự kiến" value={`${expectedStudents}`} detail="Theo sĩ số từng buổi" />
+        <WeeklyMetric icon={<CircleCheck className="h-4 w-4" />} label="Buổi hoàn tất" value={`${completedSessions}`} detail="Đã cập nhật trạng thái" tone="success" />
+        <WeeklyMetric icon={<CircleAlert className="h-4 w-4" />} label="Cần xác nhận" value={`${pendingPastSessions}`} detail="Buổi quá ngày chưa chốt" tone="attention" />
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-brand-red/10 bg-white/25 p-2">
       <WeeklyTimeGrid
         weekCells={weekCells}
         sessionsByDate={sessionsByDate}
@@ -139,6 +153,18 @@ export function WeekCalendarView({
         setSelectedSession={setSelectedSession}
         dropSessionOnDate={dropSessionOnDate}
       />
+      </div>
+    </div>
+  )
+}
+
+function WeeklyMetric({ icon, label, value, detail, tone = "default" }: { icon: React.ReactNode; label: string; value: string; detail: string; tone?: "default" | "success" | "attention" }) {
+  const toneClass = tone === "success" ? "text-emerald-700" : tone === "attention" ? "text-brand-red" : "text-brand-ink"
+  return (
+    <div className="rounded-2xl border border-brand-red/10 bg-white/55 px-4 py-3">
+      <div className={`flex items-center gap-2 text-xs font-semibold ${toneClass}`}>{icon}{label}</div>
+      <p className={`mt-2 text-2xl font-semibold ${toneClass}`}>{value}</p>
+      <p className="mt-1 text-xs text-stone-500">{detail}</p>
     </div>
   )
 }

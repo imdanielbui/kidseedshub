@@ -59,6 +59,9 @@ export function WeeklyTimeGrid({
   dropSessionOnDate
 }: WeeklyTimeGridProps) {
   const gridHeight = (endHour - startHour) * pixelsPerHour
+  const now = new Date()
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  const currentTimeTop = ((nowMinutes - startHour * 60) / 60) * pixelsPerHour
 
   return (
     <div className="overflow-x-auto">
@@ -107,6 +110,12 @@ export function WeeklyTimeGrid({
                 }}
               >
                 {isLoading ? <span className="absolute left-2 top-2 text-xs text-stone-400">Đang tải...</span> : null}
+                {isToday && nowMinutes >= startHour * 60 && nowMinutes <= endHour * 60 ? (
+                  <div className="absolute left-0 right-0 z-20 flex items-center" style={{ top: `${currentTimeTop}px` }}>
+                    <span className="-ml-1 h-2 w-2 rounded-full bg-brand-red" />
+                    <span className="h-px flex-1 bg-brand-red/70" />
+                  </div>
+                ) : null}
                 {sessionLayout.positioned.map(({ session, start: sessionStart, end: sessionEnd, lane }) => {
                   const start = Math.max(startHour * 60, sessionStart)
                   const end = Math.min(endHour * 60, sessionEnd)
