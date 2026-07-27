@@ -27,20 +27,43 @@ function minutesFromTime(value: string) {
 }
 
 function layoutSessions(sessions: ClassCalendarSessionItem[]) {
-  let activeSessions: Array<{ end: number }> = []
-  const positioned = sessions
+  const sessionsWithTimes = sessions
     .slice()
     .sort((first, second) => minutesFromTime(first.startTime) - minutesFromTime(second.startTime) || first.id.localeCompare(second.id))
     .map((session) => {
       const start = minutesFromTime(session.startTime)
       const end = Math.max(start + 40, minutesFromTime(session.endTime))
-      activeSessions = activeSessions.filter((activeSession) => activeSession.end > start)
-      const stackLevel = activeSessions.length
-      activeSessions.push({ end })
-      return { session, start, end, stackLevel }
+      return { session, start, end }
     })
 
-  return positioned
+  const overlappingGroups: Array<typeof sessionsWithTimes> = []
+  let group: typeof sessionsWithTimes = []
+  let groupEnd = -1
+
+  for (const session of sessionsWithTimes) {
+    if (group.length && session.start >= groupEnd) {
+      overlappingGroups.push(group)
+      group = []
+      groupEnd = -1
+    }
+
+    group.push(session)
+    groupEnd = Math.max(groupEnd, session.end)
+  }
+
+  if (group.length) overlappingGroups.push(group)
+
+  return overlappingGroups.flatMap((overlappingSessions) => {
+    const laneEnds: number[] = []
+    const positioned = overlappingSessions.map((item) => {
+      const availableLane = laneEnds.findIndex((laneEnd) => laneEnd <= item.start)
+      const lane = availableLane === -1 ? laneEnds.length : availableLane
+      laneEnds[lane] = item.end
+      return { ...item, lane }
+    })
+
+    return positioned.map((item) => ({ ...item, laneCount: laneEnds.length }))
+  })
 }
 
 function weeklySessionTone(session: ClassCalendarSessionItem) {
@@ -67,8 +90,8 @@ export function WeeklyTimeGrid({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[980px]">
-        <div className="grid grid-cols-[56px_repeat(7,minmax(130px,1fr))] border-b border-l border-brand-red/10">
+      <div className="min-w-[1596px]">
+        <div className="grid grid-cols-[56px_repeat(7,minmax(220px,1fr))] border-b border-l border-brand-red/10">
           <div className="border-r border-t border-brand-red/10 bg-white/40" />
           {weekCells.map((date) => {
             const key = toDateKey(date)
@@ -84,7 +107,7 @@ export function WeeklyTimeGrid({
             )
           })}
         </div>
-        <div className="grid grid-cols-[56px_repeat(7,minmax(130px,1fr))] border-l border-brand-red/10">
+        <div className="grid grid-cols-[56px_repeat(7,minmax(220px,1fr))] border-l border-brand-red/10">
           <div className="relative border-r border-brand-red/10" style={{ height: `${gridHeight}px` }}>
             {Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index).map((hour) => (
               <span key={hour} className="absolute right-2 -translate-y-1/2 text-[10px] font-semibold text-stone-400" style={{ top: `${(hour - startHour) * pixelsPerHour}px` }}>{String(hour).padStart(2, "0")}:00</span>
@@ -118,15 +141,17 @@ export function WeeklyTimeGrid({
                     <span className="h-px flex-1 bg-brand-red/70" />
                   </div>
                 ) : null}
-                {sessionLayout.map(({ session, start: sessionStart, end: sessionEnd, stackLevel }) => {
+                {sessionLayout.map(({ session, start: sessionStart, end: sessionEnd, lane, laneCount }) => {
                   const start = Math.max(startHour * 60, sessionStart)
                   const end = Math.min(endHour * 60, sessionEnd)
                   const top = ((start - startHour * 60) / 60) * pixelsPerHour
                   const height = Math.max(48, ((Math.max(end - start, 40)) / 60) * pixelsPerHour)
+                  const laneWidth = 100 / laneCount
                   return (
                     <button
                       key={session.id}
                       type="button"
+                      title={`${session.className} · ${session.startTime}-${session.endTime}`}
                       draggable={canManageSchedule && !blocked}
                       onDragStart={(event) => {
                         event.dataTransfer.setData("text/plain", session.id)
@@ -138,12 +163,12 @@ export function WeeklyTimeGrid({
                       style={{
                         top: `${top}px`,
                         minHeight: `${height}px`,
-                        left: `${stackLevel * 8 + 3}px`,
-                        right: "3px",
-                        zIndex: 10 + stackLevel
+                        left: `calc(${lane * laneWidth}% + 3px)`,
+                        width: `calc(${laneWidth}% - 6px)`,
+                        zIndex: 10
                       }}
                     >
-                      <span className="block line-clamp-2">{session.className}</span>
+                      <span className="block min-w-0 truncate whitespace-nowrap">{session.className}</span>
                       <span className="mt-0.5 block truncate">{session.startTime}-{session.endTime}</span>
                     </button>
                   )
