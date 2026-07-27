@@ -172,8 +172,8 @@ function WeeklyMetric({ icon, label, value, detail, tone = "default" }: { icon: 
 function ClassScheduleLegend() {
   return (
     <div className="flex gap-2 text-xs font-semibold">
-      <span className="rounded-full bg-lime-500 px-2 py-1 text-white">FUN</span>
-      <span className="rounded-full bg-indigo-500 px-2 py-1 text-white">Robotics</span>
+      <span className="rounded-full bg-amber-500 px-2 py-1 text-white">FUN</span>
+      <span className="rounded-full bg-brand-red px-2 py-1 text-white">Robotics</span>
       <span className="rounded-full bg-brand-red px-2 py-1 text-white">Nghỉ lễ</span>
     </div>
   )

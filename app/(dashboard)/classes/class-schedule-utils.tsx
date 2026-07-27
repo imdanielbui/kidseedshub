@@ -98,7 +98,7 @@ export function uniqueById<T extends { id: string }>(items: T[]) {
 export function sessionTone(session: ClassCalendarSessionItem) {
   if (session.status === "CANCELED") return "border-stone-300 bg-stone-200 text-stone-600"
   if (session.status === "COMPLETED") return "border-emerald-600 bg-emerald-600 text-white"
-  return session.subject === "FUN" ? "border-lime-500 bg-lime-500 text-white" : "border-indigo-500 bg-indigo-500 text-white"
+  return session.subject === "FUN" ? "border-amber-500 bg-amber-500 text-white" : "border-brand-red bg-brand-red text-white"
 }
 
 export function formatFileSize(bytes: number) {
