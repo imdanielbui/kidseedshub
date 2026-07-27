@@ -49,7 +49,7 @@ export function MonthCalendarView({
     <div className="content-border mt-5 p-3">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-xl font-semibold capitalize text-brand-ink">{monthTitle(month)}</h3>
-        <WeeklyScheduleLegend />
+        <ClassScheduleLegend />
       </div>
       <div className="grid grid-cols-7 border-l border-t border-brand-red/10">
         {weekdayColumns.map((day) => (
@@ -133,7 +133,7 @@ export function WeekCalendarView({
           <h3 className="mt-1 text-xl font-semibold capitalize text-brand-ink">{weekTitle(weekStart)}</h3>
           <p className="mt-1 text-xs text-stone-500">Theo dõi lịch lớp, tiến độ buổi học và khối lượng vận hành theo khung giờ.</p>
         </div>
-        <ClassScheduleLegend />
+        <WeeklyScheduleLegend />
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <WeeklyMetric icon={<CalendarCheck2 className="h-4 w-4" />} label="Buổi trong tuần" value={`${sessionsLength}`} detail="Đã sinh lịch" />
