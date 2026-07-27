@@ -64,7 +64,7 @@ export const defaultColumnOrder: ColumnKey[] = [
 export const defaultPinnedColumns: ColumnKey[] = ["code", "studentName"]
 
 export const pinnedColumnWidths: Partial<Record<ColumnKey, number>> = {
-  code: 104,
+  code: 148,
   studentName: 220,
   parentName: 220,
   phone: 160,

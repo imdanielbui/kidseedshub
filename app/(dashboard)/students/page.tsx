@@ -70,7 +70,7 @@ const defaultColumnOrder: ColumnKey[] = [
 const defaultPinnedColumns: ColumnKey[] = ["code", "name"]
 
 const pinnedColumnWidths: Partial<Record<ColumnKey, number>> = {
-  code: 120,
+  code: 148,
   name: 230,
   parentName: 220,
   parentPhone: 160,
