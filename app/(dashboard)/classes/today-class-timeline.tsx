@@ -32,15 +32,62 @@ function timelineTone(klass: TodayClassItem) {
   return "border-stone-200 bg-white/65 text-stone-700"
 }
 
+type TimelineClass = TodayClassItem & {
+  startMinutes: number
+  endMinutes: number
+  lane: number
+  laneCount: number
+}
+
+function arrangeTimelineClasses(classes: TodayClassItem[]): TimelineClass[] {
+  const sortedClasses = [...classes]
+    .map((klass) => ({
+      ...klass,
+      startMinutes: Math.max(startHour * 60, minutesFromTime(klass.startTime)),
+      endMinutes: Math.min(endHour * 60, minutesFromTime(klass.endTime))
+    }))
+    .sort((left, right) => left.startMinutes - right.startMinutes || left.endMinutes - right.endMinutes || left.id.localeCompare(right.id))
+
+  const groups: Array<Array<Omit<TimelineClass, "lane" | "laneCount">>> = []
+  let group: Array<Omit<TimelineClass, "lane" | "laneCount">> = []
+  let latestEnd = -1
+
+  for (const klass of sortedClasses) {
+    if (group.length && klass.startMinutes >= latestEnd) {
+      groups.push(group)
+      group = []
+      latestEnd = -1
+    }
+
+    group.push(klass)
+    latestEnd = Math.max(latestEnd, klass.endMinutes)
+  }
+
+  if (group.length) groups.push(group)
+
+  return groups.flatMap((overlappingClasses) => {
+    const laneEnds: number[] = []
+    const arranged = overlappingClasses.map((klass) => {
+      const availableLane = laneEnds.findIndex((end) => end <= klass.startMinutes)
+      const lane = availableLane === -1 ? laneEnds.length : availableLane
+      laneEnds[lane] = klass.endMinutes
+      return { ...klass, lane }
+    })
+
+    return arranged.map((klass) => ({ ...klass, laneCount: laneEnds.length }))
+  })
+}
+
 export function TodayClassTimeline({ classes, selectedClassId, setSelectedClassId, setExpandedStudentId }: TodayClassTimelineProps) {
   const now = new Date()
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
   const timelineMinutes = (endHour - startHour) * 60
   const nowTop = ((nowMinutes - startHour * 60) / timelineMinutes) * (endHour - startHour) * pixelsPerHour
+  const timelineClasses = arrangeTimelineClasses(classes)
 
   return (
     <div className="max-h-[58vh] overflow-auto pr-1">
-      <div className="relative min-w-[250px]" style={{ height: `${(endHour - startHour) * pixelsPerHour}px` }}>
+      <div className="relative min-w-[440px]" style={{ height: `${(endHour - startHour) * pixelsPerHour}px` }}>
         <div className="absolute bottom-0 left-10 top-0 border-l border-brand-red/15" />
         {Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index).map((hour) => (
           <div key={hour} className="absolute left-0 right-0 flex items-start gap-2" style={{ top: `${(hour - startHour) * pixelsPerHour}px` }}>
@@ -55,33 +102,39 @@ export function TodayClassTimeline({ classes, selectedClassId, setSelectedClassI
             <span className="rounded-full bg-brand-red px-2 py-0.5 text-[10px] font-semibold text-white">Bây giờ</span>
           </div>
         ) : null}
-        {classes.map((klass) => {
-          const start = Math.max(startHour * 60, minutesFromTime(klass.startTime))
-          const end = Math.min(endHour * 60, minutesFromTime(klass.endTime))
-          const top = ((start - startHour * 60) / 60) * pixelsPerHour
-          const height = Math.max(46, ((Math.max(end - start, 45)) / 60) * pixelsPerHour)
-          const marked = klass.students.filter((student) => student.attendanceStatus).length
-          const selected = klass.id === selectedClassId
+        <div className="absolute bottom-0 left-14 right-0 top-0 z-20">
+          {timelineClasses.map((klass) => {
+            const top = ((klass.startMinutes - startHour * 60) / 60) * pixelsPerHour
+            const height = Math.max(46, ((Math.max(klass.endMinutes - klass.startMinutes, 45)) / 60) * pixelsPerHour)
+            const marked = klass.students.filter((student) => student.attendanceStatus).length
+            const selected = klass.id === selectedClassId
+            const laneWidth = 100 / klass.laneCount
 
-          return (
-            <button
-              key={klass.id}
-              type="button"
-              className={`absolute left-14 right-0 z-20 rounded-xl border px-3 py-2 text-left transition hover:shadow-md ${timelineTone(klass)} ${selected ? "ring-2 ring-brand-red/35 ring-offset-1" : ""}`}
-              style={{ top: `${top}px`, minHeight: `${height}px` }}
-              onClick={() => {
-                setSelectedClassId(klass.id)
-                setExpandedStudentId(null)
-              }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="line-clamp-2 text-xs font-semibold">{klass.name}</span>
-                <span className="shrink-0 text-[10px] font-semibold">{marked}/{klass.students.length}</span>
-              </div>
-              <span className="mt-1 flex items-center gap-1 text-[10px] opacity-80"><Clock3 className="h-3 w-3" />{klass.startTime}-{klass.endTime}</span>
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={klass.id}
+                type="button"
+                className={`absolute overflow-hidden rounded-xl border px-3 py-2 text-left transition hover:shadow-md ${timelineTone(klass)} ${selected ? "ring-2 ring-brand-red/35 ring-offset-1" : ""}`}
+                style={{
+                  top: `${top}px`,
+                  minHeight: `${height}px`,
+                  left: `${klass.lane * laneWidth}%`,
+                  width: `calc(${laneWidth}% - 4px)`
+                }}
+                onClick={() => {
+                  setSelectedClassId(klass.id)
+                  setExpandedStudentId(null)
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="line-clamp-2 text-xs font-semibold">{klass.name}</span>
+                  <span className="shrink-0 text-[10px] font-semibold">{marked}/{klass.students.length}</span>
+                </div>
+                <span className="mt-1 flex items-center gap-1 text-[10px] opacity-80"><Clock3 className="h-3 w-3" />{klass.startTime}-{klass.endTime}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
