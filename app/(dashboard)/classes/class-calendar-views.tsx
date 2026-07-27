@@ -49,7 +49,7 @@ export function MonthCalendarView({
     <div className="content-border mt-5 p-3">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-xl font-semibold capitalize text-brand-ink">{monthTitle(month)}</h3>
-        <ClassScheduleLegend />
+        <WeeklyScheduleLegend />
       </div>
       <div className="grid grid-cols-7 border-l border-t border-brand-red/10">
         {weekdayColumns.map((day) => (
@@ -175,6 +175,16 @@ function ClassScheduleLegend() {
       <span className="rounded-full bg-lime-500 px-2 py-1 text-white">FUN</span>
       <span className="rounded-full bg-indigo-500 px-2 py-1 text-white">Robotics</span>
       <span className="rounded-full bg-brand-red px-2 py-1 text-white">Nghỉ lễ</span>
+    </div>
+  )
+}
+
+function WeeklyScheduleLegend() {
+  return (
+    <div className="flex gap-2 text-xs font-semibold">
+      <span className="rounded-full bg-amber-500 px-2 py-1 text-white">FUN</span>
+      <span className="rounded-full bg-brand-red px-2 py-1 text-white">Robotics</span>
+      <span className="rounded-full bg-stone-500 px-2 py-1 text-white">Nghỉ lễ</span>
     </div>
   )
 }

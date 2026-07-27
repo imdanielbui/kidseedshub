@@ -3,7 +3,7 @@
 import type { Dispatch, SetStateAction } from "react"
 import type { ClassCalendarSessionItem } from "@/lib/contracts/courses"
 import type { ScheduleEventItem } from "@/lib/contracts/schedule-events"
-import { defaultDate, formatWeekdayDate, sessionTone, toDateKey, weekdayColumns } from "./class-schedule-utils"
+import { defaultDate, formatWeekdayDate, toDateKey, weekdayColumns } from "./class-schedule-utils"
 
 type WeeklyTimeGridProps = {
   weekCells: Date[]
@@ -41,6 +41,12 @@ function layoutSessions(sessions: ClassCalendarSessionItem[]) {
     })
 
   return positioned
+}
+
+function weeklySessionTone(session: ClassCalendarSessionItem) {
+  if (session.status === "CANCELED") return "border-stone-300 bg-stone-200 text-stone-600"
+  if (session.status === "COMPLETED") return "border-emerald-600 bg-emerald-600 text-white"
+  return session.subject === "FUN" ? "border-amber-500 bg-amber-500 text-white" : "border-brand-red bg-brand-red text-white"
 }
 
 export function WeeklyTimeGrid({
@@ -128,7 +134,7 @@ export function WeeklyTimeGrid({
                       }}
                       onDragEnd={() => setDraggingSessionId(null)}
                       onClick={() => setSelectedSession(session)}
-                      className={`absolute overflow-hidden rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold shadow-sm transition hover:shadow-md ${sessionTone(session)} ${draggingSessionId === session.id ? "opacity-60" : ""}`}
+                      className={`absolute flex flex-col justify-start overflow-hidden rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold leading-tight shadow-sm transition hover:shadow-md ${weeklySessionTone(session)} ${draggingSessionId === session.id ? "opacity-60" : ""}`}
                       style={{
                         top: `${top}px`,
                         minHeight: `${height}px`,
