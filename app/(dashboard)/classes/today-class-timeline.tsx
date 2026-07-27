@@ -32,14 +32,15 @@ function timelineTone(klass: TodayClassItem) {
   return "border-stone-200 bg-white/65 text-stone-700"
 }
 
-type StackedTimelineClass = TodayClassItem & {
+type OverlappingTimelineClass = TodayClassItem & {
   startMinutes: number
   endMinutes: number
   top: number
   height: number
+  stackLevel: number
 }
 
-function stackTimelineClasses(classes: TodayClassItem[]): StackedTimelineClass[] {
+function overlapTimelineClasses(classes: TodayClassItem[]): OverlappingTimelineClass[] {
   const sortedClasses = [...classes]
     .map((klass) => ({
       ...klass,
@@ -48,15 +49,21 @@ function stackTimelineClasses(classes: TodayClassItem[]): StackedTimelineClass[]
     }))
     .sort((left, right) => left.startMinutes - right.startMinutes || left.endMinutes - right.endMinutes || left.id.localeCompare(right.id))
 
-  let previousBottom = 0
+  let activeClasses: Array<Pick<OverlappingTimelineClass, "endMinutes">> = []
 
   return sortedClasses.map((klass) => {
-    const scheduledTop = ((klass.startMinutes - startHour * 60) / 60) * pixelsPerHour
-    const height = Math.max(46, ((Math.max(klass.endMinutes - klass.startMinutes, 45)) / 60) * pixelsPerHour)
-    const top = Math.max(scheduledTop, previousBottom ? previousBottom + 6 : 0)
-    previousBottom = top + height
+    activeClasses = activeClasses.filter((activeClass) => activeClass.endMinutes > klass.startMinutes)
 
-    return { ...klass, top, height }
+    const height = Math.max(46, ((Math.max(klass.endMinutes - klass.startMinutes, 45)) / 60) * pixelsPerHour)
+    const stackLevel = activeClasses.length
+    activeClasses.push(klass)
+
+    return {
+      ...klass,
+      top: ((klass.startMinutes - startHour * 60) / 60) * pixelsPerHour,
+      height,
+      stackLevel
+    }
   })
 }
 
@@ -65,15 +72,11 @@ export function TodayClassTimeline({ classes, selectedClassId, setSelectedClassI
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
   const timelineMinutes = (endHour - startHour) * 60
   const nowTop = ((nowMinutes - startHour * 60) / timelineMinutes) * (endHour - startHour) * pixelsPerHour
-  const timelineClasses = stackTimelineClasses(classes)
-  const timelineHeight = Math.max(
-    (endHour - startHour) * pixelsPerHour,
-    ...timelineClasses.map((klass) => klass.top + klass.height + 8)
-  )
+  const timelineClasses = overlapTimelineClasses(classes)
 
   return (
     <div className="max-h-[58vh] overflow-auto pr-1">
-      <div className="relative min-w-[250px]" style={{ height: `${timelineHeight}px` }}>
+      <div className="relative min-w-[250px]" style={{ height: `${(endHour - startHour) * pixelsPerHour}px` }}>
         <div className="absolute bottom-0 left-10 top-0 border-l border-brand-red/15" />
         {Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index).map((hour) => (
           <div key={hour} className="absolute left-0 right-0 flex items-start gap-2" style={{ top: `${(hour - startHour) * pixelsPerHour}px` }}>
@@ -97,10 +100,13 @@ export function TodayClassTimeline({ classes, selectedClassId, setSelectedClassI
               <button
                 key={klass.id}
                 type="button"
-                className={`absolute left-0 right-0 overflow-hidden rounded-xl border px-3 py-2 text-left transition hover:shadow-md ${timelineTone(klass)} ${selected ? "ring-2 ring-brand-red/35 ring-offset-1" : ""}`}
+                className={`absolute overflow-hidden rounded-xl border px-3 py-2 text-left backdrop-blur-[1px] transition hover:shadow-md ${timelineTone(klass)} ${selected ? "ring-2 ring-brand-red/35 ring-offset-1" : ""}`}
                 style={{
                   top: `${klass.top}px`,
-                  minHeight: `${klass.height}px`
+                  minHeight: `${klass.height}px`,
+                  left: `${klass.stackLevel * 8}px`,
+                  right: 0,
+                  zIndex: klass.stackLevel
                 }}
                 onClick={() => {
                   setSelectedClassId(klass.id)
