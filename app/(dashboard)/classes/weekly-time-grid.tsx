@@ -27,24 +27,20 @@ function minutesFromTime(value: string) {
 }
 
 function layoutSessions(sessions: ClassCalendarSessionItem[]) {
-  const laneEnds: number[] = []
+  let activeSessions: Array<{ end: number }> = []
   const positioned = sessions
     .slice()
-    .sort((first, second) => minutesFromTime(first.startTime) - minutesFromTime(second.startTime))
+    .sort((first, second) => minutesFromTime(first.startTime) - minutesFromTime(second.startTime) || first.id.localeCompare(second.id))
     .map((session) => {
       const start = minutesFromTime(session.startTime)
       const end = Math.max(start + 40, minutesFromTime(session.endTime))
-      let lane = laneEnds.findIndex((laneEnd) => laneEnd <= start)
-      if (lane === -1) {
-        lane = laneEnds.length
-        laneEnds.push(end)
-      } else {
-        laneEnds[lane] = end
-      }
-      return { session, start, end, lane }
+      activeSessions = activeSessions.filter((activeSession) => activeSession.end > start)
+      const stackLevel = activeSessions.length
+      activeSessions.push({ end })
+      return { session, start, end, stackLevel }
     })
 
-  return { positioned, laneCount: Math.max(1, laneEnds.length) }
+  return positioned
 }
 
 export function WeeklyTimeGrid({
@@ -116,12 +112,11 @@ export function WeeklyTimeGrid({
                     <span className="h-px flex-1 bg-brand-red/70" />
                   </div>
                 ) : null}
-                {sessionLayout.positioned.map(({ session, start: sessionStart, end: sessionEnd, lane }) => {
+                {sessionLayout.map(({ session, start: sessionStart, end: sessionEnd, stackLevel }) => {
                   const start = Math.max(startHour * 60, sessionStart)
                   const end = Math.min(endHour * 60, sessionEnd)
                   const top = ((start - startHour * 60) / 60) * pixelsPerHour
                   const height = Math.max(48, ((Math.max(end - start, 40)) / 60) * pixelsPerHour)
-                  const laneWidth = 100 / sessionLayout.laneCount
                   return (
                     <button
                       key={session.id}
@@ -133,8 +128,14 @@ export function WeeklyTimeGrid({
                       }}
                       onDragEnd={() => setDraggingSessionId(null)}
                       onClick={() => setSelectedSession(session)}
-                      className={`absolute z-10 overflow-hidden rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold shadow-sm transition hover:shadow-md ${sessionTone(session)} ${draggingSessionId === session.id ? "opacity-60" : ""}`}
-                      style={{ top: `${top}px`, minHeight: `${height}px`, left: `calc(${lane * laneWidth}% + 3px)`, width: `calc(${laneWidth}% - 6px)` }}
+                      className={`absolute overflow-hidden rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold shadow-sm transition hover:shadow-md ${sessionTone(session)} ${draggingSessionId === session.id ? "opacity-60" : ""}`}
+                      style={{
+                        top: `${top}px`,
+                        minHeight: `${height}px`,
+                        left: `${stackLevel * 8 + 3}px`,
+                        right: "3px",
+                        zIndex: 10 + stackLevel
+                      }}
                     >
                       <span className="block truncate">{session.startTime}-{session.endTime}</span>
                       <span className="mt-0.5 block line-clamp-2">{session.className}</span>
