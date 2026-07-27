@@ -137,8 +137,8 @@ export function WeeklyTimeGrid({
                         zIndex: 10 + stackLevel
                       }}
                     >
-                      <span className="block truncate">{session.startTime}-{session.endTime}</span>
-                      <span className="mt-0.5 block line-clamp-2">{session.className}</span>
+                      <span className="block line-clamp-2">{session.className}</span>
+                      <span className="mt-0.5 block truncate">{session.startTime}-{session.endTime}</span>
                     </button>
                   )
                 })}
