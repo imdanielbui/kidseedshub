@@ -166,6 +166,12 @@ enum StudentWalletEntryType {
   APPLIED
 }
 
+enum EnrollmentHoldStatus {
+  ACTIVE
+  RESUMED
+  EXPIRED
+}
+
 enum ReceiptExtraLineType {
   TUTORING
   OTHER
@@ -189,6 +195,8 @@ model User {
   classesTeaching            Class[]
   receiptsCreated            Receipt[]                     @relation("ReceiptCreatedBy")
   enrollmentTransfersCreated EnrollmentTransfer[]          @relation("EnrollmentTransferCreatedBy")
+  enrollmentHoldsCreated     EnrollmentHold[]              @relation("EnrollmentHoldCreatedBy")
+  enrollmentHoldsResumed     EnrollmentHold[]              @relation("EnrollmentHoldResumedBy")
   expensesCreated            Expense[]                     @relation("ExpenseCreatedBy")
   attendanceMarked           Attendance[]                  @relation("AttendanceMarkedBy")
   weeklyAssessments          WeeklyAssessment[]            @relation("WeeklyAssessmentTeacher")
@@ -265,6 +273,7 @@ model Student {
   walletEntries       StudentWalletEntry[]
   refundExpenses      Expense[]            @relation("RefundExpenseStudent")
   enrollmentTransfers EnrollmentTransfer[]
+  enrollmentHolds     EnrollmentHold[]
 
   @@index([saleOwnerId])
   @@index([createdById])
@@ -309,6 +318,8 @@ model Class {
   sessions      ClassSession[]
   transfersFrom EnrollmentTransfer[] @relation("EnrollmentTransferFromClass")
   transfersTo   EnrollmentTransfer[] @relation("EnrollmentTransferToClass")
+  holdsFrom     EnrollmentHold[]     @relation("EnrollmentHoldSourceClass")
+  holdsResumed  EnrollmentHold[]     @relation("EnrollmentHoldResumedClass")
 }
 
 model ClassScheduleSlot {
@@ -546,6 +557,35 @@ model Enrollment {
   makeupEntitlements MakeupEntitlement[]
   transfersFrom      EnrollmentTransfer[] @relation("EnrollmentTransferFromEnrollment")
   transfersTo        EnrollmentTransfer[] @relation("EnrollmentTransferToEnrollment")
+  holds              EnrollmentHold[]
+}
+
+model EnrollmentHold {
+  id                String               @id @default(cuid())
+  studentId         String
+  student           Student              @relation(fields: [studentId], references: [id])
+  enrollmentId      String
+  enrollment        Enrollment           @relation(fields: [enrollmentId], references: [id])
+  sourceClassId     String?
+  sourceClass       Class?               @relation("EnrollmentHoldSourceClass", fields: [sourceClassId], references: [id], onDelete: SetNull)
+  resumedClassId    String?
+  resumedClass      Class?               @relation("EnrollmentHoldResumedClass", fields: [resumedClassId], references: [id], onDelete: SetNull)
+  remainingSessions Int
+  creditAmount      Decimal              @db.Decimal(12, 2)
+  holdMonths        Int
+  expiresAt         DateTime
+  status            EnrollmentHoldStatus @default(ACTIVE)
+  reason            String
+  createdById       String
+  createdBy         User                 @relation("EnrollmentHoldCreatedBy", fields: [createdById], references: [id])
+  resumedById       String?
+  resumedBy         User?                @relation("EnrollmentHoldResumedBy", fields: [resumedById], references: [id])
+  resumedAt         DateTime?
+  createdAt         DateTime             @default(now())
+
+  @@index([studentId, status])
+  @@index([enrollmentId, status])
+  @@index([expiresAt])
 }
 
 model EnrollmentTransfer {

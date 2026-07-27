@@ -29,6 +29,7 @@ import {
   StudentWalletCard
 } from "./student-detail-finance-cards"
 import { formatDiscountInput, formatMoneyInput } from "./student-detail-money"
+import { StudentEnrollmentHoldPanel } from "./student-detail-hold-panel"
 
 type ReceiptLineSummary = {
   line: ReceiptDraftLine
@@ -592,6 +593,7 @@ export function StudentFinanceTab({
           <FormFooter loading={isSubmittingReceipt} label="Xác nhận đóng tiền" loadingLabel="Đang thu" disabled={!receiptLineSummaries.length || actualReceiptAmount < 0 || receiptValidationErrors.length > 0} />
         </form>
       </div>
+      <StudentEnrollmentHoldPanel student={student} classes={classOptions} formatDate={formatDate} formatCurrency={formatCurrency} />
       <EnrollmentTransferHistory transfers={student.enrollmentTransfers} formatDate={formatDate} formatCurrency={formatCurrency} />
       <ReceiptHistoryCard receipts={studentReceipts} formatDate={formatDate} formatCurrency={formatCurrency} />
     </section>
