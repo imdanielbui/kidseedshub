@@ -1,7 +1,7 @@
 "use client"
 
 import { CalendarDays, ChartNoAxesCombined, Plus, RefreshCcw, Search, Trash2 } from "lucide-react"
-import type { Dispatch, FormEvent, SetStateAction } from "react"
+import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react"
 import { subjectLabels } from "@/lib/contracts/assessment"
 import type { ClassListItem, CourseListItem } from "@/lib/contracts/courses"
 import { scheduleEventTypeLabels, type ScheduleEventItem } from "@/lib/contracts/schedule-events"
@@ -152,6 +152,7 @@ export function ClassSetupWorkspace({
           form={form}
           setForm={setForm}
           activeCourses={activeCourses}
+          classes={classes}
           teacherOptions={teacherOptions}
           students={students}
           addSlot={addSlot}
@@ -296,6 +297,7 @@ function CreateClassPanel({
   form,
   setForm,
   activeCourses,
+  classes,
   teacherOptions,
   students,
   addSlot,
@@ -308,6 +310,7 @@ function CreateClassPanel({
   | "form"
   | "setForm"
   | "activeCourses"
+  | "classes"
   | "teacherOptions"
   | "students"
   | "addSlot"
@@ -316,20 +319,62 @@ function CreateClassPanel({
   | "canManageSchedule"
   | "isCreating"
 >) {
+  const [studentQuery, setStudentQuery] = useState("")
+  const [studentFilter, setStudentFilter] = useState<"ALL" | "FUNDED" | "UNFUNDED" | "SELECTED">("ALL")
   const selectedCourse = activeCourses.find((course) => course.id === form.courseId)
   const selectedTeacher = teacherOptions.find((teacher) => teacher.id === form.teacherId)
-  const selectedStudents = students.filter((student) => form.studentIds.includes(student.id))
+  const rosterStudents = useMemo(() => {
+    const query = studentQuery.trim().toLocaleLowerCase("vi")
+
+    return students
+      .map((student) => ({
+        student,
+        enrollment: student.courses.find((course) => course.courseId === form.courseId && course.isActive),
+        isAlreadyAssigned: classes.some(
+          (klass) =>
+            klass.isActive &&
+            klass.courseId === form.courseId &&
+            klass.students.some((classStudent) => classStudent.studentId === student.id && classStudent.isActive)
+        )
+      }))
+      .filter((item): item is { student: StudentListItem; enrollment: NonNullable<typeof item.enrollment>; isAlreadyAssigned: boolean } => Boolean(item.enrollment))
+      .filter((item) => !item.isAlreadyAssigned)
+      .filter((item) => {
+        if (studentFilter === "FUNDED") return item.enrollment.sessionsRemaining > 0
+        if (studentFilter === "UNFUNDED") return item.enrollment.sessionsRemaining === 0
+        if (studentFilter === "SELECTED") return form.studentIds.includes(item.student.id)
+        return true
+      })
+      .filter((item) =>
+        !query || [item.student.code, item.student.name, item.student.parentName, item.student.parentPhone]
+          .some((value) => value.toLocaleLowerCase("vi").includes(query))
+      )
+  }, [classes, form.courseId, form.studentIds, studentFilter, studentQuery, students])
+  const eligibleStudentCount = useMemo(
+    () =>
+      students.filter(
+        (student) =>
+          student.courses.some((course) => course.courseId === form.courseId && course.isActive) &&
+          !classes.some(
+            (klass) =>
+              klass.isActive &&
+              klass.courseId === form.courseId &&
+              klass.students.some((classStudent) => classStudent.studentId === student.id && classStudent.isActive)
+          )
+      ).length,
+    [classes, form.courseId, students]
+  )
 
   return (
     <form className="content-border space-y-5 p-4 sm:p-5" onSubmit={createClass}>
       <div className="flex flex-col gap-3 border-b border-brand-red/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div><p className="text-sm font-semibold text-brand-ink">Khởi tạo lớp học</p><p className="mt-1 text-xs text-stone-500">Lịch được sinh từ ngày khai giảng theo các ca học bạn thiết lập.</p></div>
-        <div className="flex flex-wrap gap-2 text-xs font-semibold"><span className="rounded-full border border-brand-red/15 px-3 py-1.5 text-brand-red">{form.slots.length} ca/tuần</span><span className="rounded-full border border-brand-red/10 px-3 py-1.5 text-stone-600">{selectedStudents.length} học viên ban đầu</span></div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold"><span className="rounded-full border border-brand-red/15 px-3 py-1.5 text-brand-red">{form.slots.length} ca/tuần</span><span className="rounded-full border border-brand-red/10 px-3 py-1.5 text-stone-600">{form.studentIds.length} học viên ban đầu</span></div>
       </div>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.65fr)]">
         <div className="rounded-2xl border border-brand-red/10 bg-white/40 p-4"><div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-brand-red text-xs font-bold text-white">1</span><p className="text-sm font-semibold text-brand-ink">Khóa và định danh lớp</p></div><div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="block text-sm font-semibold text-stone-700 md:col-span-2">Khóa học<select className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={form.courseId} onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))} required><option value="">Chọn khóa học</option>{activeCourses.map((course) => <option key={course.id} value={course.id}>{course.name} · {subjectLabels[course.subject]} · {course.totalSessions} buổi</option>)}</select></label>
+          <label className="block text-sm font-semibold text-stone-700 md:col-span-2">Khóa học<select className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={form.courseId} onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value, studentIds: [] }))} required><option value="">Chọn khóa học</option>{activeCourses.map((course) => <option key={course.id} value={course.id}>{course.name} · {subjectLabels[course.subject]} · {course.totalSessions} buổi</option>)}</select></label>
           <label className="block text-sm font-semibold text-stone-700">Tên lớp<input className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ví dụ: Robotics T7-CN 16:30" required /></label>
           <label className="block text-sm font-semibold text-stone-700">Mã lớp<input className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} placeholder="VD: RO-2026-07" /></label>
         </div></div>
@@ -358,32 +403,69 @@ function CreateClassPanel({
           ))}
         </div><label className="block text-sm font-semibold text-stone-700">Tổng buổi cần sinh<input className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none" type="number" min="1" max="200" value={form.plannedSessions} onChange={(event) => setForm((current) => ({ ...current, plannedSessions: event.target.value }))} required /><span className="mt-2 block text-xs font-normal text-stone-500">Mặc định theo khóa: {selectedCourse?.totalSessions ?? "-"} buổi.</span></label></div></section>
 
-      <section className="rounded-2xl border border-brand-red/10 bg-white/40 p-4"><div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-brand-red text-xs font-bold text-white">4</span><div><p className="text-sm font-semibold text-brand-ink">Học viên ban đầu <span className="font-normal text-stone-500">(có thể thêm sau)</span></p><p className="mt-1 text-xs text-stone-500">Chỉ chọn những bé đã ghi danh đúng khóa; roster có thể cập nhật từ Quản lý lớp sau khi tạo.</p></div></div><div className="mt-4 grid max-h-56 gap-2 overflow-auto rounded-2xl border border-brand-red/10 p-3 md:grid-cols-2 xl:grid-cols-3">
-          {students.length ? (
-            students.map((student) => (
-              <label key={student.id} className="neu-list-item flex cursor-pointer items-center gap-3 rounded-2xl px-3 py-2 text-sm text-stone-700">
-                <input
-                  type="checkbox"
-                  checked={form.studentIds.includes(student.id)}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      studentIds: event.target.checked
-                        ? [...current.studentIds, student.id]
-                        : current.studentIds.filter((studentId) => studentId !== student.id)
-                    }))
-                  }
-                />
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold text-brand-ink">{student.name}</span>
-                  <span className="block truncate text-xs text-stone-500">{student.parentName} - {student.parentPhone}</span>
-                </span>
+      <section className="rounded-2xl border border-brand-red/10 bg-white/40 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-red text-xs font-bold text-white">4</span>
+            <div>
+              <p className="text-sm font-semibold text-brand-ink">Học viên ban đầu <span className="font-normal text-stone-500">(có thể thêm sau)</span></p>
+              <p className="mt-1 text-xs text-stone-500">Chỉ hiện bé ghi danh active đúng khóa và chưa xếp vào lớp active khác của khóa này.</p>
+            </div>
+          </div>
+          <span className="shrink-0 rounded-full border border-brand-red/10 px-3 py-1.5 text-xs font-semibold text-brand-red">{form.studentIds.length} đã chọn</span>
+        </div>
+
+        {selectedCourse ? (
+          <>
+            <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
+              <label className="neu-pressed flex items-center gap-2 rounded-2xl px-3 py-2">
+                <Search className="h-4 w-4 shrink-0 text-brand-red" />
+                <input className="min-w-0 flex-1 bg-transparent text-sm text-brand-ink outline-none placeholder:text-stone-400" value={studentQuery} onChange={(event) => setStudentQuery(event.target.value)} placeholder="Tìm mã HS, học viên, phụ huynh, SĐT..." />
               </label>
-            ))
-          ) : (
-            <p className="text-sm text-stone-500">Chưa có học sinh để chọn.</p>
-          )}
-        </div></section>
+              <select className="neu-pressed rounded-2xl bg-transparent px-3 py-2 text-sm font-semibold text-stone-600 outline-none" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value as typeof studentFilter)}>
+                <option value="ALL">Tất cả đủ điều kiện</option>
+                <option value="FUNDED">Đã có buổi học</option>
+                <option value="UNFUNDED">Chờ thu học phí</option>
+                <option value="SELECTED">Đã chọn</option>
+              </select>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-stone-500">
+              <p>{eligibleStudentCount} học viên sẵn sàng xếp lớp. Bé đang ở lớp khác cùng khóa cần dùng luồng chuyển lớp.</p>
+              <span className="shrink-0 font-semibold text-brand-red">{rosterStudents.length} kết quả</span>
+            </div>
+            <div className="mt-3 grid max-h-72 gap-2 overflow-auto rounded-2xl border border-brand-red/10 p-3 md:grid-cols-2 xl:grid-cols-3">
+              {rosterStudents.length ? (
+                rosterStudents.map(({ student, enrollment }) => (
+                  <label key={student.id} className="neu-list-item flex cursor-pointer items-center gap-3 rounded-2xl px-3 py-2 text-sm text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={form.studentIds.includes(student.id)}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          studentIds: event.target.checked
+                            ? [...current.studentIds, student.id]
+                            : current.studentIds.filter((studentId) => studentId !== student.id)
+                        }))
+                      }
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-brand-red">{student.code}</span>
+                      <span className="block truncate font-semibold text-brand-ink">{student.name}</span>
+                      <span className="block truncate text-xs text-stone-500">{student.parentName} · {student.parentPhone}</span>
+                      <span className="mt-1 block text-xs font-medium text-stone-600">Còn {enrollment.sessionsRemaining} buổi</span>
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <p className="p-3 text-sm text-stone-500">{eligibleStudentCount ? "Không có học viên khớp bộ lọc." : "Chưa có học viên ghi danh active phù hợp với khóa này. Hãy ghi danh học viên hoặc dùng luồng chuyển lớp trước."}</p>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="mt-4 rounded-2xl border border-dashed border-brand-red/15 p-4 text-sm text-stone-500">Chọn khóa học trước để tìm đúng học viên có thể xếp vào lớp.</p>
+        )}
+      </section>
       <div className="flex flex-col gap-3 border-t border-brand-red/10 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-stone-500">{form.isActive ? "Lớp mở ngay sau khi tạo; lịch sẽ sẵn sàng cho điểm danh." : "Bản nháp không xuất hiện trong lịch vận hành cho đến khi được mở."}</p><button type="submit" disabled={!canManageSchedule || isCreating || !form.courseId || !form.teacherId || !form.slots.length} className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">
         <CalendarDays className="h-4 w-4" />
         {isCreating ? "Đang sinh lịch" : "Tạo lớp và sinh thời khóa biểu"}

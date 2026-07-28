@@ -170,6 +170,28 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data
+  const studentIds = [...new Set(data.studentIds)]
+  const eligibleStudents = await prisma.student.findMany({
+    where: {
+      id: { in: studentIds },
+      enrollments: { some: { courseId: data.courseId, isActive: true } },
+      classStudents: {
+        none: {
+          isActive: true,
+          class: { courseId: data.courseId, isActive: true }
+        }
+      }
+    },
+    select: { id: true }
+  })
+
+  if (eligibleStudents.length !== studentIds.length) {
+    return fail({
+      code: "INVALID_CLASS_STUDENTS",
+      message: "Chỉ có thể xếp học viên đã ghi danh active đúng khóa và chưa ở lớp active khác của khóa này."
+    }, { status: 400 })
+  }
+
   const klass = await prisma.$transaction(async (tx) => {
     const course = await tx.course.findUniqueOrThrow({ where: { id: data.courseId } })
     const slots = normalizeScheduleSlots(data)
@@ -188,7 +210,7 @@ export async function POST(request: Request) {
         plannedSessions: data.plannedSessions ?? course.totalSessions,
         isActive: data.isActive,
         students: {
-          create: data.studentIds.map((studentId) => ({
+          create: studentIds.map((studentId) => ({
             studentId
           }))
         }
