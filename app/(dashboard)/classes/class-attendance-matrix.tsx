@@ -7,10 +7,16 @@ type ClassAttendanceMatrixProps = {
   timeline: ClassTimelineItem
   selectedSessionId: string | null
   onSelectSession: (sessionId: string) => void
+  onSelectAttendance: (selection: ClassAttendanceDetailSelection) => void
 }
 
 type MatrixStudent = ClassTimelineStudent & {
   studentCode?: string
+}
+
+export type ClassAttendanceDetailSelection = {
+  session: ClassTimelineSession
+  student: ClassTimelineStudent
 }
 
 const attendanceCellMeta: Record<AttendanceStatusKey, { label: string; className: string }> = {
@@ -39,7 +45,7 @@ function sessionCellLabel(session: ClassTimelineSession, student?: MatrixStudent
   return "Chưa điểm danh"
 }
 
-export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSession }: ClassAttendanceMatrixProps) {
+export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSession, onSelectAttendance }: ClassAttendanceMatrixProps) {
   const students = useMemo(() => {
     const byId = new Map<string, MatrixStudent>()
 
@@ -102,7 +108,11 @@ export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSes
                       <td key={session.id} className="border-b border-r border-brand-red/10 p-1.5 text-center">
                         <button
                           type="button"
-                          onClick={() => onSelectSession(session.id)}
+                          onClick={() => {
+                            if (!sessionStudent) return
+                            onSelectSession(session.id)
+                            onSelectAttendance({ session, student: sessionStudent })
+                          }}
                           disabled={!sessionStudent}
                           title={`${student.studentName} - Buổi ${session.sessionNumber}: ${label}`}
                           aria-label={`${student.studentName} - Buổi ${session.sessionNumber}: ${label}`}
