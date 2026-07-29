@@ -14,6 +14,7 @@ const classTimelineInclude = Prisma.validator<Prisma.ClassInclude>()({
       joinedAt: true,
       student: {
         select: {
+          code: true,
           name: true,
           parent: { select: { user: { select: { name: true, phone: true } } } }
         }
@@ -40,6 +41,7 @@ const classTimelineInclude = Prisma.validator<Prisma.ClassInclude>()({
               student: {
                 select: {
                   id: true,
+                  code: true,
                   name: true,
                   parent: { select: { user: { select: { name: true, phone: true } } } }
                 }
@@ -78,6 +80,7 @@ function toClassTimelineItem(klass: ClassTimelineRecord): ClassTimelineItem {
         .filter((classStudent) => classStudent.joinedAt <= session.date)
         .map((classStudent) => [classStudent.studentId, {
           studentId: classStudent.studentId,
+          studentCode: classStudent.student.code,
           studentName: classStudent.student.name,
           parentName: classStudent.student.parent.user.name,
           parentPhone: classStudent.student.parent.user.phone
@@ -89,6 +92,7 @@ function toClassTimelineItem(klass: ClassTimelineRecord): ClassTimelineItem {
       if (!roster.has(student.id)) {
         roster.set(student.id, {
           studentId: student.id,
+          studentCode: student.code,
           studentName: student.name,
           parentName: student.parent.user.name,
           parentPhone: student.parent.user.phone

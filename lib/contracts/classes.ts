@@ -70,6 +70,7 @@ export type ClassTimelineAttendanceState = "UPCOMING" | "PENDING" | "PARTIAL" | 
 
 export type ClassTimelineStudent = {
   studentId: string
+  studentCode?: string
   studentName: string
   parentName: string
   parentPhone: string

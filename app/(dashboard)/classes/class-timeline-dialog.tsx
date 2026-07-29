@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { DialogShell } from "@/components/shared/dialog-shell"
 import type { ApiResponse } from "@/lib/api-response"
 import { attendanceStatusLabels, type ClassTimelineItem, type ClassTimelineSession } from "@/lib/contracts/classes"
+import { ClassAttendanceMatrix } from "./class-attendance-matrix"
 
 type ClassTimelineDialogProps = {
   classId: string
@@ -23,10 +24,6 @@ const sessionStateMeta = {
 function formatDate(value?: string) {
   if (!value) return "Chưa có"
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${value}T12:00:00`))
-}
-
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" }).format(new Date(`${value}T12:00:00`))
 }
 
 export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassTimelineDialogProps) {
@@ -74,12 +71,6 @@ export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassT
   )
   const completedCount = timeline?.sessions.filter((session) => session.attendanceState === "COMPLETE").length ?? 0
   const markedCount = timeline?.sessions.filter((session) => session.attendanceMarked > 0).length ?? 0
-  const billableSessions = timeline?.sessions.filter((session) => session.attendanceState !== "CANCELED") ?? []
-  const attendanceExpected = billableSessions.reduce((total, session) => total + session.attendanceExpected, 0)
-  const attendanceMarked = billableSessions.reduce((total, session) => total + session.attendanceMarked, 0)
-  const attendanceRate = attendanceExpected ? Math.round((attendanceMarked / attendanceExpected) * 100) : 0
-  const plannedSessions = timeline?.plannedSessions ?? timeline?.sessions.length ?? 0
-  const progressPercent = plannedSessions ? Math.min(100, Math.round((completedCount / plannedSessions) * 100)) : 0
 
   return (
     <DialogShell
@@ -97,46 +88,28 @@ export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassT
       ) : error ? (
         <div className="p-5"><p className="rounded-2xl border border-brand-red/15 bg-white/60 p-4 text-sm text-brand-red">{error}</p></div>
       ) : timeline ? (
-        <div className="min-h-0 p-4 sm:p-5">
-          <section className="overflow-hidden rounded-2xl border border-brand-red/10 bg-white/60">
-            <div className="grid gap-5 border-b border-brand-red/10 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-brand-red/10 px-2.5 py-1 text-[11px] font-semibold text-brand-red">Lớp đang vận hành</span>
-                  <span className="text-xs font-medium text-stone-500">{formatDate(timeline.startDate)} - {formatDate(timeline.endDate)}</span>
-                </div>
-                <div className="mt-3 flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-2xl font-semibold text-brand-ink">{completedCount}<span className="ml-1 text-sm font-medium text-stone-500">/ {plannedSessions} buổi hoàn tất</span></p>
-                    <p className="mt-1 text-xs text-stone-500">Một buổi hoàn tất khi roster đã được điểm danh đầy đủ.</p>
-                  </div>
-                  <p className="text-lg font-semibold text-brand-red">{progressPercent}%</p>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-red/10"><div className="h-full rounded-full bg-brand-red transition-all" style={{ width: `${progressPercent}%` }} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
-                <TimelineMetric icon={<Users className="h-4 w-4" />} label="Học viên" value={`${timeline.activeStudentCount} bé`} />
-                <TimelineMetric icon={<CheckCircle2 className="h-4 w-4" />} label="Điểm danh" value={`${attendanceRate}%`} />
-                <TimelineMetric icon={<Clock3 className="h-4 w-4" />} label="Đã ghi nhận" value={`${markedCount} buổi`} />
-                <TimelineMetric icon={<CalendarDays className="h-4 w-4" />} label="Lịch đã sinh" value={`${timeline.sessions.length} buổi`} />
-              </div>
-            </div>
+        <div className="min-h-0">
+          <div className="content-border grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-5">
+            <TimelineMetric icon={<CalendarDays className="h-4 w-4" />} label="Khai giảng" value={formatDate(timeline.startDate)} />
+            <TimelineMetric icon={<CalendarDays className="h-4 w-4" />} label="Kết thúc dự kiến" value={formatDate(timeline.endDate)} />
+            <TimelineMetric icon={<Clock3 className="h-4 w-4" />} label="Lịch đã sinh" value={`${timeline.sessions.length}/${timeline.plannedSessions ?? timeline.sessions.length} buổi`} />
+            <TimelineMetric icon={<CheckCircle2 className="h-4 w-4" />} label="Đã điểm danh đủ" value={`${completedCount} buổi`} />
+            <TimelineMetric icon={<Users className="h-4 w-4" />} label="Học sinh active" value={`${timeline.activeStudentCount} bé`} />
+          </div>
 
-            {timeline.sessions.length ? (
-              <div className="grid min-h-0 lg:grid-cols-[minmax(330px,0.9fr)_minmax(380px,1.1fr)]">
-                <section className="min-h-0 border-b border-brand-red/10 bg-[#fffdfb] p-4 lg:max-h-[52vh] lg:overflow-auto lg:border-b-0 lg:border-r">
-                  <div className="flex items-start justify-between gap-3">
-                    <div><p className="text-sm font-semibold text-brand-ink">Lộ trình buổi học</p><p className="mt-1 text-xs text-stone-500">Chọn một buổi để kiểm tra điểm danh.</p></div>
-                    <span className="rounded-full border border-brand-red/15 px-2.5 py-1 text-[11px] font-semibold text-brand-red">{markedCount}/{timeline.sessions.length} đã ghi nhận</span>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {timeline.sessions.map((session) => <SessionTimelineButton key={session.id} session={session} selected={session.id === selectedSessionId} onSelect={() => setSelectedSessionId(session.id)} />)}
-                  </div>
-                </section>
-                <AttendanceDetail session={selectedSession} />
-              </div>
-            ) : <p className="m-4 rounded-xl border border-brand-red/10 bg-[#fffdfb] p-4 text-sm text-stone-500">Lớp này chưa có buổi học nào được sinh lịch.</p>}
-          </section>
+          <div className="border-b border-brand-red/10 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-sm font-semibold text-brand-ink">Tổng quan điểm danh</p><p className="mt-1 text-xs text-stone-500">Theo dõi nhanh số buổi đã ghi nhận; chi tiết nằm trong sổ điểm danh bên dưới.</p></div>
+              <span className="rounded-full border border-brand-red/15 px-3 py-1.5 text-xs font-semibold text-brand-red">{markedCount}/{timeline.sessions.length} buổi đã có điểm danh</span>
+            </div>
+          </div>
+
+          {timeline.sessions.length ? (
+            <>
+              <ClassAttendanceMatrix timeline={timeline} selectedSessionId={selectedSessionId} onSelectSession={setSelectedSessionId} />
+              <AttendanceDetail session={selectedSession} />
+            </>
+          ) : <p className="m-5 rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Lớp này chưa có buổi học nào được sinh lịch.</p>}
         </div>
       ) : null}
     </DialogShell>
@@ -144,28 +117,17 @@ export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassT
 }
 
 function TimelineMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return <div className="min-w-[118px] rounded-xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2.5"><div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-500">{icon}{label}</div><p className="mt-1.5 text-sm font-semibold text-brand-ink">{value}</p></div>
-}
-
-function SessionTimelineButton({ session, selected, onSelect }: { session: ClassTimelineSession; selected: boolean; onSelect: () => void }) {
-  const meta = sessionStateMeta[session.attendanceState]
-  return <button type="button" onClick={onSelect} className={`group relative flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${meta.className} ${selected ? "border-brand-red bg-white shadow-sm ring-1 ring-brand-red/35" : "hover:border-brand-red/35 hover:bg-white/80"}`}>
-    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border text-xs font-bold ${selected ? "border-brand-red bg-brand-red text-white" : "border-current/20 bg-white/65"}`}>{session.sessionNumber}</span>
-    <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-brand-ink">{formatShortDate(session.date)}</span><span className="shrink-0 text-[11px] font-semibold">{session.attendanceMarked}/{session.attendanceExpected}</span></span><span className="mt-1 block text-xs text-stone-600">{session.startTime}-{session.endTime}{session.room ? ` · ${session.room}` : ""}</span></span>
-    <span className="hidden shrink-0 text-[11px] font-semibold sm:block">{meta.label}</span>
-  </button>
+  return <div className="rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-stone-500">{icon}{label}</div><p className="mt-2 text-sm font-semibold text-brand-ink">{value}</p></div>
 }
 
 function AttendanceDetail({ session }: { session: ClassTimelineSession | null }) {
-  if (!session) return <aside className="p-4 text-sm text-stone-500">Chọn một buổi học để xem điểm danh.</aside>
+  if (!session) return <aside className="p-5 text-sm text-stone-500">Chọn một buổi học để xem điểm danh.</aside>
   const meta = sessionStateMeta[session.attendanceState]
-  return <aside className="min-h-0 bg-white/45 p-4 lg:max-h-[52vh] lg:overflow-auto">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-widest text-brand-red">Buổi đang xem</p><p className="mt-1 text-lg font-semibold text-brand-ink">Buổi {session.sessionNumber} · {formatDate(session.date)}</p><p className="mt-1 text-xs text-stone-500">{session.startTime}-{session.endTime}{session.room ? ` · ${session.room}` : ""}</p></div><span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.className}`}>{meta.label}</span></div>
-    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-brand-red/10 bg-[#fffaf7] px-3 py-2.5 text-xs text-stone-600"><span className="flex items-center gap-2"><CircleAlert className="h-4 w-4 text-brand-red" />Tiến độ điểm danh</span><span className="font-semibold text-brand-ink">{session.attendanceMarked}/{session.attendanceExpected} học viên</span></div>
-    <div className="mt-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-brand-ink">Danh sách học viên</p><p className="text-xs text-stone-500">{session.students.length} bé</p></div>
-      <div className="mt-2 space-y-2">
-        {session.students.length ? session.students.map((student) => <div key={student.studentId} className="rounded-xl border border-brand-red/10 bg-white px-3 py-2.5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-brand-ink">{student.studentName}</p><p className="mt-1 truncate text-xs text-stone-500">{student.parentName} · {student.parentPhone}</p></div><span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${student.attendanceStatus ? "border-emerald-500/30 bg-emerald-50 text-emerald-800" : "border-brand-red/20 bg-brand-red/5 text-brand-red"}`}>{student.attendanceStatus ? attendanceStatusLabels[student.attendanceStatus] : "Chưa điểm danh"}</span></div>{student.attendanceNote ? <p className="mt-2 text-xs text-stone-600">Ghi chú: {student.attendanceNote}</p> : null}{student.markedByName ? <p className="mt-1 text-[11px] text-stone-500">Điểm danh bởi {student.markedByName}</p> : null}</div>) : <p className="rounded-xl border border-brand-red/10 p-3 text-sm text-stone-500">Buổi học này chưa có danh sách học viên.</p>}
-      </div>
+  return <aside className="min-h-0 p-5 lg:max-h-[52vh] lg:overflow-auto">
+    <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-brand-ink">Buổi {session.sessionNumber} · {formatDate(session.date)}</p><p className="mt-1 text-xs text-stone-500">{session.startTime}-{session.endTime}{session.room ? ` · ${session.room}` : ""}</p></div><span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.className}`}>{meta.label}</span></div>
+    <div className="mt-4 flex items-center gap-2 rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-xs text-stone-600"><CircleAlert className="h-4 w-4 text-brand-red" />Đã điểm danh {session.attendanceMarked}/{session.attendanceExpected} học viên.</div>
+    <div className="mt-4 space-y-2">
+      {session.students.length ? session.students.map((student) => <div key={student.studentId} className="rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-brand-ink">{student.studentName}</p><p className="mt-1 truncate text-xs text-stone-500">{student.parentName} · {student.parentPhone}</p></div><span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${student.attendanceStatus ? "border-emerald-500/30 bg-emerald-50 text-emerald-800" : "border-brand-red/20 bg-brand-red/5 text-brand-red"}`}>{student.attendanceStatus ? attendanceStatusLabels[student.attendanceStatus] : "Chưa điểm danh"}</span></div>{student.attendanceNote ? <p className="mt-2 text-xs text-stone-600">Ghi chú: {student.attendanceNote}</p> : null}{student.markedByName ? <p className="mt-1 text-[11px] text-stone-500">Điểm danh bởi {student.markedByName}</p> : null}</div>) : <p className="rounded-2xl border border-brand-red/10 p-3 text-sm text-stone-500">Buổi học này chưa có danh sách học viên.</p>}
     </div>
   </aside>
 }
