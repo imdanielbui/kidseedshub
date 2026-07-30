@@ -292,7 +292,7 @@ export default function FinancePage() {
 
       {activeDialog === "student-receipt" ? <StudentReceiptPickerDialog students={students} onClose={() => setActiveDialog(null)} onSelectStudent={(studentId) => router.push(`/students/${studentId}?tab=finance`)} /> : null}
 
-      {activeDialog === "other-income-receipt" ? <OtherIncomeReceiptDialog form={otherIncomeReceiptForm} isSubmitting={isSubmittingOtherIncomeReceipt} onClose={() => setActiveDialog(null)} onSubmit={submitOtherIncomeReceipt} setForm={setOtherIncomeReceiptForm} /> : null}
+      {activeDialog === "other-income-receipt" ? <OtherIncomeReceiptDialog form={otherIncomeReceiptForm} isSubmitting={isSubmittingOtherIncomeReceipt} onClose={() => setActiveDialog(null)} onSubmit={submitOtherIncomeReceipt} setForm={setOtherIncomeReceiptForm} students={students} /> : null}
 
       {activeDialog === "expense" && isAdmin ? (
         <ExpenseDialog

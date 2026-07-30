@@ -21,6 +21,8 @@ export type ExpenseFormState = {
 export type OtherIncomeReceiptFormState = {
   category: OtherIncomeCategoryKey
   amount: string
+  payerMode: "PARENT" | "MANUAL"
+  payerParentPhone: string
   payerName: string
   payerPhone: string
   description: string
@@ -59,6 +61,8 @@ export const emptyExpenseForm: ExpenseFormState = {
 export const emptyOtherIncomeReceiptForm: OtherIncomeReceiptFormState = {
   category: "WORKSHOP_EVENT",
   amount: "",
+  payerMode: "MANUAL",
+  payerParentPhone: "",
   payerName: "",
   payerPhone: "",
   description: "",
@@ -86,6 +90,16 @@ export function buildYearOptions(selectedYear: string) {
 
 export function formatMoney(value: string) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(value))
+}
+
+export function formatMoneyInput(value: string) {
+  const digits = value.replace(/\D/g, "")
+  return digits ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(digits)) : ""
+}
+
+export function parseMoneyInput(value: string) {
+  const digits = value.replace(/\D/g, "")
+  return digits ? Number(digits) : 0
 }
 
 export function formatDate(value: string) {

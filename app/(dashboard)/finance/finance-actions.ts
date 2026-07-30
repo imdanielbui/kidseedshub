@@ -5,6 +5,7 @@ import type { QueuedTuitionReminder, TuitionReminderItem } from "@/lib/contracts
 import {
   emptyExpenseForm,
   emptyOtherIncomeReceiptForm,
+  parseMoneyInput,
   type ExpenseFormState,
   type FinanceDialog,
   type OtherIncomeReceiptFormState
@@ -86,7 +87,7 @@ export function useFinanceActions({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           category: otherIncomeReceiptForm.category,
-          amount: Number(otherIncomeReceiptForm.amount),
+          amount: parseMoneyInput(otherIncomeReceiptForm.amount),
           payerName: otherIncomeReceiptForm.payerName.trim(),
           payerPhone: otherIncomeReceiptForm.payerPhone.trim() || undefined,
           description: otherIncomeReceiptForm.description.trim(),
