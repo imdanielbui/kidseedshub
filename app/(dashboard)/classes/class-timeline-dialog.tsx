@@ -20,7 +20,6 @@ function formatDate(value?: string) {
 
 export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassTimelineDialogProps) {
   const [timeline, setTimeline] = useState<ClassTimelineItem | null>(null)
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [selectedAttendance, setSelectedAttendance] = useState<ClassAttendanceDetailSelection | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
@@ -43,10 +42,6 @@ export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassT
 
         setTimeline(payload.data)
         setSelectedAttendance(null)
-        const preferredSession = payload.data.sessions.find((session) => session.attendanceState === "PENDING" || session.attendanceState === "PARTIAL")
-          ?? payload.data.sessions.find((session) => session.attendanceState === "COMPLETE")
-          ?? payload.data.sessions[0]
-        setSelectedSessionId(preferredSession?.id ?? null)
       } catch (requestError) {
         if (requestError instanceof DOMException && requestError.name === "AbortError") return
         setError("Không tải được tiến độ lớp học.")
@@ -98,8 +93,6 @@ export function ClassTimelineDialog({ classId, onClose, panelClassName }: ClassT
           {timeline.sessions.length ? (
             <ClassAttendanceMatrix
               timeline={timeline}
-              selectedSessionId={selectedSessionId}
-              onSelectSession={setSelectedSessionId}
               onSelectAttendance={setSelectedAttendance}
             />
           ) : <p className="m-5 rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Lớp này chưa có buổi học nào được sinh lịch.</p>}

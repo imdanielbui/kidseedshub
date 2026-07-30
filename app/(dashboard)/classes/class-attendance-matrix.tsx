@@ -1,12 +1,11 @@
 "use client"
 
 import { useMemo } from "react"
+import { Check, Circle, Clock3, Minus, X } from "lucide-react"
 import type { AttendanceStatusKey, ClassTimelineItem, ClassTimelineSession, ClassTimelineStudent } from "@/lib/contracts/classes"
 
 type ClassAttendanceMatrixProps = {
   timeline: ClassTimelineItem
-  selectedSessionId: string | null
-  onSelectSession: (sessionId: string) => void
   onSelectAttendance: (selection: ClassAttendanceDetailSelection) => void
 }
 
@@ -19,10 +18,10 @@ export type ClassAttendanceDetailSelection = {
   student: ClassTimelineStudent
 }
 
-const attendanceCellMeta: Record<AttendanceStatusKey, { label: string; className: string }> = {
-  PRESENT: { label: "Có mặt", className: "border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600" },
-  ABSENT_EXCUSED: { label: "Nghỉ phép", className: "border-amber-400 bg-amber-300 text-amber-950 hover:bg-amber-400" },
-  ABSENT_NO_EXCUSE: { label: "Vắng", className: "border-brand-red bg-brand-red text-white hover:bg-brand-red/90" }
+const attendanceCellMeta: Record<AttendanceStatusKey, { label: string; className: string; iconClassName: string; icon: typeof Check }> = {
+  PRESENT: { label: "Có mặt", className: "bg-emerald-50 hover:bg-emerald-100", iconClassName: "text-emerald-600", icon: Check },
+  ABSENT_EXCUSED: { label: "Nghỉ phép", className: "bg-amber-50 hover:bg-amber-100", iconClassName: "text-amber-600", icon: Clock3 },
+  ABSENT_NO_EXCUSE: { label: "Vắng", className: "bg-brand-red/5 hover:bg-brand-red/10", iconClassName: "text-brand-red", icon: X }
 }
 
 function shortDate(value: string) {
@@ -32,9 +31,9 @@ function shortDate(value: string) {
 function sessionCellClass(session: ClassTimelineSession, student?: MatrixStudent) {
   if (!student) return "border-transparent bg-transparent text-transparent"
   if (student.attendanceStatus) return attendanceCellMeta[student.attendanceStatus].className
-  if (session.attendanceState === "CANCELED") return "border-stone-200 bg-stone-100 text-stone-400"
-  if (session.attendanceState === "UPCOMING") return "border-stone-200 bg-white/70 text-stone-400"
-  return "border-brand-red/20 bg-brand-red/5 text-brand-red hover:bg-brand-red/10"
+  if (session.attendanceState === "CANCELED") return "bg-stone-50 text-stone-300"
+  if (session.attendanceState === "UPCOMING") return "bg-stone-50/70 text-stone-300 hover:bg-stone-100"
+  return "bg-stone-50 text-stone-400 hover:bg-stone-100"
 }
 
 function sessionCellLabel(session: ClassTimelineSession, student?: MatrixStudent) {
@@ -45,7 +44,7 @@ function sessionCellLabel(session: ClassTimelineSession, student?: MatrixStudent
   return "Chưa điểm danh"
 }
 
-export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSession, onSelectAttendance }: ClassAttendanceMatrixProps) {
+export function ClassAttendanceMatrix({ timeline, onSelectAttendance }: ClassAttendanceMatrixProps) {
   const students = useMemo(() => {
     const byId = new Map<string, MatrixStudent>()
 
@@ -64,16 +63,13 @@ export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSes
 
   return (
     <section className="border-b border-brand-red/10">
-      <div className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-brand-ink">Sổ điểm danh theo buổi</p>
-          <p className="mt-1 text-xs text-stone-500">Chọn một ô để xem chi tiết buổi học. Cột buổi cuộn ngang, danh sách học viên luôn được ghim.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
-          <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Có mặt</span>
-          <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-amber-300" />Nghỉ phép</span>
-          <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-brand-red" />Vắng</span>
-          <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm border border-brand-red/25 bg-brand-red/5" />Chưa điểm danh</span>
+      <div className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-brand-ink">Sổ điểm danh theo buổi</p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600">
+          <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-500" />Có mặt</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-amber-400" />Nghỉ phép</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-brand-red" />Vắng</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full border border-stone-300" />Chưa điểm danh</span>
         </div>
       </div>
 
@@ -84,11 +80,9 @@ export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSes
               <tr>
                 <th className="sticky left-0 z-30 min-w-[230px] border-b border-r border-brand-red/10 bg-[#fffaf7] px-4 py-3 font-semibold text-brand-ink">Học viên</th>
                 {timeline.sessions.map((session) => (
-                  <th key={session.id} className="min-w-[76px] border-b border-r border-brand-red/10 bg-[#fffaf7] px-2 py-2 text-center">
-                    <button type="button" onClick={() => onSelectSession(session.id)} className={`w-full rounded-lg px-1 py-1.5 transition ${selectedSessionId === session.id ? "bg-brand-red text-white" : "text-brand-ink hover:bg-brand-red/5"}`}>
-                      <span className="block text-[11px] font-semibold">Buổi {session.sessionNumber}</span>
-                      <span className="mt-0.5 block text-[10px] font-medium opacity-80">{shortDate(session.date)}</span>
-                    </button>
+                  <th key={session.id} className={`min-w-[76px] border-b border-r border-brand-red/10 px-2 py-2 text-center ${session.attendanceState === "CANCELED" ? "bg-stone-50 text-stone-400" : "bg-[#fffaf7] text-brand-ink"}`}>
+                    <span className="block text-[11px] font-semibold">Buổi {session.sessionNumber}</span>
+                    <span className="mt-0.5 block text-[10px] font-medium opacity-75">{session.attendanceState === "CANCELED" ? "Đã hủy" : shortDate(session.date)}</span>
                   </th>
                 ))}
               </tr>
@@ -110,15 +104,14 @@ export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSes
                           type="button"
                           onClick={() => {
                             if (!sessionStudent) return
-                            onSelectSession(session.id)
                             onSelectAttendance({ session, student: sessionStudent })
                           }}
                           disabled={!sessionStudent}
                           title={`${student.studentName} - Buổi ${session.sessionNumber}: ${label}`}
                           aria-label={`${student.studentName} - Buổi ${session.sessionNumber}: ${label}`}
-                          className={`grid h-9 w-full min-w-14 place-items-center rounded-md border text-[10px] font-semibold transition disabled:cursor-default ${sessionCellClass(session, sessionStudent)}`}
+                          className={`grid h-8 w-full min-w-14 place-items-center rounded-lg transition disabled:cursor-default ${sessionCellClass(session, sessionStudent)}`}
                         >
-                          {sessionStudent ? sessionStudent.attendanceStatus ? attendanceCellMeta[sessionStudent.attendanceStatus].label : session.attendanceState === "CANCELED" ? "Hủy" : session.attendanceState === "UPCOMING" ? "-" : "?" : ""}
+                          {sessionStudent ? <AttendanceCellIcon session={session} student={sessionStudent} /> : null}
                         </button>
                       </td>
                     )
@@ -133,4 +126,16 @@ export function ClassAttendanceMatrix({ timeline, selectedSessionId, onSelectSes
       )}
     </section>
   )
+}
+
+function AttendanceCellIcon({ session, student }: { session: ClassTimelineSession; student: MatrixStudent }) {
+  if (student.attendanceStatus) {
+    const meta = attendanceCellMeta[student.attendanceStatus]
+    const Icon = meta.icon
+    return <Icon className={`h-3.5 w-3.5 ${meta.iconClassName}`} aria-hidden="true" />
+  }
+
+  if (session.attendanceState === "CANCELED") return <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+  if (session.attendanceState === "UPCOMING") return <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+  return <Circle className="h-3.5 w-3.5" aria-hidden="true" />
 }
