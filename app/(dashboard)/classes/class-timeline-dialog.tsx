@@ -1,10 +1,10 @@
 "use client"
 
-import { CalendarDays, CheckCircle2, Clock3, Users } from "lucide-react"
+import { CalendarDays, CheckCircle2, Clock3, ImageIcon, Users } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
 import { DialogShell } from "@/components/shared/dialog-shell"
 import type { ApiResponse } from "@/lib/api-response"
-import { attendanceStatusLabels, type ClassTimelineItem } from "@/lib/contracts/classes"
+import { attendanceStatusLabels, type ClassPhotoListItem, type ClassTimelineItem } from "@/lib/contracts/classes"
 import { ClassAttendanceMatrix, type ClassAttendanceDetailSelection } from "./class-attendance-matrix"
 
 type ClassTimelineDialogProps = {
@@ -111,6 +111,9 @@ function TimelineMetric({ icon, label, value }: { icon: ReactNode; label: string
 
 function AttendanceCellDetailDialog({ selection, onClose }: { selection: ClassAttendanceDetailSelection; onClose: () => void }) {
   const { session, student } = selection
+  const [photos, setPhotos] = useState<ClassPhotoListItem[]>([])
+  const [isLoadingPhotos, setIsLoadingPhotos] = useState(true)
+  const [photoError, setPhotoError] = useState("")
   const status = student.attendanceStatus
     ? attendanceStatusLabels[student.attendanceStatus]
     : session.attendanceState === "CANCELED"
@@ -118,6 +121,36 @@ function AttendanceCellDetailDialog({ selection, onClose }: { selection: ClassAt
       : session.attendanceState === "UPCOMING"
         ? "Buổi sắp diễn ra"
         : "Chưa điểm danh"
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadPhotos() {
+      setIsLoadingPhotos(true)
+      setPhotoError("")
+
+      try {
+        const query = new URLSearchParams({ studentId: student.studentId, classSessionId: session.id })
+        const response = await fetch(`/api/class-photos?${query}`, { cache: "no-store", signal: controller.signal })
+        const payload = (await response.json()) as ApiResponse<ClassPhotoListItem[]>
+
+        if (!response.ok || !payload.success || !payload.data) {
+          setPhotoError(payload.error?.message ?? "Không tải được ảnh của học viên trong buổi này.")
+          return
+        }
+
+        setPhotos(payload.data)
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return
+        setPhotoError("Không tải được ảnh của học viên trong buổi này.")
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingPhotos(false)
+      }
+    }
+
+    void loadPhotos()
+    return () => controller.abort()
+  }, [session.id, student.studentId])
 
   return (
     <DialogShell
@@ -144,6 +177,28 @@ function AttendanceCellDetailDialog({ selection, onClose }: { selection: ClassAt
       </dl>
       {student.attendanceNote ? <DetailField label="Ghi chú điểm danh" value={student.attendanceNote} /> : null}
       {student.markedByName ? <DetailField label="Điểm danh bởi" value={student.markedByName} /> : null}
+      <section className="rounded-2xl border border-brand-red/10 bg-white/55 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="flex items-center gap-2 text-sm font-semibold text-brand-ink"><ImageIcon className="h-4 w-4 text-brand-red" />Ảnh buổi học</p>
+          {!isLoadingPhotos ? <span className="text-xs font-medium text-stone-500">{photos.length} ảnh</span> : null}
+        </div>
+        {isLoadingPhotos ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3"><div className="h-24 animate-pulse rounded-xl bg-stone-100" /><div className="h-24 animate-pulse rounded-xl bg-stone-100" /></div>
+        ) : photoError ? (
+          <p className="mt-3 rounded-xl border border-brand-red/15 bg-brand-red/5 px-3 py-2 text-xs text-brand-red">{photoError}</p>
+        ) : photos.length ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {photos.map((photo) => <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-brand-red/10 bg-white">
+              {/* Class photo URLs may use local trial storage or configured external storage. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.url} alt={photo.caption || `Ảnh ${student.studentName} buổi ${session.sessionNumber}`} className="h-24 w-full object-cover transition duration-200 group-hover:scale-[1.03]" />
+              {photo.caption ? <p className="truncate px-2 py-1.5 text-[11px] text-stone-600">{photo.caption}</p> : null}
+            </a>)}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-xl bg-stone-50 px-3 py-2.5 text-xs text-stone-500">Chưa có ảnh riêng của bé trong buổi học này.</p>
+        )}
+      </section>
     </DialogShell>
   )
 }
