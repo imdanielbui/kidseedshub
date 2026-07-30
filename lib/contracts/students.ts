@@ -32,7 +32,7 @@ export type StudentCourseBalance = {
   className?: string
   courseId: string
   courseName: string
-  courseSubject: "FUN" | "ROBOTICS"
+  courseSubject: SubjectKey
   courseTotalSessions: number
   coursePrice: string
   sessionsBought: number

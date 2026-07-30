@@ -2,7 +2,6 @@ import bcrypt from "bcryptjs";
 import {
   type PrismaClient,
   type ContactResult,
-  type CourseSubject,
   type ExpenseCategory,
   type PaymentMethod,
   type StudentStatus,
@@ -148,7 +147,7 @@ async function upsertParent(input: {
 
 async function upsertCourse(input: {
   name: string;
-  subject: CourseSubject;
+  subject: string;
   totalSessions: number;
   price: number;
   description: string;

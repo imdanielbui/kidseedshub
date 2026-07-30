@@ -41,7 +41,7 @@ type PublishStudentResult =
   | { status: "ALREADY_PUBLISHED"; finalAssessmentId: string }
   | { status: "SKIPPED"; reason: string }
 
-function coverageFromWeeklyAssessments(weeklyAssessments: WeeklyRecord[], subject: "FUN" | "ROBOTICS") {
+function coverageFromWeeklyAssessments(weeklyAssessments: WeeklyRecord[], subject: string) {
   const firstVersion = weeklyAssessments[0]?.rubricVersion ?? `${subject.toLowerCase()}-rubric`
   const snapshot = weeklyAssessments.find((assessment) => assessment.rubricSnapshot)?.rubricSnapshot
   const rubric = rubricFromSnapshot(snapshot, subject, firstVersion)
@@ -76,7 +76,7 @@ function coverageFromWeeklyAssessments(weeklyAssessments: WeeklyRecord[], subjec
   }
 }
 
-function labelsFromRubric(weeklyAssessments: WeeklyRecord[], subject: "FUN" | "ROBOTICS", version: string) {
+function labelsFromRubric(weeklyAssessments: WeeklyRecord[], subject: string, version: string) {
   const snapshot = weeklyAssessments.find((assessment) => assessment.rubricSnapshot)?.rubricSnapshot
   const rubric = rubricFromSnapshot(snapshot, subject, version)
   const labels = new Map<string, string>()
@@ -92,7 +92,7 @@ function labelsFromRubric(weeklyAssessments: WeeklyRecord[], subject: "FUN" | "R
   return labels
 }
 
-function reportText(weeklyAssessments: WeeklyRecord[], subject: "FUN" | "ROBOTICS", ageGroup?: ReturnType<typeof roboticsAgeGroupFromBirthDate>["ageGroup"]) {
+function reportText(weeklyAssessments: WeeklyRecord[], subject: string, ageGroup?: ReturnType<typeof roboticsAgeGroupFromBirthDate>["ageGroup"]) {
   const firstVersion = weeklyAssessments[0]?.rubricVersion ?? `${subject.toLowerCase()}-rubric`
 
   if (subject === "ROBOTICS") {
@@ -117,7 +117,7 @@ function reportText(weeklyAssessments: WeeklyRecord[], subject: "FUN" | "ROBOTIC
   }
 }
 
-function matchingFinalAssessment(finalAssessments: FinalRecord[], enrollmentId: string, subject: "FUN" | "ROBOTICS", requiredWeeks: number) {
+function matchingFinalAssessment(finalAssessments: FinalRecord[], enrollmentId: string, subject: string, requiredWeeks: number) {
   return finalAssessments.find(
     (assessment) => assessment.enrollmentId === enrollmentId && assessment.subject === subject && finalAssessmentMeetsRequiredWeeks(assessment, requiredWeeks)
   )

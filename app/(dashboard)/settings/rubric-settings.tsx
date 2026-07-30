@@ -5,13 +5,11 @@ import { useEffect, useMemo, useState } from "react"
 import type { ApiResponse } from "@/lib/api-response"
 import {
   rubricConfigStatusLabels,
-  subjectLabels,
   type AssessmentRubricConfigItem,
   type AssessmentRubricDomain,
   type SubjectKey
 } from "@/lib/contracts/assessment"
-
-const subjects = Object.keys(subjectLabels) as SubjectKey[]
+import type { SubjectListItem } from "@/lib/contracts/subjects"
 
 function slugify(value: string) {
   const base = value
@@ -33,6 +31,7 @@ function cloneDomains(domains: AssessmentRubricDomain[]) {
 
 export function RubricSettings() {
   const [rubrics, setRubrics] = useState<AssessmentRubricConfigItem[]>([])
+  const [subjects, setSubjects] = useState<SubjectListItem[]>([])
   const [subject, setSubject] = useState<SubjectKey>("FUN")
   const [selectedId, setSelectedId] = useState("")
   const [domains, setDomains] = useState<AssessmentRubricDomain[]>([])
@@ -74,19 +73,24 @@ export function RubricSettings() {
     let isMounted = true
 
     async function loadInitialRubrics() {
-      const response = await fetch("/api/assessment-rubrics?all=true", { cache: "no-store" })
-      const payload = (await response.json()) as ApiResponse<AssessmentRubricConfigItem[]>
+      const [rubricResponse, subjectResponse] = await Promise.all([
+        fetch("/api/assessment-rubrics?all=true", { cache: "no-store" }),
+        fetch("/api/subjects", { cache: "no-store" })
+      ])
+      const payload = (await rubricResponse.json()) as ApiResponse<AssessmentRubricConfigItem[]>
+      const subjectPayload = (await subjectResponse.json()) as ApiResponse<SubjectListItem[]>
 
       if (!isMounted) return
 
-      if (!response.ok || !payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không tải được bộ kỹ năng.")
+      if (!rubricResponse.ok || !payload.success || !payload.data || !subjectResponse.ok || !subjectPayload.success || !subjectPayload.data) {
+        setError(payload.error?.message ?? subjectPayload.error?.message ?? "Không tải được bộ kỹ năng.")
         setRubrics([])
         setIsLoading(false)
         return
       }
 
       const nextRubrics = payload.data
+      setSubjects(subjectPayload.data)
       const nextSubjectRubrics = nextRubrics.filter((rubric) => rubric.subject === "FUN")
       const active = nextSubjectRubrics.find((rubric) => rubric.status === "ACTIVE") ?? nextSubjectRubrics[0]
 
@@ -290,14 +294,14 @@ export function RubricSettings() {
           <p className="mt-1 text-sm text-stone-500">Quản lý nhóm kỹ năng, kỹ năng và tiêu chí checklist theo từng bộ môn.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {subjects.map((item) => (
+          {subjects.filter((item) => item.isActive).map((item) => (
             <button
-              key={item}
+              key={item.key}
               type="button"
-              className={`glass-button-secondary px-4 py-2 text-sm font-semibold ${subject === item ? "text-brand-red" : ""}`}
-              onClick={() => selectSubject(item)}
+              className={`glass-button-secondary px-4 py-2 text-sm font-semibold ${subject === item.key ? "text-brand-red" : ""}`}
+              onClick={() => selectSubject(item.key)}
             >
-              {subjectLabels[item]}
+              {item.name}
             </button>
           ))}
         </div>

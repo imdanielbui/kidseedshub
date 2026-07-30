@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { progressLevels } from "@/lib/assessment-rubrics"
 
+const subjectKey = z.string().trim().min(1).max(80).regex(/^[A-Z0-9_]+$/)
+
 export const weeklyAssessmentItemSchema = z.object({
   domainKey: z.string().min(1),
   skillKey: z.string().min(1),
@@ -15,7 +17,7 @@ export const weeklyAssessmentItemSchema = z.object({
 export const weeklyAssessmentSchema = z.object({
   studentId: z.string().min(1),
   enrollmentId: z.string().min(1),
-  subject: z.enum(["FUN", "ROBOTICS"]).optional(),
+  subject: subjectKey.optional(),
   rubricVersion: z.string().min(1).optional(),
   weekNumber: z.number().int().min(1),
   status: z.enum(["NOT_STARTED", "IN_PROGRESS", "COMPLETE"]).optional(),
@@ -41,7 +43,7 @@ export const weeklyClassAssessmentSchema = z.object({
 export const finalAssessmentSchema = z.object({
   studentId: z.string().min(1),
   enrollmentId: z.string().min(1),
-  subject: z.enum(["FUN", "ROBOTICS"]),
+  subject: subjectKey,
   rubricVersion: z.string().min(1),
   requiredWeeks: z.number().int().min(1),
   strengths: z.string().min(1),
@@ -67,7 +69,7 @@ const rubricDomainSchema = z.object({
 })
 
 export const rubricConfigCreateSchema = z.object({
-  subject: z.enum(["FUN", "ROBOTICS"]),
+  subject: subjectKey,
   version: z.string().min(1).optional(),
   domains: z.array(rubricDomainSchema).min(1)
 })

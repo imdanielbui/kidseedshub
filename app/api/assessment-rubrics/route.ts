@@ -23,30 +23,21 @@ export async function GET(request: Request) {
     }
 
     const configs = await prisma.assessmentRubricConfig.findMany({
-      where: subject === "FUN" || subject === "ROBOTICS" ? { subject } : undefined,
+      where: subject ? { subject } : undefined,
       orderBy: [{ subject: "asc" }, { status: "asc" }, { updatedAt: "desc" }]
     })
 
     return ok(configs.map(toRubricConfigItem))
   }
 
-  if (subject === "FUN" || subject === "ROBOTICS") {
+  if (subject) {
     const active = await findActiveRubric(prisma, subject)
     return ok(active.rubric)
   }
 
-  if (!subject) {
-    const activeRubrics = await Promise.all([findActiveRubric(prisma, "FUN"), findActiveRubric(prisma, "ROBOTICS")])
-    return ok(activeRubrics.map((entry) => entry.rubric))
-  }
-
-  return fail(
-    {
-      code: "INVALID_SUBJECT",
-      message: "Bộ môn không hợp lệ. Chỉ hỗ trợ FUN hoặc Robotics."
-    },
-    { status: 400 }
-  )
+  const subjects = await prisma.subject.findMany({ where: { isActive: true }, select: { key: true } })
+  const activeRubrics = await Promise.all(subjects.map((item) => findActiveRubric(prisma, item.key)))
+  return ok(activeRubrics.map((entry) => entry.rubric))
 }
 
 export async function POST(request: Request) {

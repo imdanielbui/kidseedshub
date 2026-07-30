@@ -3,13 +3,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { BookOpenCheck, RefreshCcw, Save, Settings2 } from "lucide-react"
 import type { ApiResponse } from "@/lib/api-response"
-import { subjectLabels, type SubjectKey } from "@/lib/contracts/assessment"
 import type { CourseListItem } from "@/lib/contracts/courses"
+import type { SubjectListItem } from "@/lib/contracts/subjects"
 
 type CourseFormState = {
   id?: string
   name: string
-  subject: SubjectKey
+  subject: string
   description: string
   totalSessions: string
   price: string
@@ -36,15 +36,26 @@ async function fetchCourseList() {
   return (await response.json()) as ApiResponse<CourseListItem[]>
 }
 
+async function fetchSubjectList() {
+  const response = await fetch("/api/subjects", { cache: "no-store" })
+  return (await response.json()) as ApiResponse<SubjectListItem[]>
+}
+
 export function CourseSettings() {
   const [courses, setCourses] = useState<CourseListItem[]>([])
+  const [subjects, setSubjects] = useState<SubjectListItem[]>([])
   const [form, setForm] = useState<CourseFormState>(emptyCourseForm)
+  const [subjectName, setSubjectName] = useState("")
+  const [subjectKey, setSubjectKey] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingSubject, setIsSavingSubject] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
   const activeCount = useMemo(() => courses.filter((course) => course.isActive).length, [courses])
+  const activeSubjects = useMemo(() => subjects.filter((subject) => subject.isActive), [subjects])
+  const subjectNameByKey = useMemo(() => new Map(subjects.map((subject) => [subject.key, subject.name])), [subjects])
   const isEditing = Boolean(form.id)
 
   const loadCourses = useCallback(async () => {
@@ -64,22 +75,32 @@ export function CourseSettings() {
     setIsLoading(false)
   }, [])
 
+  const loadSubjects = useCallback(async () => {
+    const payload = await fetchSubjectList()
+    if (!payload.success || !payload.data) {
+      setError(payload.error?.message ?? "Không tải được danh sách bộ môn.")
+      return
+    }
+    setSubjects(payload.data)
+  }, [])
+
   useEffect(() => {
     let isMounted = true
 
     async function loadInitialCourses() {
-      const payload = await fetchCourseList()
+      const [coursePayload, subjectPayload] = await Promise.all([fetchCourseList(), fetchSubjectList()])
 
       if (!isMounted) return
 
-      if (!payload.success || !payload.data) {
-        setError(payload.error?.message ?? "Không tải được danh sách khóa học.")
+      if (!coursePayload.success || !coursePayload.data || !subjectPayload.success || !subjectPayload.data) {
+        setError(coursePayload.error?.message ?? subjectPayload.error?.message ?? "Không tải được dữ liệu khóa học.")
         setCourses([])
         setIsLoading(false)
         return
       }
 
-      setCourses(payload.data)
+      setCourses(coursePayload.data)
+      setSubjects(subjectPayload.data)
       setIsLoading(false)
     }
 
@@ -89,6 +110,36 @@ export function CourseSettings() {
       isMounted = false
     }
   }, [])
+
+  async function createSubject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError("")
+    setMessage("")
+    setIsSavingSubject(true)
+
+    try {
+      const response = await fetch("/api/subjects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: subjectKey.trim().toUpperCase(), name: subjectName.trim() })
+      })
+      const payload = (await response.json()) as ApiResponse<SubjectListItem>
+      if (!payload.success || !payload.data) {
+        setError(payload.error?.message ?? "Không tạo được bộ môn.")
+        return
+      }
+      const createdSubject = payload.data
+      setSubjectName("")
+      setSubjectKey("")
+      setForm((current) => ({ ...current, subject: createdSubject.key }))
+      setMessage(`Đã tạo bộ môn ${createdSubject.name} kèm rubric checklist mặc định.`)
+      await loadSubjects()
+    } catch {
+      setError("Không tạo được bộ môn.")
+    } finally {
+      setIsSavingSubject(false)
+    }
+  }
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -187,6 +238,12 @@ export function CourseSettings() {
       {error ? <p className="mt-5 rounded-3xl border border-brand-red/15 bg-white/50 p-4 text-sm text-brand-red">{error}</p> : null}
       {message ? <p className="mt-5 rounded-3xl border border-brand-red/15 bg-white/50 p-4 text-sm font-semibold text-brand-red">{message}</p> : null}
 
+      <form className="content-border mt-5 grid gap-3 pt-5 md:grid-cols-[1fr_180px_auto]" onSubmit={createSubject}>
+        <CourseInput label="Bộ môn mới" value={subjectName} onChange={setSubjectName} required />
+        <CourseInput label="Mã bộ môn" value={subjectKey} onChange={(value) => setSubjectKey(value.toUpperCase())} required />
+        <button type="submit" className="glass-button-primary self-end rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-60" disabled={isSavingSubject}>{isSavingSubject ? "Đang tạo..." : "Thêm bộ môn"}</button>
+      </form>
+
       <form className="content-border mt-5 pt-5" onSubmit={submitForm}>
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
           <h3 className="text-base font-semibold text-brand-ink">{isEditing ? "Sửa khóa học" : "Tạo khóa học"}</h3>
@@ -208,11 +265,11 @@ export function CourseSettings() {
             <select
               className="neu-pressed mt-2 w-full rounded-2xl bg-transparent px-4 py-3 text-sm text-brand-ink outline-none"
               value={form.subject}
-              onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value as SubjectKey }))}
+              onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
             >
-              {(Object.keys(subjectLabels) as SubjectKey[]).map((subject) => (
-                <option key={subject} value={subject}>
-                  {subjectLabels[subject]}
+              {activeSubjects.map((subject) => (
+                <option key={subject.key} value={subject.key}>
+                  {subject.name}
                 </option>
               ))}
             </select>
@@ -289,7 +346,7 @@ export function CourseSettings() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="font-semibold text-brand-ink">{course.name}</h4>
                         <span className="rounded-full border border-brand-red/15 px-2 py-1 text-xs font-semibold text-brand-red">
-                          {subjectLabels[course.subject]}
+                          {subjectNameByKey.get(course.subject) ?? course.subject}
                         </span>
                         <span className="rounded-full border border-brand-red/10 px-2 py-1 text-xs text-stone-500">
                           {course.isActive ? "Active" : "Inactive"}

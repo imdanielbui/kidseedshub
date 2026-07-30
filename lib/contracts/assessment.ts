@@ -1,9 +1,15 @@
-export const subjectLabels = {
+export const coreSubjectLabels = {
   FUN: "FUN",
   ROBOTICS: "Robotics"
 } as const
 
-export type SubjectKey = keyof typeof subjectLabels
+export const subjectLabels: Record<string, string> = coreSubjectLabels
+
+export type SubjectKey = string
+
+export function subjectLabel(subject: SubjectKey) {
+  return subjectLabels[subject] ?? subject
+}
 
 export const rubricConfigStatusLabels = {
   DRAFT: "Bản nháp",

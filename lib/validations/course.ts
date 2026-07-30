@@ -1,10 +1,8 @@
 import { z } from "zod"
 
-export const courseSubjects = ["FUN", "ROBOTICS"] as const
-
 export const courseCreateSchema = z.object({
   name: z.string().min(1, "Tên khóa học là bắt buộc").max(160),
-  subject: z.enum(courseSubjects),
+  subject: z.string().trim().min(1).max(80).regex(/^[A-Z0-9_]+$/, "Mã bộ môn không hợp lệ"),
   description: z.string().max(1000).optional(),
   totalSessions: z.number().int().min(1).max(200),
   price: z.number().nonnegative(),

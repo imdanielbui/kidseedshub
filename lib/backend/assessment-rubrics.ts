@@ -1,4 +1,4 @@
-import { Prisma, type CourseSubject, type PrismaClient } from "@prisma/client"
+import { Prisma, type PrismaClient } from "@prisma/client"
 import { assessmentRubrics, type AssessmentRubric } from "@/lib/assessment-rubrics"
 import type { AssessmentRubricConfigItem, AssessmentRubricDomain, AssessmentRubricSkill, RoboticsAgeGroup, SubjectKey } from "@/lib/contracts/assessment"
 
@@ -6,7 +6,7 @@ type PrismaTx = Prisma.TransactionClient | PrismaClient
 
 type RubricRecord = {
   id: string
-  subject: CourseSubject
+  subject: string
   version: string
   status: "DRAFT" | "ACTIVE" | "ARCHIVED"
   domainsJson: Prisma.JsonValue
@@ -16,7 +16,28 @@ type RubricRecord = {
 }
 
 export function staticRubric(subject: SubjectKey): AssessmentRubric {
-  return assessmentRubrics[subject]
+  return assessmentRubrics[subject as keyof typeof assessmentRubrics] ?? {
+    subject,
+    version: `${subject.toLowerCase()}-default`,
+    domains: [
+      {
+        key: "learning_habits",
+        label: "Thói quen học tập",
+        skills: [
+          { key: "participation", label: "Tham gia", outcomes: ["Tham gia và hoàn thành hoạt động học tập"] },
+          { key: "focus", label: "Tập trung", outcomes: ["Duy trì sự tập trung phù hợp trong buổi học"] }
+        ]
+      },
+      {
+        key: "development",
+        label: "Phát triển kỹ năng",
+        skills: [
+          { key: "practice", label: "Thực hành", outcomes: ["Thực hành kỹ năng của bộ môn"] },
+          { key: "collaboration", label: "Hợp tác", outcomes: ["Hợp tác tích cực với giáo viên và bạn học"] }
+        ]
+      }
+    ]
+  }
 }
 
 function stringRecord(value: unknown): Record<string, string> | undefined {
@@ -83,7 +104,7 @@ export function rubricDomainsFromJson(value: Prisma.JsonValue): AssessmentRubric
 export function rubricFromSnapshot(value: Prisma.JsonValue | null | undefined, fallbackSubject: SubjectKey, fallbackVersion: string): AssessmentRubricConfigItem {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, Prisma.JsonValue>
-    const subject = record.subject === "FUN" || record.subject === "ROBOTICS" ? record.subject : fallbackSubject
+    const subject = typeof record.subject === "string" ? record.subject : fallbackSubject
     const version = typeof record.version === "string" ? record.version : fallbackVersion
 
     return {

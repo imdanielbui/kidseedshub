@@ -3,6 +3,7 @@ import { fail, ok } from "@/lib/api-response"
 import type { CourseListItem } from "@/lib/contracts/courses"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
+import { requireActiveSubject } from "@/lib/modules/subjects/subject-service"
 import { courseCreateSchema } from "@/lib/validations/course"
 
 function toCourseListItem(course: {
@@ -57,9 +58,12 @@ export async function POST(request: Request) {
     return fail({ code: "INVALID_BODY", message: "Thông tin khóa học không hợp lệ." }, { status: 400 })
   }
 
-  const course = await prisma.course.create({
-    data: parsed.data
-  })
+  const subject = await requireActiveSubject(prisma, parsed.data.subject)
+  if (!subject) {
+    return fail({ code: "SUBJECT_NOT_ACTIVE", message: "Bộ môn không tồn tại hoặc đã ngừng sử dụng." }, { status: 400 })
+  }
+
+  const course = await prisma.course.create({ data: parsed.data })
 
   return ok(toCourseListItem(course), { status: 201 })
 }

@@ -1,6 +1,5 @@
 import {
   type PrismaClient,
-  type CourseSubject,
   type ProgressLevel,
 } from "@prisma/client";
 import { type AssessmentRubric } from "../../lib/assessment-rubrics";
@@ -88,7 +87,7 @@ async function upsertRubricConfig(input: {
 async function upsertWeeklyAssessment(input: {
   studentId: string;
   enrollmentId: string;
-  subject: CourseSubject;
+  subject: string;
   rubricVersion: string;
   weekNumber: number;
   teacherId: string;
@@ -155,7 +154,7 @@ async function upsertWeeklyAssessment(input: {
 async function upsertFinalAssessment(input: {
   studentId: string;
   enrollmentId: string;
-  subject: CourseSubject;
+  subject: string;
   rubricVersion: string;
   requiredWeeks: number;
   completedWeeks: number;

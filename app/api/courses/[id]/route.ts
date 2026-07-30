@@ -3,6 +3,7 @@ import { fail, ok } from "@/lib/api-response"
 import type { CourseListItem } from "@/lib/contracts/courses"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
+import { requireActiveSubject } from "@/lib/modules/subjects/subject-service"
 import { courseUpdateSchema } from "@/lib/validations/course"
 
 type RouteContext = {
@@ -48,6 +49,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params
+  if (parsed.data.subject) {
+    const subject = await requireActiveSubject(prisma, parsed.data.subject)
+    if (!subject) {
+      return fail({ code: "SUBJECT_NOT_ACTIVE", message: "Bộ môn không tồn tại hoặc đã ngừng sử dụng." }, { status: 400 })
+    }
+  }
   const course = await prisma.course.update({
     where: { id },
     data: parsed.data
