@@ -2,7 +2,7 @@ import ExcelJS from "exceljs"
 import { join } from "node:path"
 import { auth } from "@/lib/auth"
 import { fail } from "@/lib/api-response"
-import { expenseCategoryLabels, paymentMethodLabels } from "@/lib/contracts/finance"
+import { expenseCategoryLabels, otherIncomeCategoryLabels, paymentMethodLabels } from "@/lib/contracts/finance"
 import { studentStatusLabels } from "@/lib/contracts/students"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
@@ -62,7 +62,7 @@ export async function GET() {
     return fail({ code: "FORBIDDEN", message: "Bạn không có quyền export dữ liệu." }, { status: 403 })
   }
 
-  const [students, receipts, expenses] = await prisma.$transaction([
+  const [students, receipts, otherIncomeReceipts, expenses] = await prisma.$transaction([
     prisma.student.findMany({
       include: {
         parent: { include: { user: true } },
@@ -72,7 +72,7 @@ export async function GET() {
       },
       orderBy: { updatedAt: "desc" }
     }),
-	    prisma.receipt.findMany({
+    prisma.receipt.findMany({
 	      include: {
 	        createdBy: true,
 	        enrollment: {
@@ -84,8 +84,12 @@ export async function GET() {
 	        lines: { orderBy: { createdAt: "asc" } },
 	        extraLines: { orderBy: { createdAt: "asc" } }
 	      },
-	      orderBy: { createdAt: "desc" }
-	    }),
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.otherIncomeReceipt.findMany({
+      include: { createdBy: true },
+      orderBy: { createdAt: "desc" }
+    }),
     prisma.expense.findMany({
       include: { createdBy: true },
       orderBy: { date: "desc" }
@@ -200,6 +204,36 @@ export async function GET() {
 	  receiptsSheet.getColumn("lineAmount").numFmt = "#,##0"
 	  receiptsSheet.getColumn("walletCredit").numFmt = "#,##0"
   addWorksheetBranding(receiptsSheet, "Students Finance Export - Phiếu thu", logoImageId)
+
+  const otherIncomeSheet = workbook.addWorksheet("Other Income")
+  otherIncomeSheet.columns = [
+    { header: "Receipt Code", key: "code", width: 18 },
+    { header: "Date", key: "date", width: 14 },
+    { header: "Category", key: "category", width: 24 },
+    { header: "Payer", key: "payer", width: 24 },
+    { header: "Payer Phone", key: "payerPhone", width: 18 },
+    { header: "Description", key: "description", width: 36 },
+    { header: "Amount", key: "amount", width: 16 },
+    { header: "Method", key: "method", width: 18 },
+    { header: "Created By", key: "createdBy", width: 22 },
+    { header: "Note", key: "note", width: 32 }
+  ]
+  otherIncomeReceipts.forEach((receipt) => {
+    otherIncomeSheet.addRow({
+      code: receipt.code,
+      date: formatDate(receipt.createdAt),
+      category: otherIncomeCategoryLabels[receipt.category],
+      payer: receipt.payerName,
+      payerPhone: receipt.payerPhone ?? "",
+      description: receipt.description,
+      amount: Number(receipt.amount.toString()),
+      method: paymentMethodLabels[receipt.method],
+      createdBy: receipt.createdBy.name,
+      note: receipt.note ?? ""
+    })
+  })
+  otherIncomeSheet.getColumn("amount").numFmt = "#,##0"
+  addWorksheetBranding(otherIncomeSheet, "Students Finance Export - Phiếu thu khác", logoImageId)
 
   const expensesSheet = workbook.addWorksheet("Expenses")
   expensesSheet.columns = [

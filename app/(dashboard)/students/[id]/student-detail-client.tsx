@@ -1,5 +1,6 @@
 "use client"
 
+import { useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import type { PaymentMethodKey } from "@/lib/contracts/finance"
 import {
@@ -24,7 +25,9 @@ import { useStudentProfileState } from "./student-detail-profile-state"
 import { useStudentParentAccountActions } from "./student-detail-parent-account-actions"
 
 export function StudentDetailClient({ studentId }: { studentId: string }) {
-  const [activeTab, setActiveTab] = useState<DetailTab>("overview")
+  const searchParams = useSearchParams()
+  const requestedTab = searchParams.get("tab")
+  const [activeTab, setActiveTab] = useState<DetailTab>(() => requestedTab === "finance" ? "finance" : "overview")
   const [enrollmentCourseId, setEnrollmentCourseId] = useState("")
   const [enrollmentClassId, setEnrollmentClassId] = useState("")
   const [enrollmentSessions, setEnrollmentSessions] = useState("0")

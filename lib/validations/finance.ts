@@ -3,6 +3,7 @@ import { z } from "zod"
 export const paymentMethods = ["CASH", "BANK_TRANSFER"] as const
 export const expenseCategories = ["SALARY", "MATERIALS", "UTILITIES", "MARKETING", "OTHER"] as const
 export const receiptExtraLineTypes = ["TUTORING", "OTHER"] as const
+export const otherIncomeCategories = ["WORKSHOP_EVENT", "MATERIALS", "REGISTRATION_FEE", "OTHER"] as const
 
 const receiptLineCreateSchema = z.object({
   enrollmentId: z.string().min(1),
@@ -55,6 +56,20 @@ export const receiptListQuerySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   billingMonth: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   studentId: z.string().min(1).optional()
+})
+
+export const otherIncomeReceiptCreateSchema = z.object({
+  category: z.enum(otherIncomeCategories),
+  amount: z.number().positive().max(1_000_000_000),
+  payerName: z.string().trim().min(1).max(255),
+  payerPhone: z.string().trim().min(8).max(24).optional(),
+  description: z.string().trim().min(1).max(1000),
+  note: z.string().trim().max(1000).optional(),
+  method: z.enum(paymentMethods)
+})
+
+export const otherIncomeReceiptListQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional()
 })
 
 export const expenseCreateSchema = z.object({

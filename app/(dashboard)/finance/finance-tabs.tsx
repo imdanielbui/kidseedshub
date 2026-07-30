@@ -1,8 +1,8 @@
 import { BellRing, CheckCircle2, MessageSquareText, Plus, RefreshCcw, WalletCards, type LucideIcon } from "lucide-react"
-import { expenseCategoryLabels, paymentMethodLabels, type ExpenseListItem, type FinanceSummary, type ReceiptListItem } from "@/lib/contracts/finance"
+import { expenseCategoryLabels, paymentMethodLabels, type ExpenseListItem, type FinanceSummary, type OtherIncomeReceiptItem, type ReceiptListItem } from "@/lib/contracts/finance"
 import { payrollRunStatusLabels, type PayrollLineItem, type PayrollRunItem } from "@/lib/contracts/payroll"
 import type { TuitionReminderItem, ZaloTemplateItem } from "@/lib/contracts/reminders"
-import { ExpenseItem, FinanceInput, PanelState, PayrollMetric, ReceiptItem, SectionHeader, SummaryBreakdown } from "./finance-presentational"
+import { ExpenseItem, FinanceInput, OtherIncomeReceiptItem as OtherIncomeReceiptListItem, PanelState, PayrollMetric, ReceiptItem, SectionHeader, SummaryBreakdown } from "./finance-presentational"
 import { formatMoney, type PayrollLineEditState } from "./finance-utils"
 
 export function OverviewTab({
@@ -11,6 +11,7 @@ export function OverviewTab({
   isAdmin,
   isLoading,
   receipts,
+  otherIncomeReceipts,
   summary
 }: {
   cards: Array<{ label: string; value: string; icon: LucideIcon }>
@@ -18,8 +19,15 @@ export function OverviewTab({
   isAdmin: boolean
   isLoading: boolean
   receipts: ReceiptListItem[]
+  otherIncomeReceipts: OtherIncomeReceiptItem[]
   summary: FinanceSummary | null
 }) {
+  const ledgerEntries = [
+    ...receipts.map((receipt) => ({ id: `receipt-${receipt.id}`, createdAt: receipt.createdAt, type: "receipt" as const, item: receipt })),
+    ...otherIncomeReceipts.map((receipt) => ({ id: `other-income-${receipt.id}`, createdAt: receipt.createdAt, type: "other-income" as const, item: receipt })),
+    ...expenses.map((expense) => ({ id: `expense-${expense.id}`, createdAt: expense.date, type: "expense" as const, item: expense }))
+  ].sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime())
+
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-4">
@@ -69,11 +77,12 @@ export function OverviewTab({
         <div className="content-border max-h-[62vh] space-y-3 overflow-auto p-4">
           {isLoading ? (
             <PanelState text="Đang tải hoạt động tài chính..." />
-          ) : receipts.length || expenses.length ? (
-            <>
-              {receipts.slice(0, 5).map((receipt) => <ReceiptItem key={receipt.id} receipt={receipt} compact />)}
-              {isAdmin ? expenses.slice(0, 5).map((expense) => <ExpenseItem key={expense.id} expense={expense} compact />) : null}
-            </>
+          ) : ledgerEntries.length ? (
+            ledgerEntries.slice(0, 10).map((entry) => {
+              if (entry.type === "receipt") return <ReceiptItem key={entry.id} receipt={entry.item} compact />
+              if (entry.type === "other-income") return <OtherIncomeReceiptListItem key={entry.id} receipt={entry.item} compact />
+              return <ExpenseItem key={entry.id} expense={entry.item} compact />
+            })
           ) : (
             <PanelState text="Chưa có hoạt động trong tháng." />
           )}
@@ -86,12 +95,16 @@ export function OverviewTab({
 export function ReceiptsTab({
   canCreateReceipt,
   isLoading,
-  onCreate,
+  onCreateOtherIncome,
+  onCreateStudentTuition,
+  otherIncomeReceipts,
   receipts
 }: {
   canCreateReceipt: boolean
   isLoading: boolean
-  onCreate: () => void
+  onCreateOtherIncome: () => void
+  onCreateStudentTuition: () => void
+  otherIncomeReceipts: OtherIncomeReceiptItem[]
   receipts: ReceiptListItem[]
 }) {
   return (
@@ -99,18 +112,16 @@ export function ReceiptsTab({
       <SectionHeader
         title="Sổ phiếu thu"
         eyebrow="Receipts"
-        action={canCreateReceipt ? (
-          <button type="button" className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={onCreate}>
-            <Plus className="h-4 w-4" />
-            Tạo phiếu thu
-          </button>
-        ) : null}
+        action={canCreateReceipt ? <div className="flex flex-wrap gap-2"><button type="button" className="neu-list-item inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-stone-600 hover:text-brand-red" onClick={onCreateStudentTuition}><Plus className="h-4 w-4" />Thu học phí</button><button type="button" className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" onClick={onCreateOtherIncome}><Plus className="h-4 w-4" />Phiếu thu khác</button></div> : null}
       />
       <div className="content-border max-h-[68vh] space-y-3 overflow-auto p-4">
         {isLoading ? (
           <PanelState text="Đang tải phiếu thu..." />
-        ) : receipts.length ? (
-          receipts.map((receipt) => <ReceiptItem key={receipt.id} receipt={receipt} />)
+        ) : receipts.length || otherIncomeReceipts.length ? (
+          <>
+            {receipts.map((receipt) => <ReceiptItem key={receipt.id} receipt={receipt} />)}
+            {otherIncomeReceipts.map((receipt) => <OtherIncomeReceiptListItem key={receipt.id} receipt={receipt} />)}
+          </>
         ) : (
           <PanelState text="Chưa có phiếu thu trong tháng." />
         )}

@@ -1,24 +1,20 @@
 "use client"
 
 import { BarChart3, BellRing, Download, FileText, Plus, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { PermissionState } from "./finance-presentational"
 import { useFinanceData } from "./finance-data"
 import { useFinanceActions } from "./finance-actions"
 import { useFinancePayrollActions } from "./finance-payroll-actions"
-import { ExpenseDialog, ReceiptDialog } from "./finance-dialogs"
+import { ExpenseDialog, OtherIncomeReceiptDialog, StudentReceiptPickerDialog } from "./finance-dialogs"
 import { ExpensesTab, OverviewTab, PayrollTab, ReceiptsTab, RemindersTab } from "./finance-tabs"
 import {
   buildYearOptions,
-  countCourseSessionsInBillingMonth,
   emptyExpenseForm,
-  emptyReceiptForm,
+  emptyOtherIncomeReceiptForm,
   financeMonthChoices,
   formatMoney,
-  getBillingMonthChoicesForYear,
-  getBillingMonthInRange,
-  getBillingYearOptions,
-  getCourseBillingMonthOptions,
   getCurrentMonth,
   getMonthPart,
   getReceiptTotal,
@@ -26,29 +22,29 @@ import {
   type ExpenseFormState,
   type FinanceDialog,
   type FinanceTab,
+  type OtherIncomeReceiptFormState,
   type PayrollLineEditState,
-  type ReceiptBillingMode,
-  type ReceiptFormState,
 } from "./finance-utils"
 
 export default function FinancePage() {
+  const router = useRouter()
   const [month, setMonth] = useState(getCurrentMonth)
   const [activeTab, setActiveTab] = useState<FinanceTab>("overview")
   const [activeDialog, setActiveDialog] = useState<FinanceDialog>(null)
-  const [receiptForm, setReceiptForm] = useState<ReceiptFormState>(emptyReceiptForm)
   const [expenseForm, setExpenseForm] = useState<ExpenseFormState>(emptyExpenseForm)
+  const [otherIncomeReceiptForm, setOtherIncomeReceiptForm] = useState<OtherIncomeReceiptFormState>(emptyOtherIncomeReceiptForm)
   const [selectedTemplateId, setSelectedTemplateId] = useState("TUITION_LOW_SESSIONS")
   const [refreshKey, setRefreshKey] = useState(0)
-  const [isSubmittingReceipt, setIsSubmittingReceipt] = useState(false)
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false)
+  const [isSubmittingOtherIncomeReceipt, setIsSubmittingOtherIncomeReceipt] = useState(false)
   const [isCreatingPayroll, setIsCreatingPayroll] = useState(false)
   const [payrollActionId, setPayrollActionId] = useState("")
   const [payrollLineEdits, setPayrollLineEdits] = useState<Record<string, PayrollLineEditState>>({})
   const [queueingEnrollmentId, setQueueingEnrollmentId] = useState("")
   const financeData = useFinanceData({ month, refreshKey, selectedTemplateId })
   const {
-    canCreateReceipt, canManageReminders, canUseFinance, classes, error, expenses, isAdmin,
-    isLoading, isLoadingSession, payrollRuns, receipts, reminders, setError,
+    canCreateReceipt, canManageReminders, canUseFinance, error, expenses, isAdmin,
+    isLoading, isLoadingSession, otherIncomeReceipts, payrollRuns, receipts, reminders, setError,
     students, summary, templates
   } = financeData
   const selectedMonthPart = getMonthPart(month)
@@ -70,7 +66,8 @@ export default function FinancePage() {
 
   const adminSummaryCards = useMemo(
     () => [
-      { label: "Doanh thu gross", value: summary ? formatMoney(summary.revenue) : "0đ", icon: TrendingUp },
+      { label: "Thực thu", value: summary ? formatMoney(summary.revenue) : "0đ", icon: TrendingUp },
+      { label: "Thu khác", value: summary ? formatMoney(summary.otherIncomeRevenue) : "0đ", icon: ReceiptText },
       { label: "Refund", value: summary ? formatMoney(summary.refundExpense) : "0đ", icon: TrendingDown },
       { label: "Doanh thu ròng", value: summary ? formatMoney(summary.netRevenue) : "0đ", icon: WalletCards },
       { label: "Chi vận hành", value: summary ? formatMoney(summary.operatingExpense) : "0đ", icon: TrendingDown },
@@ -81,83 +78,26 @@ export default function FinancePage() {
   )
   const saleSummaryCards = useMemo(
     () => [
-      { label: "Doanh thu của bạn", value: formatMoney(String(getReceiptTotal(receipts))), icon: TrendingUp },
-      { label: "Phiếu thu", value: `${receipts.length} phiếu`, icon: ReceiptText },
+      { label: "Doanh thu của bạn", value: formatMoney(String(getReceiptTotal(receipts) + otherIncomeReceipts.reduce((total, receipt) => total + Number(receipt.amount), 0))), icon: TrendingUp },
+      { label: "Phiếu thu", value: `${receipts.length + otherIncomeReceipts.length} phiếu`, icon: ReceiptText },
       { label: "Số buổi đã bán", value: `${receipts.reduce((total, receipt) => total + receipt.sessions, 0)} buổi`, icon: WalletCards }
     ],
-    [receipts]
+    [otherIncomeReceipts, receipts]
   )
-  const enrollmentOptions = useMemo(
-    () =>
-	      students.flatMap((student) =>
-	        student.courses.map((course) => ({
-	          studentName: student.name,
-	          parentName: student.parentName,
-	          enrollmentId: course.enrollmentId,
-	          course,
-	          courseName: course.courseName,
-	          sessionsRemaining: course.sessionsRemaining
-	        }))
-	      ),
-	    [students]
-	  )
-	  const selectedReceiptEnrollment = useMemo(
-	    () => enrollmentOptions.find((option) => option.enrollmentId === receiptForm.enrollmentId),
-	    [enrollmentOptions, receiptForm.enrollmentId]
-	  )
-	  const isReceiptMonthlyBilling = receiptForm.billingMode === "MONTHLY"
-	  const receiptBillingMonthOptions = useMemo(
-	    () => getCourseBillingMonthOptions(selectedReceiptEnrollment?.course, classes),
-	    [classes, selectedReceiptEnrollment?.course]
-	  )
-	  const activeReceiptBillingMonth = useMemo(
-	    () => getBillingMonthInRange(receiptForm.billingMonth, receiptBillingMonthOptions),
-	    [receiptForm.billingMonth, receiptBillingMonthOptions]
-	  )
-	  const activeReceiptBillingYear = useMemo(() => getYearPart(activeReceiptBillingMonth), [activeReceiptBillingMonth])
-	  const receiptBillingYearOptions = useMemo(
-	    () => getBillingYearOptions(receiptBillingMonthOptions, activeReceiptBillingMonth),
-	    [activeReceiptBillingMonth, receiptBillingMonthOptions]
-	  )
-	  const receiptBillingMonthChoices = useMemo(
-	    () => getBillingMonthChoicesForYear(receiptBillingMonthOptions, activeReceiptBillingYear),
-	    [activeReceiptBillingYear, receiptBillingMonthOptions]
-	  )
-	  const suggestedReceiptSessions = useMemo(
-	    () => isReceiptMonthlyBilling ? countCourseSessionsInBillingMonth(selectedReceiptEnrollment?.course, classes, activeReceiptBillingMonth) : undefined,
-	    [activeReceiptBillingMonth, classes, isReceiptMonthlyBilling, selectedReceiptEnrollment?.course]
-	  )
-	  const selectedReceiptUnitPrice = selectedReceiptEnrollment?.course.courseTotalSessions
-	    ? Number(selectedReceiptEnrollment.course.coursePrice) / selectedReceiptEnrollment.course.courseTotalSessions
-	    : 0
-	  const defaultReceiptSessions = selectedReceiptEnrollment ? selectedReceiptEnrollment.sessionsRemaining : 0
-	  const receiptBillableSessions = Number(receiptForm.billableSessions || suggestedReceiptSessions || defaultReceiptSessions || 0)
-	  const receiptExpectedAmount = selectedReceiptUnitPrice * receiptBillableSessions
-	  const payrollRun = payrollRuns[0]
+  const payrollRun = payrollRuns[0]
 
-	  function suggestReceiptSessions(enrollmentId: string, billingMonth: string, billingMode: ReceiptBillingMode) {
-	    const option = enrollmentOptions.find((item) => item.enrollmentId === enrollmentId)
-	    if (billingMode === "COURSE") return option ? String(option.sessionsRemaining) : ""
-	    const suggested = countCourseSessionsInBillingMonth(option?.course, classes, billingMonth)
-	    return suggested === undefined ? "" : String(Math.max(0, suggested))
-	  }
-
-  const { queueReminder, submitExpense, submitReceipt } = useFinanceActions({
-    activeReceiptBillingMonth,
+  const { queueReminder, submitExpense, submitOtherIncomeReceipt } = useFinanceActions({
     expenseForm,
-    isReceiptMonthlyBilling,
+    otherIncomeReceiptForm,
     month,
-    receiptBillableSessions,
-    receiptBillingMonthOptions,
-    receiptForm,
     selectedTemplateId,
     setActiveDialog,
     setError,
     setExpenseForm,
+    setOtherIncomeReceiptForm,
     setIsSubmittingExpense,
-    setIsSubmittingReceipt,
+    setIsSubmittingOtherIncomeReceipt,
     setQueueingEnrollmentId,
-    setReceiptForm,
     setRefreshKey
   })
 
@@ -225,14 +165,16 @@ export default function FinancePage() {
                 Tải lại
               </button>
               {canCreateReceipt ? (
-                <button
-                  type="button"
-                  className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
-                  onClick={() => setActiveDialog("receipt")}
-                >
-                  <Plus className="h-4 w-4" />
-                  Phiếu thu
-                </button>
+                <>
+                  <button type="button" className="neu-list-item inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-stone-600 hover:text-brand-red" onClick={() => setActiveDialog("student-receipt")}>
+                    <Plus className="h-4 w-4" />
+                    Thu học phí
+                  </button>
+                  <button type="button" className="glass-button-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold" onClick={() => setActiveDialog("other-income-receipt")}>
+                    <Plus className="h-4 w-4" />
+                    Phiếu thu khác
+                  </button>
+                </>
               ) : null}
               {isAdmin ? (
                 <>
@@ -298,6 +240,7 @@ export default function FinancePage() {
           isAdmin={isAdmin}
           isLoading={isPageLoading}
           receipts={receipts}
+          otherIncomeReceipts={otherIncomeReceipts}
           expenses={expenses}
           summary={summary}
         />
@@ -308,7 +251,9 @@ export default function FinancePage() {
           canCreateReceipt={canCreateReceipt}
           isLoading={isPageLoading}
           receipts={receipts}
-          onCreate={() => setActiveDialog("receipt")}
+          otherIncomeReceipts={otherIncomeReceipts}
+          onCreateStudentTuition={() => setActiveDialog("student-receipt")}
+          onCreateOtherIncome={() => setActiveDialog("other-income-receipt")}
         />
       ) : null}
 
@@ -345,27 +290,9 @@ export default function FinancePage() {
         />
       ) : null}
 
-      {activeDialog === "receipt" ? (
-        <ReceiptDialog
-          activeReceiptBillingMonth={activeReceiptBillingMonth}
-          activeReceiptBillingYear={activeReceiptBillingYear}
-          classes={classes}
-          defaultReceiptSessions={defaultReceiptSessions}
-          enrollmentOptions={enrollmentOptions}
-          isMonthlyBilling={isReceiptMonthlyBilling}
-          isSubmitting={isSubmittingReceipt}
-          receiptBillingMonthChoices={receiptBillingMonthChoices}
-          receiptBillingMonthOptions={receiptBillingMonthOptions}
-          receiptBillingYearOptions={receiptBillingYearOptions}
-          receiptExpectedAmount={receiptExpectedAmount}
-          receiptForm={receiptForm}
-          setReceiptForm={setReceiptForm}
-          suggestedReceiptSessions={suggestedReceiptSessions}
-          suggestReceiptSessions={suggestReceiptSessions}
-          onClose={() => setActiveDialog(null)}
-          onSubmit={submitReceipt}
-        />
-      ) : null}
+      {activeDialog === "student-receipt" ? <StudentReceiptPickerDialog students={students} onClose={() => setActiveDialog(null)} onSelectStudent={(studentId) => router.push(`/students/${studentId}?tab=finance`)} /> : null}
+
+      {activeDialog === "other-income-receipt" ? <OtherIncomeReceiptDialog form={otherIncomeReceiptForm} isSubmitting={isSubmittingOtherIncomeReceipt} onClose={() => setActiveDialog(null)} onSubmit={submitOtherIncomeReceipt} setForm={setOtherIncomeReceiptForm} /> : null}
 
       {activeDialog === "expense" && isAdmin ? (
         <ExpenseDialog

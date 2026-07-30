@@ -1,6 +1,6 @@
 import { Lock } from "lucide-react"
 import type { ReactNode } from "react"
-import { expenseCategoryLabels, paymentMethodLabels, type ExpenseListItem, type ReceiptListItem } from "@/lib/contracts/finance"
+import { expenseCategoryLabels, otherIncomeCategoryLabels, paymentMethodLabels, type ExpenseListItem, type OtherIncomeReceiptItem, type ReceiptListItem } from "@/lib/contracts/finance"
 import { formatDate, formatMoney } from "./finance-utils"
 
 export function ReceiptItem({ compact = false, receipt }: { compact?: boolean; receipt: ReceiptListItem }) {
@@ -52,6 +52,27 @@ export function ExpenseItem({ compact = false, expense }: { compact?: boolean; e
           {!compact ? <p className="mt-2 text-xs text-stone-500">{formatDate(expense.date)} - tạo bởi {expense.createdByName}</p> : null}
         </div>
         <p className="text-sm font-semibold text-brand-red">{formatMoney(expense.amount)}</p>
+      </div>
+    </article>
+  )
+}
+
+export function OtherIncomeReceiptItem({ compact = false, receipt }: { compact?: boolean; receipt: OtherIncomeReceiptItem }) {
+  return (
+    <article className="neu-list-item rounded-2xl p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-brand-ink">{receipt.code}</p>
+            <span className="rounded-full border border-brand-red/10 px-2 py-1 text-[11px] font-semibold text-stone-500">{otherIncomeCategoryLabels[receipt.category]}</span>
+          </div>
+          <p className="mt-1 text-xs text-stone-500">{receipt.payerName} - {receipt.description}</p>
+          {!compact ? <p className="mt-2 text-xs text-stone-500">{formatDate(receipt.createdAt)} - tạo bởi {receipt.createdByName}</p> : null}
+        </div>
+        <div className="text-left sm:text-right">
+          <p className="text-sm font-semibold text-brand-red">{formatMoney(receipt.amount)}</p>
+          {!compact ? <a className="mt-2 inline-flex text-xs font-semibold text-stone-500 hover:text-brand-red" href={`/other-income-receipts/${receipt.id}/print`} target="_blank">In phiếu</a> : null}
+        </div>
       </div>
     </article>
   )

@@ -1,99 +1,45 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react"
 import type { ApiResponse } from "@/lib/api-response"
-import type { ExpenseListItem, ReceiptListItem } from "@/lib/contracts/finance"
+import type { ExpenseListItem, OtherIncomeReceiptItem } from "@/lib/contracts/finance"
 import type { QueuedTuitionReminder, TuitionReminderItem } from "@/lib/contracts/reminders"
 import {
   emptyExpenseForm,
-  emptyReceiptForm,
-  getBillingPeriodForMonth,
+  emptyOtherIncomeReceiptForm,
   type ExpenseFormState,
   type FinanceDialog,
-  type ReceiptFormState
+  type OtherIncomeReceiptFormState
 } from "./finance-utils"
 
 type SetState<T> = Dispatch<SetStateAction<T>>
 
 export function useFinanceActions({
-  activeReceiptBillingMonth,
   expenseForm,
-  isReceiptMonthlyBilling,
+  otherIncomeReceiptForm,
   month,
-  receiptBillableSessions,
-  receiptBillingMonthOptions,
-  receiptForm,
   selectedTemplateId,
   setActiveDialog,
   setError,
   setExpenseForm,
+  setOtherIncomeReceiptForm,
   setIsSubmittingExpense,
-  setIsSubmittingReceipt,
+  setIsSubmittingOtherIncomeReceipt,
   setQueueingEnrollmentId,
-  setReceiptForm,
   setRefreshKey
 }: {
-  activeReceiptBillingMonth: string
   expenseForm: ExpenseFormState
-  isReceiptMonthlyBilling: boolean
+  otherIncomeReceiptForm: OtherIncomeReceiptFormState
   month: string
-  receiptBillableSessions: number
-  receiptBillingMonthOptions: unknown[]
-  receiptForm: ReceiptFormState
   selectedTemplateId: string
   setActiveDialog: SetState<FinanceDialog>
   setError: SetState<string | null>
   setExpenseForm: SetState<ExpenseFormState>
+  setOtherIncomeReceiptForm: SetState<OtherIncomeReceiptFormState>
   setIsSubmittingExpense: SetState<boolean>
-  setIsSubmittingReceipt: SetState<boolean>
+  setIsSubmittingOtherIncomeReceipt: SetState<boolean>
   setQueueingEnrollmentId: SetState<string>
-  setReceiptForm: SetState<ReceiptFormState>
   setRefreshKey: SetState<number>
 }) {
   const refresh = () => setRefreshKey((current) => current + 1)
-
-  async function submitReceipt(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSubmittingReceipt(true)
-    setError(null)
-
-    try {
-      if (isReceiptMonthlyBilling && !receiptBillingMonthOptions.length) {
-        setError("Khóa học này chưa có khoảng tháng hợp lệ để thu theo tháng.")
-        return
-      }
-
-      const billingPeriod = isReceiptMonthlyBilling ? getBillingPeriodForMonth(activeReceiptBillingMonth) : null
-      const response = await fetch("/api/receipts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          enrollmentId: receiptForm.enrollmentId,
-          lines: [{
-            enrollmentId: receiptForm.enrollmentId,
-            billableSessions: receiptBillableSessions,
-            billingPeriodStart: billingPeriod?.startIso,
-            billingPeriodEnd: billingPeriod?.endIso,
-            billingLabel: billingPeriod?.label
-          }],
-          method: receiptForm.method,
-          note: receiptForm.note.trim() || undefined
-        })
-      })
-      const payload = (await response.json()) as ApiResponse<ReceiptListItem>
-
-      if (!response.ok || !payload.success) {
-        setError(payload.error?.message ?? "Không tạo được phiếu thu.")
-        return
-      }
-
-      setReceiptForm(emptyReceiptForm)
-      setActiveDialog(null)
-      refresh()
-    } catch {
-      setError("Không tạo được phiếu thu.")
-    } finally {
-      setIsSubmittingReceipt(false)
-    }
-  }
 
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -129,6 +75,42 @@ export function useFinanceActions({
     }
   }
 
+  async function submitOtherIncomeReceipt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSubmittingOtherIncomeReceipt(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/other-income-receipts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          category: otherIncomeReceiptForm.category,
+          amount: Number(otherIncomeReceiptForm.amount),
+          payerName: otherIncomeReceiptForm.payerName.trim(),
+          payerPhone: otherIncomeReceiptForm.payerPhone.trim() || undefined,
+          description: otherIncomeReceiptForm.description.trim(),
+          note: otherIncomeReceiptForm.note.trim() || undefined,
+          method: otherIncomeReceiptForm.method
+        })
+      })
+      const payload = (await response.json()) as ApiResponse<OtherIncomeReceiptItem>
+
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Không tạo được phiếu thu khác.")
+        return
+      }
+
+      setOtherIncomeReceiptForm(emptyOtherIncomeReceiptForm)
+      setActiveDialog(null)
+      refresh()
+    } catch {
+      setError("Không tạo được phiếu thu khác.")
+    } finally {
+      setIsSubmittingOtherIncomeReceipt(false)
+    }
+  }
+
   async function queueReminder(reminder: TuitionReminderItem) {
     setQueueingEnrollmentId(reminder.enrollmentId)
     setError(null)
@@ -158,5 +140,5 @@ export function useFinanceActions({
     }
   }
 
-  return { queueReminder, submitExpense, submitReceipt }
+  return { queueReminder, submitExpense, submitOtherIncomeReceipt }
 }

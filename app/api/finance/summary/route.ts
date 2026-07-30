@@ -38,7 +38,8 @@ export async function GET(request: Request) {
     salaryExpenseSum,
     refundExpenseSum,
     walletCreditIssuedSum,
-    walletCreditAppliedSum
+    walletCreditAppliedSum,
+    otherIncomeReceiptSum
   ] = await prisma.$transaction([
     prisma.receipt.aggregate({
       where: { createdAt: { gte: range.start, lt: range.end } },
@@ -91,10 +92,16 @@ export async function GET(request: Request) {
         type: "APPLIED"
       },
       _sum: { amount: true }
+    }),
+    prisma.otherIncomeReceipt.aggregate({
+      where: { createdAt: { gte: range.start, lt: range.end } },
+      _sum: { amount: true }
     })
   ])
 
-  const revenue = receiptSum._sum.amount ?? new Prisma.Decimal(0)
+  const tuitionRevenue = receiptSum._sum.amount ?? new Prisma.Decimal(0)
+  const otherIncomeRevenue = otherIncomeReceiptSum._sum.amount ?? new Prisma.Decimal(0)
+  const revenue = tuitionRevenue.plus(otherIncomeRevenue)
   const expense = expenseSum._sum.amount ?? new Prisma.Decimal(0)
   const salaryExpense = salaryExpenseSum._sum.amount ?? new Prisma.Decimal(0)
   const refundExpense = refundExpenseSum._sum.amount ?? new Prisma.Decimal(0)
@@ -115,6 +122,8 @@ export async function GET(request: Request) {
     operatingExpense: operatingExpense.lessThan(0) ? "0" : operatingExpense.toString(),
     profit: revenue.minus(expense).toString(),
     netProfit: revenue.minus(expense).toString(),
+    otherIncomeRevenue: otherIncomeRevenue.toString(),
+    tuitionRevenue: tuitionRevenue.toString(),
     receiptCount: receiptSum._count,
     expenseCount: expenseSum._count,
     receiptsByMethod: receiptsByMethod.map((row) => ({

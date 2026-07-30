@@ -16,9 +16,17 @@ export const receiptExtraLineTypeLabels = {
   OTHER: "Thu riêng"
 } as const
 
+export const otherIncomeCategoryLabels = {
+  WORKSHOP_EVENT: "Workshop / Sự kiện",
+  MATERIALS: "Giáo trình - học cụ",
+  REGISTRATION_FEE: "Phí đăng ký",
+  OTHER: "Thu khác"
+} as const
+
 export type PaymentMethodKey = keyof typeof paymentMethodLabels
 export type ExpenseCategoryKey = keyof typeof expenseCategoryLabels
 export type ReceiptExtraLineTypeKey = keyof typeof receiptExtraLineTypeLabels
+export type OtherIncomeCategoryKey = keyof typeof otherIncomeCategoryLabels
 
 export type ReceiptLineItem = {
   id: string
@@ -91,6 +99,26 @@ export type ReceiptPrintDetail = ReceiptListItem & {
   totalCourseSessionsAtJoin?: number
 }
 
+export type OtherIncomeReceiptItem = {
+  id: string
+  code: string
+  category: OtherIncomeCategoryKey
+  amount: string
+  payerName: string
+  payerPhone?: string
+  description: string
+  note?: string
+  method: PaymentMethodKey
+  createdByName: string
+  createdAt: string
+}
+
+export type OtherIncomeReceiptPrintDetail = OtherIncomeReceiptItem & {
+  centerName: string
+  branchName: string
+  amountInWords: string
+}
+
 export type ExpenseListItem = {
   id: string
   code: string
@@ -116,6 +144,8 @@ export type FinanceSummary = {
   operatingExpense: string
   profit: string
   netProfit: string
+  otherIncomeRevenue: string
+  tuitionRevenue: string
   receiptCount: number
   expenseCount: number
   receiptsByMethod: Array<{

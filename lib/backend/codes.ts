@@ -18,6 +18,22 @@ export async function nextReceiptCode(tx: Tx, date = new Date()) {
   })
 }
 
+export async function nextOtherIncomeReceiptCode(tx: Tx, date = new Date()) {
+  return nextYearlyCode({
+    prefix: "PTK",
+    year: date.getFullYear(),
+    latestCode: (
+      await tx.otherIncomeReceipt.findFirst({
+        where: {
+          code: { startsWith: `PTK-${date.getFullYear()}-` }
+        },
+        orderBy: { code: "desc" },
+        select: { code: true }
+      })
+    )?.code
+  })
+}
+
 export async function nextExpenseCode(tx: Tx, date = new Date()) {
   return nextYearlyCode({
     prefix: "PC",
