@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
-import { averageScore, progressLevelToScore, roboticsAgeGroupFromBirthDate } from "@/lib/assessment-scoring"
+import { averageScore, progressLevelToScore, roboticsAgeGroupForAssessment } from "@/lib/assessment-scoring"
 import { findActiveRubric, toSnapshot } from "@/lib/backend/assessment-rubrics"
 import { dateKey } from "@/lib/backend/class-schedule"
 import type { WeeklyClassAssessmentDetail, WeeklyAssessmentMatrixItem, WeeklyAssessmentWeekOption } from "@/lib/contracts/assessment"
@@ -179,7 +179,7 @@ function toDetail(
     const assessment = enrollment ? assessmentByEnrollmentId.get(enrollment.id) : undefined
     const savedItems = new Map((assessment?.items ?? []).map((item) => [itemKey(item), item]))
     const savedRoboticsItems = new Map((assessment?.items ?? []).map((item) => [`${item.skillKey}:${item.outcomeIndex}`, item]))
-    const ageGroup = roboticsAgeGroupFromBirthDate(classStudent.student.birthDate)
+    const ageGroup = roboticsAgeGroupForAssessment({ birthDate: classStudent.student.birthDate, override: classStudent.student.assessmentAgeGroupOverride })
     const items = emptyItems(rubric).map((item) => {
       const saved = savedItems.get(itemKey(item)) ?? (klass.course.subject === "ROBOTICS" ? savedRoboticsItems.get(`${item.skillKey}:${item.outcomeIndex}`) : undefined)
       const fallbackScore = saved?.score ?? (saved?.progressLevel ? progressLevelToScore(saved.progressLevel) : undefined)

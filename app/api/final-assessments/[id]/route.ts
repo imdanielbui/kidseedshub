@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
-import { assessmentItemScore, roboticsAgeGroupFromBirthDate } from "@/lib/assessment-scoring"
+import { assessmentItemScore, roboticsAgeGroupForAssessment } from "@/lib/assessment-scoring"
 import { rubricFromSnapshot } from "@/lib/backend/assessment-rubrics"
 import { finalAssessmentMeetsRequiredWeeks, requiredWeeksFromClass } from "@/lib/backend/final-assessments"
 import { roboticsSkillSummaries } from "@/lib/backend/robotics-assessment-report"
@@ -30,7 +30,10 @@ function toFinalReportDetail(
   const snapshotSource = weeklyAssessments.find((weekly) => weekly.rubricSnapshot)?.rubricSnapshot
   const rubric = rubricFromSnapshot(snapshotSource, assessment.subject, assessment.rubricVersion)
   const checkedScores = new Map<string, number>()
-  const ageGroup = roboticsAgeGroupFromBirthDate(assessment.student.birthDate)
+  const ageGroup = roboticsAgeGroupForAssessment({
+    birthDate: assessment.student.birthDate,
+    override: assessment.student.assessmentAgeGroupOverride
+  })
 
   for (const item of weeklyAssessments.flatMap((weekly) => weekly.items)) {
     if (!item.checked) continue

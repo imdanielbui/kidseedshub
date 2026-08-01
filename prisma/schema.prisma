@@ -245,6 +245,7 @@ model Student {
   code              String        @unique
   name              String
   birthDate         DateTime?
+  assessmentAgeGroupOverride String?
   address           String?
   parentId          String
   parent            Parent        @relation(fields: [parentId], references: [id])

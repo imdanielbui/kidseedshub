@@ -43,6 +43,14 @@ export function roboticsAgeGroupFromBirthDate(value?: Date | string | null): { a
   return { ageGroup: "11-14", isDefault: false }
 }
 
+export function roboticsAgeGroupForAssessment(input: { birthDate?: Date | string | null; override?: string | null }): { ageGroup: RoboticsAgeGroup; isDefault: boolean } {
+  if (input.override === "5-6" || input.override === "7-10" || input.override === "11-14") {
+    return { ageGroup: input.override, isDefault: false }
+  }
+
+  return roboticsAgeGroupFromBirthDate(input.birthDate)
+}
+
 export function skillDescriptionForAge(skill: AssessmentRubricSkill, ageGroup?: RoboticsAgeGroup) {
   return (ageGroup ? skill.ageDescriptions?.[ageGroup] : undefined) ?? skill.description ?? ""
 }

@@ -1,10 +1,11 @@
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
-import { assessmentItemScore, roboticsAgeGroupFromBirthDate } from "@/lib/assessment-scoring"
+import { assessmentItemScore, roboticsAgeGroupForAssessment } from "@/lib/assessment-scoring"
 import { rubricFromSnapshot } from "@/lib/backend/assessment-rubrics"
 import { finalAssessmentMeetsRequiredWeeks, requiredWeeksFromClass } from "@/lib/backend/final-assessments"
 import { roboticsReportText } from "@/lib/backend/robotics-assessment-report"
+import type { RoboticsAgeGroup } from "@/lib/contracts/assessment"
 import { can } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { finalClassPublishSchema } from "@/lib/validations/assessment"
@@ -92,7 +93,7 @@ function labelsFromRubric(weeklyAssessments: WeeklyRecord[], subject: string, ve
   return labels
 }
 
-function reportText(weeklyAssessments: WeeklyRecord[], subject: string, ageGroup?: ReturnType<typeof roboticsAgeGroupFromBirthDate>["ageGroup"]) {
+function reportText(weeklyAssessments: WeeklyRecord[], subject: string, ageGroup?: RoboticsAgeGroup) {
   const firstVersion = weeklyAssessments[0]?.rubricVersion ?? `${subject.toLowerCase()}-rubric`
 
   if (subject === "ROBOTICS") {
@@ -193,7 +194,10 @@ async function publishStudentFinalReport(klass: ClassRecord, classStudent: Class
     return { status: "ALREADY_PUBLISHED", finalAssessmentId: existing.id }
   }
 
-  const ageGroup = roboticsAgeGroupFromBirthDate(classStudent.student.birthDate).ageGroup
+  const ageGroup = roboticsAgeGroupForAssessment({
+    birthDate: classStudent.student.birthDate,
+    override: classStudent.student.assessmentAgeGroupOverride
+  }).ageGroup
   const generated = reportText(weeklyAssessments, klass.course.subject, ageGroup)
   const dataToSave = {
     studentId: classStudent.studentId,
