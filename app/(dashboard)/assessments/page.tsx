@@ -70,6 +70,10 @@ function classRequiredWeeks(klass: ClassListItem) {
   return Math.max(1, klass.generatedSessionCount || klass.plannedSessions || 1)
 }
 
+function activeStudentCount(klass: ClassListItem) {
+  return klass.students.filter((student) => student.isActive).length
+}
+
 function formatDate(value?: string) {
   if (!value) return "-"
 
@@ -162,7 +166,7 @@ export default function AssessmentsPage() {
           return
         }
 
-        const initialClass = payload.data?.find((klass) => klass.students.length > 0) ?? payload.data?.[0]
+        const initialClass = payload.data?.find((klass) => activeStudentCount(klass) > 0) ?? payload.data?.[0]
         setClasses(payload.data)
         setClassId((current) => current || initialClass?.id || "")
         setRequiredWeeks((current) => (initialClass ? classRequiredWeeks(initialClass) : current))
@@ -513,7 +517,7 @@ export default function AssessmentsPage() {
               >
                 {classes.map((klass) => (
                   <option key={klass.id} value={klass.id}>
-                    {klass.name} - {subjectLabels[klass.subject]} - {klass.students.length} HS
+                    {klass.name} - {subjectLabels[klass.subject]} - {activeStudentCount(klass)} HS
                   </option>
                 ))}
               </select>
@@ -557,7 +561,7 @@ export default function AssessmentsPage() {
           <div className="content-border mt-4 grid gap-2 pt-4 text-sm sm:grid-cols-2 xl:grid-cols-5">
             <InfoPill label="Bộ môn tự nhận" value={subjectLabels[selectedClass.subject]} />
             <InfoPill label="Khóa học" value={selectedClass.courseName} />
-            <InfoPill label="Học sinh trong lớp" value={`${selectedClass.students.length}`} />
+            <InfoPill label="Học sinh trong lớp" value={`${activeStudentCount(selectedClass)}`} />
             <InfoPill label="Giáo viên" value={selectedClass.teacherName} />
             <InfoPill label="Tuần hệ thống gợi ý" value={detail ? `Tuần ${detail.suggestedWeekNumber}` : "Đang tính"} />
           </div>
