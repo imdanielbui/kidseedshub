@@ -104,8 +104,8 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
             <p className="receipt-muted">Khơi mở tiềm năng trẻ</p>
           </div>
           <div className="receipt-code">
-            <span>Trạng thái</span>
-            <strong>{finalAssessmentStatusLabels[report.status]}</strong>
+            <span>Trạng thái báo cáo</span>
+            <strong>{report.status === "DRAFT" ? "Nội bộ - chưa phát hành" : finalAssessmentStatusLabels[report.status]}</strong>
           </div>
         </header>
 
@@ -139,7 +139,7 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
             <p className="receipt-value">{report.completedWeeks}/{report.requiredWeeks}</p>
           </div>
           <div>
-            <p className="receipt-label">Ngày gửi</p>
+            <p className="receipt-label">{report.status === "PUBLISHED" ? "Ngày gửi phụ huynh" : "Ngày lập báo cáo"}</p>
             <p className="receipt-value">{formatDate(report.publishedAt ?? report.createdAt)}</p>
           </div>
         </div>
@@ -272,12 +272,18 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
         </section>
 
         <section className="receipt-section">
-          <h2>{report.subject === "ROBOTICS" ? "Thang sao Robotics" : "Mức tiến độ"}</h2>
+          <h2>{report.subject === "ROBOTICS" ? "Cách đọc kết quả" : "Mức tiến độ"}</h2>
+          {report.subject === "ROBOTICS" ? (
+            <p className="receipt-muted">Kết quả phản ánh quá trình quan sát và thực hành của bé trong khóa học, không dùng để xếp hạng học viên.</p>
+          ) : null}
           <div className="receipt-note-grid">
             {report.subject === "ROBOTICS"
-              ? [1, 2, 3, 4, 5].map((score) => (
-                  <ReportBlock key={score} title={`${score} sao`} value={score === 1 ? "Cần hỗ trợ nhiều" : score === 3 ? "Đạt mức ổn định" : score === 5 ? "Vượt trội" : "Đang phát triển"} />
-                ))
+              ? [
+                  { title: "1-2 sao - Đang làm quen", value: "Bé cần thêm thời gian thực hành và hướng dẫn phù hợp." },
+                  { title: "3 sao - Đang củng cố", value: "Bé đã thực hiện được khi có gợi ý phù hợp." },
+                  { title: "4 sao - Đạt kỳ vọng", value: "Bé thực hiện tốt trong các hoạt động của khóa." },
+                  { title: "5 sao - Vững vàng", value: "Bé tự tin vận dụng và sẵn sàng thử thách nâng cao." }
+                ].map((level) => <ReportBlock key={level.title} {...level} />)
               : Object.entries(progressLevelLabels).map(([key, label]) => (
                   <ReportBlock key={key} title={label} value={progressLevelDescriptions[key as ProgressLevelKey]} />
                 ))}
@@ -286,12 +292,12 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
 
         <footer className="receipt-signatures">
           <div>
-            <p>Giáo viên</p>
+            <p>Giáo viên phụ trách</p>
             <span>{report.teacherName}</span>
           </div>
           <div>
-            <p>Trung tâm</p>
-            <span>Kid Seeds Hub</span>
+            <p>Xác nhận của trung tâm</p>
+            <span>Kid Seeds Hub - Trung tâm Hạt Giống Nhỏ</span>
           </div>
         </footer>
       </section>
