@@ -249,8 +249,8 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
               {report.weeklySummaries.map((weekly) => (
                 <tr key={weekly.weekNumber}>
                   <td>Tuần {weekly.weekNumber}</td>
-                  <td>{weekly.checkedItems}/{weekly.totalItems}</td>
-                  <td>{weekly.comment ?? "-"}</td>
+                  <td>{weekly.totalItems ? `${weekly.checkedItems}/${weekly.totalItems}` : "Không có quan sát"}</td>
+                  <td>{weekly.comment ?? "Bé không có mặt đủ để thực hiện đánh giá trong tuần này."}</td>
                 </tr>
               ))}
             </tbody>

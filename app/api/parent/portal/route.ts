@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { dateKey } from "@/lib/backend/class-schedule"
 import { toCourseFeedbackItem } from "@/lib/backend/course-feedback"
-import { finalAssessmentMeetsRequiredWeeks, requiredWeeksFromClass } from "@/lib/backend/final-assessments"
+import { finalAssessmentMeetsRequiredWeeks } from "@/lib/backend/final-assessments"
 import type { FinalAssessmentResult } from "@/lib/contracts/assessment"
 import type { ParentPortalChild, ParentPortalNotice, ParentPortalOverview, ParentPortalSession } from "@/lib/contracts/parent-portal"
 import { can } from "@/lib/permissions"
@@ -243,11 +243,8 @@ function toPortalOverview(parent: ParentPortalRecord): ParentPortalOverview {
         )
         .sort((first, second) => second.date.localeCompare(first.date))
         .slice(0, 10)
-      const requiredWeeksByCourseId = new Map(
-        student.classStudents.map(({ class: klass }) => [klass.courseId, requiredWeeksFromClass(klass)])
-      )
       const finalAssessments = student.finalAssessments.filter((assessment) =>
-        finalAssessmentMeetsRequiredWeeks(assessment, requiredWeeksByCourseId.get(assessment.enrollment.courseId) ?? assessment.requiredWeeks)
+        finalAssessmentMeetsRequiredWeeks(assessment, assessment.requiredWeeks)
       )
       const walletBalance = student.walletEntries.reduce((total, entry) => total.plus(entry.amount), new Prisma.Decimal(0))
       const finalAssessmentResults = finalAssessments.map(toFinalAssessmentResult)

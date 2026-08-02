@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { assessmentItemScore, roboticsAgeGroupForAssessment } from "@/lib/assessment-scoring"
 import { rubricFromSnapshot } from "@/lib/backend/assessment-rubrics"
-import { finalAssessmentMeetsRequiredWeeks, requiredWeeksFromClass } from "@/lib/backend/final-assessments"
+import { requiredAssessmentWeeksForEnrollment, assessmentWeekGroups, sessionsPerAssessmentWeek } from "@/lib/backend/assessment-weeks"
+import { finalAssessmentMeetsRequiredWeeks } from "@/lib/backend/final-assessments"
 import { roboticsReportText } from "@/lib/backend/robotics-assessment-report"
 import type { RoboticsAgeGroup } from "@/lib/contracts/assessment"
 import { can } from "@/lib/permissions"
@@ -14,6 +15,17 @@ const classInclude = Prisma.validator<Prisma.ClassInclude>()({
   course: true,
   _count: { select: { sessions: true } },
   teacher: true,
+  scheduleSlots: { select: { isActive: true } },
+  sessions: {
+    where: { status: { not: "CANCELED" } },
+    select: {
+      id: true,
+      date: true,
+      status: true,
+      attendances: { select: { classSessionId: true, enrollmentId: true, status: true } }
+    },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }]
+  },
   students: {
     where: { isActive: true },
     include: {
@@ -137,9 +149,22 @@ function enrollmentForClass(classStudent: ClassStudentRecord, courseId: string) 
   )
 }
 
-function classStudentStatus(klass: ClassRecord, requiredWeeks: number) {
+function requiredWeeksForStudent(klass: ClassRecord, enrollmentId: string) {
+  return requiredAssessmentWeeksForEnrollment({
+    sessions: klass.sessions,
+    scheduleSlots: klass.scheduleSlots,
+    attendances: klass.sessions.flatMap((session) => session.attendances.filter((attendance) => attendance.enrollmentId === enrollmentId))
+  })
+}
+
+function classAssessmentWeekCount(klass: ClassRecord) {
+  return Math.max(1, assessmentWeekGroups(klass.sessions, sessionsPerAssessmentWeek(klass.scheduleSlots)).length)
+}
+
+function classStudentStatus(klass: ClassRecord) {
   return klass.students.map((classStudent) => {
     const enrollment = enrollmentForClass(classStudent, klass.courseId)
+    const requiredWeeks = enrollment ? requiredWeeksForStudent(klass, enrollment.id) : classAssessmentWeekCount(klass)
     const weeklyAssessments = enrollment
       ? classStudent.student.weeklyAssessments.filter((assessment) => assessment.enrollmentId === enrollment.id && assessment.subject === klass.course.subject && assessment.status === "COMPLETE")
       : []
@@ -178,7 +203,6 @@ async function getClass(classId: string, userId: string, role: string) {
 async function publishStudentFinalReport(
   klass: ClassRecord,
   classStudent: ClassStudentRecord,
-  requiredWeeks: number,
   publishedById: string,
   mode: "DRAFT" | "PUBLISH"
 ): Promise<PublishStudentResult> {
@@ -187,6 +211,8 @@ async function publishStudentFinalReport(
   if (!enrollment) {
     return { status: "SKIPPED", reason: "Chưa đăng ký khóa học của lớp." }
   }
+
+  const requiredWeeks = requiredWeeksForStudent(klass, enrollment.id)
 
   const weeklyAssessments = classStudent.student.weeklyAssessments.filter(
     (assessment) => assessment.enrollmentId === enrollment.id && assessment.subject === klass.course.subject && assessment.status === "COMPLETE"
@@ -271,7 +297,7 @@ export async function GET(request: Request) {
     return fail({ code: "CLASS_NOT_FOUND", message: "Không tìm thấy lớp học hoặc bạn không phụ trách lớp này." }, { status: 404 })
   }
 
-  const requiredWeeks = requiredWeeksFromClass(klass)
+  const requiredWeeks = classAssessmentWeekCount(klass)
 
   return ok({
     classId: klass.id,
@@ -279,7 +305,7 @@ export async function GET(request: Request) {
     courseName: klass.course.name,
     subject: klass.course.subject,
     requiredWeeks,
-    students: classStudentStatus(klass, requiredWeeks)
+    students: classStudentStatus(klass)
   })
 }
 
@@ -308,7 +334,6 @@ export async function POST(request: Request) {
     return fail({ code: "CLASS_NOT_FOUND", message: "Không tìm thấy lớp học hoặc bạn không phụ trách lớp này." }, { status: 404 })
   }
 
-  const requiredWeeks = requiredWeeksFromClass(klass)
   let draftCount = 0
   let publishedCount = 0
   let alreadyPublishedCount = 0
@@ -321,7 +346,7 @@ export async function POST(request: Request) {
   }
 
   for (const classStudent of targetStudents) {
-    const result = await publishStudentFinalReport(klass, classStudent, requiredWeeks, session.user.id, data.mode)
+    const result = await publishStudentFinalReport(klass, classStudent, session.user.id, data.mode)
 
     if (result.status === "SKIPPED") {
       skippedStudents.push({ studentId: classStudent.studentId, studentName: classStudent.student.name, reason: result.reason })

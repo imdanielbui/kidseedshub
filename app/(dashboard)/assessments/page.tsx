@@ -67,7 +67,10 @@ function scoreOutOfFive(items: WeeklyAssessmentMatrixItem["items"]) {
 }
 
 function classRequiredWeeks(klass: ClassListItem) {
-  return Math.max(1, klass.generatedSessionCount || klass.plannedSessions || 1)
+  const sessionsPerWeek = Math.max(1, klass.scheduleSlots.filter((slot) => slot.isActive).length)
+  const totalSessions = Math.max(klass.generatedSessionCount, klass.plannedSessions ?? 0, 1)
+
+  return Math.ceil(totalSessions / sessionsPerWeek)
 }
 
 function activeStudentCount(klass: ClassListItem) {
@@ -242,6 +245,7 @@ export default function AssessmentsPage() {
 
       if (finalResponse.ok && finalPayload.success && finalPayload.data) {
         setFinalSummary(finalPayload.data)
+        setRequiredWeeks(finalPayload.data.requiredWeeks)
       }
     }
 

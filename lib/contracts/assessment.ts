@@ -103,6 +103,7 @@ export type WeeklyAssessmentMatrixItem = {
   parentPhone: string
   healthNote?: string
   enrollmentId?: string
+  canEvaluate: boolean
   status: AssessmentStatusKey
   comment?: string
   checkedItems: number

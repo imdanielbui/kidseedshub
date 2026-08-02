@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { averageScore, progressLevelToScore, roboticsAgeGroupForAssessment } from "@/lib/assessment-scoring"
 import { findActiveRubric, toSnapshot } from "@/lib/backend/assessment-rubrics"
+import { assessmentWeekGroups, observedEnrollmentIdsForAssessmentWeek, sessionsPerAssessmentWeek } from "@/lib/backend/assessment-weeks"
 import { dateKey } from "@/lib/backend/class-schedule"
 import type { WeeklyClassAssessmentDetail, WeeklyAssessmentMatrixItem, WeeklyAssessmentWeekOption } from "@/lib/contracts/assessment"
 import { can } from "@/lib/permissions"
@@ -25,8 +26,17 @@ const classInclude = Prisma.validator<Prisma.ClassInclude>()({
     orderBy: { joinedAt: "asc" }
   },
   sessions: {
-    orderBy: [{ date: "asc" }, { startTime: "asc" }]
-  }
+    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    include: {
+      attendances: {
+        select: {
+          enrollmentId: true,
+          status: true
+        }
+      }
+    }
+  },
+  scheduleSlots: { select: { isActive: true } }
 })
 
 type ClassRecord = Prisma.ClassGetPayload<{ include: typeof classInclude }>
@@ -123,14 +133,21 @@ function startOfToday() {
   return today
 }
 
+function observedEnrollmentIdsForWeek(klass: ClassRecord, weekNumber: number) {
+  return observedEnrollmentIdsForAssessmentWeek({
+    sessions: klass.sessions,
+    scheduleSlots: klass.scheduleSlots,
+    weekNumber
+  })
+}
+
 function buildWeekOptions(
   klass: ClassRecord,
   weeklyAssessments: Array<{ weekNumber: number; status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE" }>,
   totalStudents: number
 ): WeeklyAssessmentWeekOption[] {
   const today = startOfToday()
-  const scheduledSessions = klass.sessions.filter((session) => session.status !== "CANCELED")
-  const plannedWeeks = Math.max(1, klass.plannedSessions ?? klass.course.totalSessions, scheduledSessions.length)
+  const weekGroups = assessmentWeekGroups(klass.sessions, sessionsPerAssessmentWeek(klass.scheduleSlots))
   const assessmentsByWeek = new Map<number, Array<{ status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE" }>>()
 
   for (const assessment of weeklyAssessments) {
@@ -139,15 +156,26 @@ function buildWeekOptions(
     assessmentsByWeek.set(assessment.weekNumber, items)
   }
 
-  return Array.from({ length: plannedWeeks }, (_, index) => {
+  if (!weekGroups.length) {
+    return [{
+      weekNumber: 1,
+      label: "Tuần 1",
+      isDue: false,
+      completeStudents: 0,
+      totalStudents,
+      status: "NOT_DUE"
+    }]
+  }
+
+  return weekGroups.map((sessions, index) => {
     const weekNumber = index + 1
-    const session = scheduledSessions[index]
     const assessments = assessmentsByWeek.get(weekNumber) ?? []
     const completeStudents = assessments.filter((assessment) => assessment.status === "COMPLETE").length
+    const totalStudentsForWeek = observedEnrollmentIdsForWeek(klass, weekNumber).size
     const hasStarted = assessments.some((assessment) => assessment.status !== "NOT_STARTED")
-    const isDue = session ? session.date <= today : weekNumber <= scheduledSessions.filter((item) => item.date <= today).length
+    const isDue = sessions.some((session) => session.date <= today)
     const status: WeeklyAssessmentWeekOption["status"] =
-      totalStudents > 0 && completeStudents >= totalStudents
+      totalStudentsForWeek === 0 || completeStudents >= totalStudentsForWeek
         ? "COMPLETE"
         : hasStarted
           ? "IN_PROGRESS"
@@ -157,11 +185,11 @@ function buildWeekOptions(
 
     return {
       weekNumber,
-      label: session ? `Tuần ${weekNumber} - ${dateKey(session.date)}` : `Tuần ${weekNumber}`,
-      date: session ? dateKey(session.date) : undefined,
+      label: sessions.length > 1 ? `Tuần ${weekNumber} - ${dateKey(sessions[0].date)} đến ${dateKey(sessions.at(-1)!.date)}` : `Tuần ${weekNumber} - ${dateKey(sessions[0].date)}`,
+      date: dateKey(sessions[0].date),
       isDue,
       completeStudents,
-      totalStudents,
+      totalStudents: totalStudentsForWeek,
       status
     }
   })
@@ -185,6 +213,7 @@ function toDetail(
   assessments: Prisma.WeeklyAssessmentGetPayload<{ include: { items: true } }>[]
 ): WeeklyClassAssessmentDetail {
   const assessmentByEnrollmentId = new Map(assessments.map((assessment) => [assessment.enrollmentId, assessment]))
+  const observedEnrollmentIds = observedEnrollmentIdsForWeek(klass, weekNumber)
   const totalItems = emptyItems(rubric).length
   const students: WeeklyAssessmentMatrixItem[] = klass.students.map((classStudent) => {
     const enrollment = enrollmentForClass(classStudent, klass.courseId)
@@ -217,6 +246,7 @@ function toDetail(
       parentPhone: classStudent.student.parent.user.phone,
       healthNote: classStudent.student.healthNote ?? undefined,
       enrollmentId: enrollment?.id,
+      canEvaluate: Boolean(enrollment && observedEnrollmentIds.has(enrollment.id)),
       status: assessment?.status ?? "NOT_STARTED",
       comment: assessment?.comment ?? undefined,
       checkedItems: items.filter((item) => item.checked).length,
@@ -356,15 +386,42 @@ export async function POST(request: Request) {
       .map((classStudent) => enrollmentForClass(classStudent, klass.courseId)?.id)
       .filter((id): id is string => Boolean(id))
   )
+  const observedEnrollmentIds = observedEnrollmentIdsForWeek(klass, data.weekNumber)
+  const normalizedAssessments = data.assessments.map((assessment) => {
+    const canEvaluate = observedEnrollmentIds.has(assessment.enrollmentId)
+    const hasAssessmentContent =
+      assessment.status !== "NOT_STARTED" ||
+      Boolean(assessment.comment?.trim()) ||
+      assessment.items.some((item) => item.checked || typeof item.score === "number" || Boolean(item.progressLevel) || Boolean(item.comment?.trim()) || Boolean(item.evidenceUrl?.trim()))
 
-  for (const assessment of data.assessments) {
+    if (!canEvaluate && hasAssessmentContent) {
+      return { assessment, error: "Chỉ có thể chấm đánh giá cho học viên có mặt ít nhất một buổi trong tuần này." }
+    }
+
+    return {
+      assessment: {
+        ...assessment,
+        status: canEvaluate ? assessment.status : "NOT_STARTED" as const,
+        comment: canEvaluate ? assessment.comment : undefined,
+        items: canEvaluate ? assessment.items : []
+      }
+    }
+  })
+
+  const absentStudentAssessment = normalizedAssessments.find((item) => item.error)
+
+  if (absentStudentAssessment?.error) {
+    return fail({ code: "STUDENT_NOT_PRESENT_FOR_ASSESSMENT", message: absentStudentAssessment.error }, { status: 400 })
+  }
+
+  for (const { assessment } of normalizedAssessments) {
     if (!allowedEnrollmentIds.has(assessment.enrollmentId)) {
       return fail({ code: "ENROLLMENT_NOT_IN_CLASS", message: "Có học viên chưa đăng ký khóa học của lớp." }, { status: 400 })
     }
   }
 
   await prisma.$transaction(
-    data.assessments.map((assessment) =>
+    normalizedAssessments.map(({ assessment }) =>
       prisma.weeklyAssessment.upsert({
         where: {
           enrollmentId_weekNumber_subject: {

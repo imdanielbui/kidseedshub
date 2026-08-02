@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { fail, ok } from "@/lib/api-response"
 import { assessmentItemScore, roboticsAgeGroupForAssessment } from "@/lib/assessment-scoring"
 import { rubricFromSnapshot } from "@/lib/backend/assessment-rubrics"
-import { finalAssessmentMeetsRequiredWeeks, requiredWeeksFromClass } from "@/lib/backend/final-assessments"
+import { requiredAssessmentWeeksForEnrollment } from "@/lib/backend/assessment-weeks"
+import { finalAssessmentMeetsRequiredWeeks } from "@/lib/backend/final-assessments"
 import { roboticsSkillSummaries } from "@/lib/backend/robotics-assessment-report"
 import type { FinalReportDetail } from "@/lib/contracts/assessment"
 import { can } from "@/lib/permissions"
@@ -128,8 +129,7 @@ export async function GET(_: Request, context: RouteContext) {
     prisma.weeklyAssessment.findMany({
       where: {
         enrollmentId: assessment.enrollmentId,
-        subject: assessment.subject,
-        status: "COMPLETE"
+        subject: assessment.subject
       },
       include: { items: true },
       orderBy: { weekNumber: "asc" }
@@ -140,10 +140,33 @@ export async function GET(_: Request, context: RouteContext) {
         isActive: true,
         class: { courseId: assessment.enrollment.courseId }
       },
-      include: { class: { include: { course: true, _count: { select: { sessions: true } } } } }
+      include: {
+        class: {
+          include: {
+            course: true,
+            scheduleSlots: { select: { isActive: true } },
+            sessions: {
+              where: { status: { not: "CANCELED" } },
+              select: {
+                id: true,
+                date: true,
+                status: true,
+                attendances: { select: { classSessionId: true, enrollmentId: true, status: true } }
+              },
+              orderBy: [{ date: "asc" }, { startTime: "asc" }]
+            }
+          }
+        }
+      }
     })
   ])
-  const requiredWeeks = classStudent ? requiredWeeksFromClass(classStudent.class) : assessment.requiredWeeks
+  const requiredWeeks = classStudent
+    ? requiredAssessmentWeeksForEnrollment({
+        sessions: classStudent.class.sessions,
+        scheduleSlots: classStudent.class.scheduleSlots,
+        attendances: classStudent.class.sessions.flatMap((session) => session.attendances.filter((attendance) => attendance.enrollmentId === assessment.enrollmentId))
+      })
+    : assessment.requiredWeeks
 
   if (session.user.role === "PARENT" && !finalAssessmentMeetsRequiredWeeks(assessment, requiredWeeks)) {
     return fail({ code: "FORBIDDEN", message: "Báo cáo cuối khóa này chưa đủ điều kiện gửi phụ huynh." }, { status: 403 })

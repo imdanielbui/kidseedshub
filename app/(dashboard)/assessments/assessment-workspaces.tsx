@@ -210,6 +210,7 @@ export function FunAssessmentWorkspace({
 
   const selectedDomain = detail.rubric.domains.find((domain) => domain.key === selectedDomainKey) ?? detail.rubric.domains[0]
   const selectedProgress = student.domainProgress.find((domain) => domain.domainKey === selectedDomain?.key)
+  const canEvaluate = Boolean(student.enrollmentId && student.canEvaluate)
 
   if (!selectedDomain) {
     return <p className="rounded-2xl border border-brand-red/10 p-4 text-sm text-stone-500">Rubric FUN chưa có domain active.</p>
@@ -228,6 +229,7 @@ export function FunAssessmentWorkspace({
               <p className="mt-1 text-sm text-stone-500">
                 {detail.className} · {selectedProgress?.checkedItems ?? 0}/{selectedProgress?.totalItems ?? 0} milestone trong domain đang chọn
               </p>
+              {!canEvaluate ? <p className="mt-2 text-xs font-semibold text-stone-500">Không có quan sát trong tuần này vì học viên vắng cả các buổi học.</p> : null}
               {student.healthNote ? (
                 <p className="mt-2 rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-xs font-semibold text-brand-red">
                   Lưu ý sức khỏe: {student.healthNote}
@@ -239,7 +241,7 @@ export function FunAssessmentWorkspace({
                 aria-label="Trạng thái đánh giá"
                 className="rounded-2xl border border-brand-red/10 bg-white/60 px-3 py-2 text-xs font-semibold text-brand-ink outline-none"
                 value={student.status}
-                disabled={!student.enrollmentId}
+                disabled={!canEvaluate}
                 onChange={(event) => onUpdateStatus(student.studentId, event.target.value as AssessmentStatusKey)}
               >
                 {Object.entries(assessmentStatusLabels).map(([key, label]) => (
@@ -291,7 +293,7 @@ export function FunAssessmentWorkspace({
                           <button
                             type="button"
                             className={`rounded-2xl border px-3 py-3 text-xs font-semibold transition ${!item?.checked ? "border-stone-300 bg-stone-100 text-stone-700" : "border-brand-red/10 bg-white/60 text-stone-500 hover:border-brand-red/30"}`}
-                            disabled={!student.enrollmentId}
+                            disabled={!canEvaluate}
                             onClick={() => onUpdateItem(student.studentId, key, { checked: false, progressLevel: undefined })}
                           >
                             Chưa quan sát
@@ -301,7 +303,7 @@ export function FunAssessmentWorkspace({
                               key={level}
                               type="button"
                               className={`rounded-2xl border px-3 py-3 text-xs font-semibold transition ${item?.checked && item.progressLevel === level ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/60 text-brand-red hover:border-brand-red/30 hover:bg-white"}`}
-                              disabled={!student.enrollmentId}
+                              disabled={!canEvaluate}
                               onClick={() => onUpdateItem(student.studentId, key, { checked: true, progressLevel: level as ProgressLevelKey })}
                             >
                               {label}
@@ -315,14 +317,14 @@ export function FunAssessmentWorkspace({
                           <input
                             className="rounded-2xl border border-brand-red/10 bg-white/60 px-3 py-2 text-sm text-brand-ink outline-none placeholder:text-stone-400"
                             value={item?.comment ?? ""}
-                            disabled={!student.enrollmentId}
+                            disabled={!canEvaluate}
                             onChange={(event) => onUpdateItem(student.studentId, key, { comment: event.target.value })}
                             placeholder="Nhận xét ngắn..."
                           />
                           <input
                             className="rounded-2xl border border-brand-red/10 bg-white/60 px-3 py-2 text-sm text-brand-ink outline-none placeholder:text-stone-400"
                             value={item?.evidenceUrl ?? ""}
-                            disabled={!student.enrollmentId}
+                            disabled={!canEvaluate}
                             onChange={(event) => onUpdateItem(student.studentId, key, { evidenceUrl: event.target.value || undefined })}
                             placeholder="Link ảnh/video nếu có..."
                           />
@@ -343,7 +345,7 @@ export function FunAssessmentWorkspace({
               <textarea
                 className="mt-3 min-h-40 w-full rounded-2xl border border-brand-red/10 bg-white/70 px-3 py-2 text-sm font-normal normal-case tracking-normal text-brand-ink outline-none placeholder:text-stone-400"
                 value={student.comment ?? ""}
-                disabled={!student.enrollmentId}
+                disabled={!canEvaluate}
                 onChange={(event) => onUpdateComment(student.studentId, event.target.value)}
                 placeholder="Nhận xét tổng quan cho tuần này..."
               />
@@ -431,6 +433,7 @@ export function RoboticsAssessmentWorkspace({
   })
   const chartData = skillRows.map((row) => ({ skill: row.skill.label, score: row.score ?? 0, fullMark: 5 }))
   const observedRows = skillRows.filter((row) => typeof row.score === "number")
+  const canEvaluate = Boolean(student.enrollmentId && student.canEvaluate)
   const average = scoreOutOfFive(student.items)
   const strongest = [...observedRows].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
   const focus = [...observedRows].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0]
@@ -448,6 +451,7 @@ export function RoboticsAssessmentWorkspace({
               <p className="mt-1 text-sm text-stone-500">
                 {detail.className} · {student.ageGroup ?? "7-10"}{student.ageGroupIsDefault ? " mặc định do thiếu ngày sinh" : ""} · {student.checkedItems}/{student.totalItems} kỹ năng đã chấm
               </p>
+              {!canEvaluate ? <p className="mt-2 text-xs font-semibold text-stone-500">Không có quan sát trong tuần này vì học viên vắng cả các buổi học.</p> : null}
               {student.healthNote ? (
                 <p className="mt-2 rounded-2xl border border-brand-red/10 bg-white/55 px-3 py-2 text-xs font-semibold text-brand-red">
                   Lưu ý sức khỏe: {student.healthNote}
@@ -459,7 +463,7 @@ export function RoboticsAssessmentWorkspace({
                 aria-label="Trạng thái đánh giá"
                 className="rounded-2xl border border-brand-red/10 bg-white/60 px-3 py-2 text-xs font-semibold text-brand-ink outline-none"
                 value={student.status}
-                disabled={!student.enrollmentId}
+                disabled={!canEvaluate}
                 onChange={(event) => onUpdateStatus(student.studentId, event.target.value as AssessmentStatusKey)}
               >
                 {Object.entries(assessmentStatusLabels).map(([key, label]) => (
@@ -497,7 +501,7 @@ export function RoboticsAssessmentWorkspace({
                           key={score}
                           type="button"
                           className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition ${typeof row.score === "number" && row.score >= score ? "border-brand-red bg-brand-red text-white" : "border-brand-red/10 bg-white/70 text-brand-red hover:border-brand-red/30 hover:bg-white"}`}
-                          disabled={!student.enrollmentId}
+                          disabled={!canEvaluate}
                           aria-label={`${row.skill.label} ${score} sao`}
                           onClick={() => onUpdateScore(student.studentId, row.skill.key, score)}
                         >
@@ -512,7 +516,7 @@ export function RoboticsAssessmentWorkspace({
                       <button
                         type="button"
                         className="rounded-2xl border border-brand-red/10 bg-white/50 px-3 py-2 text-xs font-semibold text-stone-500 hover:border-brand-red/30"
-                        disabled={!student.enrollmentId || typeof row.score !== "number"}
+                        disabled={!canEvaluate || typeof row.score !== "number"}
                         onClick={() => onUpdateScore(student.studentId, row.skill.key, undefined)}
                       >
                         Xóa
@@ -536,9 +540,9 @@ export function RoboticsAssessmentWorkspace({
               <textarea
                 className="mt-3 min-h-40 w-full rounded-2xl border border-brand-red/10 bg-white/70 px-3 py-2 text-sm font-normal normal-case tracking-normal text-brand-ink outline-none placeholder:text-stone-400"
                 value={student.comment ?? ""}
-                disabled={!student.enrollmentId}
+                disabled={!canEvaluate}
                 onChange={(event) => onUpdateComment(student.studentId, event.target.value)}
-                placeholder={student.enrollmentId ? "Nhận xét tổng quan cho tuần này..." : "Học sinh chưa có khóa đã đăng ký của lớp"}
+                placeholder={canEvaluate ? "Nhận xét tổng quan cho tuần này..." : "Không có quan sát trong tuần này"}
               />
             </label>
             <div className="rounded-3xl border border-brand-red/10 bg-white/45 p-4">
