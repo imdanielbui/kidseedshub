@@ -38,6 +38,7 @@ type ClassStudentRecord = ClassRecord["students"][number]
 type WeeklyRecord = ClassRecord["students"][number]["student"]["weeklyAssessments"][number]
 type FinalRecord = ClassStudentRecord["student"]["finalAssessments"][number]
 type PublishStudentResult =
+  | { status: "DRAFT_SAVED"; finalAssessmentId: string }
   | { status: "PUBLISHED"; finalAssessmentId: string }
   | { status: "ALREADY_PUBLISHED"; finalAssessmentId: string }
   | { status: "SKIPPED"; reason: string }
@@ -124,9 +125,21 @@ function matchingFinalAssessment(finalAssessments: FinalRecord[], enrollmentId: 
   )
 }
 
+function enrollmentForClass(classStudent: ClassStudentRecord, courseId: string) {
+  const matches = classStudent.student.enrollments.filter((item) => item.courseId === courseId)
+  const active = matches.find((item) => item.isActive)
+
+  if (active) return active
+
+  return matches.reduce<typeof matches[number] | undefined>(
+    (latest, item) => (!latest || item.updatedAt > latest.updatedAt ? item : latest),
+    undefined
+  )
+}
+
 function classStudentStatus(klass: ClassRecord, requiredWeeks: number) {
   return klass.students.map((classStudent) => {
-    const enrollment = classStudent.student.enrollments.find((item) => item.courseId === klass.courseId && item.isActive)
+    const enrollment = enrollmentForClass(classStudent, klass.courseId)
     const weeklyAssessments = enrollment
       ? classStudent.student.weeklyAssessments.filter((assessment) => assessment.enrollmentId === enrollment.id && assessment.subject === klass.course.subject && assessment.status === "COMPLETE")
       : []
@@ -162,8 +175,14 @@ async function getClass(classId: string, userId: string, role: string) {
   })
 }
 
-async function publishStudentFinalReport(klass: ClassRecord, classStudent: ClassStudentRecord, requiredWeeks: number, publishedById: string): Promise<PublishStudentResult> {
-  const enrollment = classStudent.student.enrollments.find((item) => item.courseId === klass.courseId && item.isActive)
+async function publishStudentFinalReport(
+  klass: ClassRecord,
+  classStudent: ClassStudentRecord,
+  requiredWeeks: number,
+  publishedById: string,
+  mode: "DRAFT" | "PUBLISH"
+): Promise<PublishStudentResult> {
+  const enrollment = enrollmentForClass(classStudent, klass.courseId)
 
   if (!enrollment) {
     return { status: "SKIPPED", reason: "Chưa đăng ký khóa học của lớp." }
@@ -199,6 +218,7 @@ async function publishStudentFinalReport(klass: ClassRecord, classStudent: Class
     override: classStudent.student.assessmentAgeGroupOverride
   }).ageGroup
   const generated = reportText(weeklyAssessments, klass.course.subject, ageGroup)
+  const isPublishing = mode === "PUBLISH"
   const dataToSave = {
     studentId: classStudent.studentId,
     enrollmentId: enrollment.id,
@@ -211,9 +231,9 @@ async function publishStudentFinalReport(klass: ClassRecord, classStudent: Class
     teacherSummary: generated.teacherSummary,
     nextSteps: generated.nextSteps,
     teacherId: publishedById,
-    status: "PUBLISHED" as const,
-    publishedAt: new Date(),
-    publishedById
+    status: isPublishing ? "PUBLISHED" as const : "DRAFT" as const,
+    publishedAt: isPublishing ? new Date() : null,
+    publishedById: isPublishing ? publishedById : null
   }
 
   const finalAssessment = existing
@@ -223,7 +243,7 @@ async function publishStudentFinalReport(klass: ClassRecord, classStudent: Class
       })
     : await prisma.finalAssessment.create({ data: dataToSave })
 
-  return { status: "PUBLISHED", finalAssessmentId: finalAssessment.id }
+  return { status: isPublishing ? "PUBLISHED" : "DRAFT_SAVED", finalAssessmentId: finalAssessment.id }
 }
 
 export async function GET(request: Request) {
@@ -271,14 +291,14 @@ export async function POST(request: Request) {
   }
 
   if (!can(session.user.role, "assessments:evaluate")) {
-    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền gửi báo cáo cuối khóa." }, { status: 403 })
+    return fail({ code: "FORBIDDEN", message: "Bạn không có quyền lưu hoặc gửi báo cáo cuối khóa." }, { status: 403 })
   }
 
   const body = await request.json()
   const parsed = finalClassPublishSchema.safeParse(body)
 
   if (!parsed.success) {
-    return fail({ code: "INVALID_BODY", message: "Thông tin gửi báo cáo cả lớp không hợp lệ." }, { status: 400 })
+    return fail({ code: "INVALID_BODY", message: "Thông tin lưu báo cáo cả lớp không hợp lệ." }, { status: 400 })
   }
 
   const data = parsed.data
@@ -289,6 +309,7 @@ export async function POST(request: Request) {
   }
 
   const requiredWeeks = requiredWeeksFromClass(klass)
+  let draftCount = 0
   let publishedCount = 0
   let alreadyPublishedCount = 0
   const skippedStudents: Array<{ studentId: string; studentName: string; reason: string }> = []
@@ -300,7 +321,7 @@ export async function POST(request: Request) {
   }
 
   for (const classStudent of targetStudents) {
-    const result = await publishStudentFinalReport(klass, classStudent, requiredWeeks, session.user.id)
+    const result = await publishStudentFinalReport(klass, classStudent, requiredWeeks, session.user.id, data.mode)
 
     if (result.status === "SKIPPED") {
       skippedStudents.push({ studentId: classStudent.studentId, studentName: classStudent.student.name, reason: result.reason })
@@ -314,12 +335,17 @@ export async function POST(request: Request) {
       continue
     }
 
-    publishedCount += 1
+    if (result.status === "DRAFT_SAVED") {
+      draftCount += 1
+    } else {
+      publishedCount += 1
+    }
   }
 
   return ok({
     classId: klass.id,
     className: klass.name,
+    draftCount,
     publishedCount,
     alreadyPublishedCount,
     skippedCount: skippedStudents.length,

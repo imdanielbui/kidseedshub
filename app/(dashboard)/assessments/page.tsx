@@ -115,6 +115,7 @@ export default function AssessmentsPage() {
   const [finalSummary, setFinalSummary] = useState<FinalClassSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingFinalDraft, setIsSavingFinalDraft] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
   const [publishingStudentId, setPublishingStudentId] = useState<string | null>(null)
   const [error, setError] = useState("")
@@ -406,6 +407,35 @@ export default function AssessmentsPage() {
     await loadFinalSummary()
   }
 
+  async function saveFinalReportDrafts() {
+    if (!finalSummary) return
+
+    setIsSavingFinalDraft(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const response = await fetch("/api/final-assessments/classroom", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ classId, requiredWeeks, mode: "DRAFT" })
+      })
+      const payload = await readApiResponse<BulkPublishResult & { draftCount?: number }>(response, "Không lưu được báo cáo nháp.")
+
+      if (!response.ok || !payload.success || !payload.data) {
+        setError(payload.error?.message ?? "Không lưu được báo cáo nháp.")
+        return
+      }
+
+      setMessage(`Đã lưu ${payload.data.draftCount ?? 0} báo cáo nháp. Bỏ qua ${payload.data.skippedCount} học viên chưa đủ điều kiện.`)
+      await loadFinalSummary()
+    } catch {
+      setError("Không lưu được báo cáo nháp.")
+    } finally {
+      setIsSavingFinalDraft(false)
+    }
+  }
+
   async function publishFinalReportForStudent(student: FinalClassSummary["students"][number]) {
     if (!finalSummary) return
 
@@ -612,11 +642,19 @@ export default function AssessmentsPage() {
             <button
               type="button"
               className="glass-button-primary mt-4 inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold"
-              disabled={!finalSummary || isPublishing}
+              disabled={!finalSummary || isPublishing || isSavingFinalDraft}
               onClick={() => void publishFinalReports()}
             >
               <Send className="h-4 w-4" />
               {isPublishing ? "Đang gửi" : "Tạo & gửi cả lớp"}
+            </button>
+            <button
+              type="button"
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-red/15 bg-white/65 px-4 py-3 text-sm font-semibold text-brand-red transition hover:border-brand-red/35 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!finalSummary || isPublishing || isSavingFinalDraft}
+              onClick={() => void saveFinalReportDrafts()}
+            >
+              {isSavingFinalDraft ? "Đang lưu" : "Lưu bản nháp cả lớp"}
             </button>
           </section>
 

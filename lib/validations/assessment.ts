@@ -82,5 +82,6 @@ export const rubricConfigUpdateSchema = z.object({
 export const finalClassPublishSchema = z.object({
   classId: z.string().min(1),
   requiredWeeks: z.number().int().min(1),
-  studentId: z.string().min(1).optional()
+  studentId: z.string().min(1).optional(),
+  mode: z.enum(["DRAFT", "PUBLISH"]).default("PUBLISH")
 })
