@@ -48,6 +48,18 @@ function itemKey(item: { domainKey: string; skillKey: string; outcomeIndex: numb
   return `${item.domainKey}:${item.skillKey}:${item.outcomeIndex}`
 }
 
+function enrollmentForClass(classStudent: ClassRecord["students"][number], courseId: string) {
+  const matches = classStudent.student.enrollments.filter((enrollment) => enrollment.courseId === courseId)
+  const activeEnrollment = matches.find((enrollment) => enrollment.isActive)
+
+  if (activeEnrollment) return activeEnrollment
+
+  return matches.reduce<typeof matches[number] | undefined>(
+    (latest, enrollment) => (!latest || enrollment.updatedAt > latest.updatedAt ? enrollment : latest),
+    undefined
+  )
+}
+
 function scoreOutOfFive(items: WeeklyAssessmentMatrixItem["items"]) {
   return averageScore(items)
 }
@@ -175,7 +187,7 @@ function toDetail(
   const assessmentByEnrollmentId = new Map(assessments.map((assessment) => [assessment.enrollmentId, assessment]))
   const totalItems = emptyItems(rubric).length
   const students: WeeklyAssessmentMatrixItem[] = klass.students.map((classStudent) => {
-    const enrollment = classStudent.student.enrollments.find((item) => item.courseId === klass.courseId && item.isActive)
+    const enrollment = enrollmentForClass(classStudent, klass.courseId)
     const assessment = enrollment ? assessmentByEnrollmentId.get(enrollment.id) : undefined
     const savedItems = new Map((assessment?.items ?? []).map((item) => [itemKey(item), item]))
     const savedRoboticsItems = new Map((assessment?.items ?? []).map((item) => [`${item.skillKey}:${item.outcomeIndex}`, item]))
@@ -269,7 +281,7 @@ export async function GET(request: Request) {
 
   const activeRubric = await findActiveRubric(prisma, klass.course.subject)
   const enrollmentIds = klass.students
-    .map((classStudent) => classStudent.student.enrollments.find((enrollment) => enrollment.courseId === klass.courseId && enrollment.isActive)?.id)
+    .map((classStudent) => enrollmentForClass(classStudent, klass.courseId)?.id)
     .filter((id): id is string => Boolean(id))
   const weeklyAssessments = enrollmentIds.length
     ? await prisma.weeklyAssessment.findMany({
@@ -341,7 +353,7 @@ export async function POST(request: Request) {
   const isRobotics = klass.course.subject === "ROBOTICS"
   const allowedEnrollmentIds = new Set(
     klass.students
-      .map((classStudent) => classStudent.student.enrollments.find((enrollment) => enrollment.courseId === klass.courseId && enrollment.isActive)?.id)
+      .map((classStudent) => enrollmentForClass(classStudent, klass.courseId)?.id)
       .filter((id): id is string => Boolean(id))
   )
 
