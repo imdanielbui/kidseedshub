@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import type { ApiResponse } from "@/lib/api-response"
-import { finalAssessmentStatusLabels, progressLevelDescriptions, progressLevelLabels, subjectLabels, type FinalReportDetail, type ProgressLevelKey } from "@/lib/contracts/assessment"
+import { progressLevelDescriptions, progressLevelLabels, subjectLabels, type FinalReportDetail, type ProgressLevelKey } from "@/lib/contracts/assessment"
 
 function formatDate(value?: string) {
   if (!value) return "-"
@@ -102,10 +102,6 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
             <p className="receipt-kicker">Kid Seeds Hub</p>
             <h1>Báo cáo cuối khóa</h1>
             <p className="receipt-muted">Khơi mở tiềm năng trẻ</p>
-          </div>
-          <div className="receipt-code">
-            <span>Trạng thái báo cáo</span>
-            <strong>{report.status === "DRAFT" ? "Nội bộ - chưa phát hành" : finalAssessmentStatusLabels[report.status]}</strong>
           </div>
         </header>
 
