@@ -53,17 +53,6 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
     }
   }, [assessmentId])
 
-  const rubricTotals = useMemo(() => {
-    if (!report) return { skills: 0, outcomes: 0 }
-
-    return report.rubric.domains.reduce(
-      (total, domain) => ({
-        skills: total.skills + domain.skills.length,
-        outcomes: total.outcomes + domain.skills.reduce((sum, skill) => sum + skill.outcomes.length, 0)
-      }),
-      { skills: 0, outcomes: 0 }
-    )
-  }, [report])
   const roboticsChartData = useMemo(
     () => report?.roboticsSkillSummaries?.map((skill) => ({ skill: skill.label, score: skill.averageScore, fullMark: 5 })) ?? [],
     [report]
@@ -99,9 +88,7 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
             <BrandLogo print imageClassName="receipt-brand-logo" />
           </div>
           <div>
-            <p className="receipt-kicker">Kid Seeds Hub</p>
-            <h1>Báo cáo cuối khóa</h1>
-            <p className="receipt-muted">Khơi mở tiềm năng trẻ</p>
+            <h1>Báo cáo cuối khóa bộ môn {subjectLabels[report.subject]}</h1>
           </div>
         </header>
 
@@ -139,28 +126,6 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
             <p className="receipt-value">{formatDate(report.publishedAt ?? report.createdAt)}</p>
           </div>
         </div>
-
-        <section className="receipt-section">
-          <h2>Tổng quan kỹ năng</h2>
-          <div className="receipt-grid">
-            <div>
-              <p className="receipt-label">Rubric</p>
-              <p className="receipt-value">{report.rubric.version}</p>
-            </div>
-            <div>
-              <p className="receipt-label">Nhóm kỹ năng</p>
-              <p className="receipt-value">{report.rubric.domains.length}</p>
-            </div>
-            <div>
-              <p className="receipt-label">Kỹ năng</p>
-              <p className="receipt-value">{rubricTotals.skills}</p>
-            </div>
-            <div>
-              <p className="receipt-label">Tiêu chí</p>
-              <p className="receipt-value">{rubricTotals.outcomes}</p>
-            </div>
-          </div>
-        </section>
 
         {report.subject === "FUN" ? (
           <section className="receipt-section">
@@ -240,7 +205,7 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
           <table className="receipt-table">
             <thead>
               <tr>
-                <th>Tuần</th>
+                <th className="whitespace-nowrap">Tuần</th>
                 <th>Tiêu chí đạt</th>
                 <th>Nhận xét</th>
               </tr>
@@ -248,7 +213,7 @@ export function FinalAssessmentPrintClient({ assessmentId }: { assessmentId: str
             <tbody>
               {report.weeklySummaries.map((weekly) => (
                 <tr key={weekly.weekNumber}>
-                  <td>Tuần {weekly.weekNumber}</td>
+                  <td className="whitespace-nowrap">Tuần {weekly.weekNumber}</td>
                   <td>{weekly.totalItems ? `${weekly.checkedItems}/${weekly.totalItems}` : "Không có quan sát"}</td>
                   <td>{weekly.comment ?? "Bé không có mặt đủ để thực hiện đánh giá trong tuần này."}</td>
                 </tr>
